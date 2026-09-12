@@ -1,0 +1,19 @@
+{
+  "name": "med-reminder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "定时服药提醒 — 打卡制排程 + 后台本地通知",
+  "scripts": {
+    "sync": "cap sync",
+    "android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/local-notifications": "^6.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2"
+  }
+}

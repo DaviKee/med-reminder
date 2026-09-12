@@ -1,0 +1,14 @@
+{
+  "appId": "com.medreminder.app",
+  "appName": "定时服药提醒",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0A0A0A",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_notify"
+    }
+  }
+}

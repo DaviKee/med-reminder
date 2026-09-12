@@ -1,0 +1,30 @@
+# ===== Dependencies =====
+node_modules/
+
+# ===== Android build artifacts =====
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/**/*.iml
+android/.idea/
+
+# ===== iOS (future-proof; not present yet) =====
+ios/
+
+# ===== Capacitor / native build outputs =====
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# ===== Logs & OS cruft =====
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== WorkBuddy / editor internal =====
+.workbuddy/
+.vscode/*
+!.vscode/extensions.json

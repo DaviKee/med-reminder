@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="isCu3nCNJnxOhR5CCFVCim">
+<head data-page-node-id="7bFCbViP48T5XiZzWMbM4g">
+<meta charset="UTF-8" data-page-node-id="fTntSYjclcugRqSAZ52tlJ">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="LiUg7VjSRU6OHOISRX8DQA">
+<title>安装到手机 · 定时服药提醒</title>
+<style>
+  :root{
+    --bg:#0A0A0A; --card:#191919; --line:#212327; --inner:#1A1C20;
+    --fg:#FFFFFF; --dim:#7D8187; --soft:#DADBDF; --accent:#FF7A17;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:40px 20px 60px; display:flex; justify-content:center;
+  }
+  .wrap{width:100%;max-width:760px}
+  .eyebrow{
+    font-family:"Geist Mono",ui-monospace,Consolas,monospace;
+    font-size:12px;letter-spacing:1.4px;color:var(--dim);
+  }
+  h1{font-size:32px;line-height:40px;letter-spacing:-.6px;font-weight:400;margin:10px 0 8px}
+  .lead{font-size:14px;line-height:22px;color:var(--dim)}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:28px; margin-top:28px;
+  }
+  .qrow{display:flex;gap:28px;align-items:center;flex-wrap:wrap}
+  .qr{
+    background:var(--inner); border:1px solid var(--line); border-radius:12px;
+    padding:14px; line-height:0; flex:0 0 auto;
+  }
+  .qr svg{width:184px;height:184px;display:block;border-radius:6px}
+  .qtext{flex:1;min-width:260px}
+  .qtext h2{font-size:20px;line-height:28px;font-weight:500;margin-bottom:10px}
+  .qtext p{font-size:14px;line-height:22px;color:var(--dim);margin-bottom:8px}
+  .urlbox{
+    display:flex;align-items:center;gap:10px;margin-top:14px;
+    background:var(--inner);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+  }
+  .urlbox code{
+    flex:1;font-family:"Geist Mono",ui-monospace,Consolas,monospace;
+    font-size:12px;color:var(--soft);word-break:break-all;line-height:16px;
+  }
+  .copy{
+    border:1px solid var(--line);background:transparent;color:var(--fg);
+    font-family:inherit;font-size:12px;padding:6px 12px;border-radius:9999px;cursor:pointer;
+    white-space:nowrap;transition:border-color .15s,color .15s;
+  }
+  .copy:hover{border-color:var(--accent);color:var(--accent)}
+  .warn{
+    margin-top:18px;padding:12px 14px;border-radius:8px;
+    background:rgba(255,122,23,.08);border:1px solid rgba(255,122,23,.35);
+    font-size:13px;line-height:20px;color:var(--accent);
+  }
+  h3{
+    font-size:12px;letter-spacing:1.4px;color:var(--dim);font-weight:400;
+    font-family:"Geist Mono",ui-monospace,Consolas,monospace;margin-bottom:16px;
+  }
+  .alt{display:flex;flex-direction:column;gap:14px}
+  .alt-item{display:flex;gap:14px;align-items:flex-start}
+  .num{
+    flex:0 0 auto;width:26px;height:26px;border-radius:9999px;border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;color:var(--dim);margin-top:1px;
+  }
+  .alt-item.is-rec .num{background:var(--accent);border-color:var(--accent);color:#0A0A0A}
+  .alt-body{flex:1}
+  .alt-body b{display:block;font-size:15px;line-height:20px;font-weight:500;margin-bottom:5px}
+  .alt-body span,.alt-body p{font-size:13px;line-height:20px;color:var(--dim)}
+  pre{
+    margin-top:8px;background:var(--inner);border:1px solid var(--line);border-radius:8px;
+    padding:12px;overflow-x:auto;
+    font-family:"Geist Mono",ui-monospace,Consolas,monospace;font-size:12px;
+    line-height:18px;color:var(--soft);
+  }
+  .todo{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+  .todo-item{
+    display:flex;gap:14px;align-items:center;
+    background:var(--inner);border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+  }
+  .chk{
+    flex:0 0 auto;width:18px;height:18px;border-radius:9999px;border:1px solid var(--dim);
+  }
+  .todo-item b{font-size:14px;line-height:20px;font-weight:500}
+  .todo-item p{font-size:12px;line-height:18px;color:var(--dim);margin-top:3px}
+  .foot{margin-top:32px;font-size:12px;line-height:18px;color:var(--dim);text-align:center}
+  .foot code{font-family:"Geist Mono",ui-monospace,monospace;color:var(--soft)}
+  @media(max-width:560px){
+    h1{font-size:26px;line-height:34px}
+    .card{padding:20px}
+    .qrow{gap:20px;justify-content:center;text-align:left}
+  }
+</style>
+</head>
+<body data-page-node-id="RoL0eIDIRrLpiIvYN76Zop">
+<div class="wrap" data-page-node-id="kgSBMYzhjVkhACsi3yZmOW">
+
+  <span class="eyebrow" data-page-node-id="bGpboyr5rxvW6pQ6EtUA6g">INSTALL · 定时服药提醒</span>
+  <h1 data-page-node-id="4wHwVZVzvRK2RpiG3cbvEq">安装到你的安卓手机</h1>
+  <p class="lead" data-page-node-id="nQNVJssJsETDDNiT09UUVI">包名 <code style="color:var(--soft)" data-page-node-id="2X7jMHMiYvD80vtCc8BW6g">com.medreminder.app</code> · 3.5 MB · Android 8.0 以上可用。安装后记得做下面那两件事，否则提醒不会响。</p>
+
+  <div class="card" data-page-node-id="NOxNJOzEMGtBQVMMIRfzxI">
+    <span class="eyebrow" data-page-node-id="YnURx5hWldo1dDFwq7pOED">方式一 · 扫码直装（推荐）</span>
+    <div class="qrow" style="margin-top:18px" data-page-node-id="7gPieTzEt2b7MTEntPYMUB">
+      <div class="qr" data-page-node-id="Ai2olhM1J0I7npqcwWqq66"><svg width="232" height="232" class="segno" data-page-node-id="9mAWwEoH2u1l9H8OfdJGUL"><g transform="scale(8)" data-page-node-id="e6wMdoITiRvEuH2ZHkU03B"><path fill="#121212" d="M0 0h29v29h-29z" data-page-node-id="mHKxSQgL1vAKl46HHsp3qr"/><path class="qrline" stroke="#ff7a17" d="M2 2.5h7m4 0h3m2 0h1m1 0h7m-25 1h1m5 0h1m1 0h1m2 0h1m1 0h1m4 0h1m5 0h1m-25 1h1m1 0h3m1 0h1m1 0h1m3 0h1m3 0h1m1 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m1 0h1m2 0h6m1 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m2 0h3m2 0h1m3 0h1m1 0h3m1 0h1m-25 1h1m5 0h1m2 0h2m1 0h2m4 0h1m5 0h1m-25 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-17 1h1m2 0h1m2 0h2m-16 1h1m5 0h1m1 0h1m1 0h1m2 0h1m1 0h4m2 0h3m-24 1h5m2 0h1m1 0h2m2 0h1m1 0h3m2 0h4m-21 1h2m1 0h2m1 0h1m1 0h3m1 0h1m2 0h2m1 0h1m1 0h2m-21 1h2m3 0h3m3 0h2m3 0h2m2 0h1m-24 1h1m1 0h1m2 0h3m2 0h2m1 0h1m1 0h3m5 0h1m-25 1h1m4 0h1m6 0h4m7 0h1m-24 1h1m2 0h1m2 0h1m3 0h1m1 0h1m2 0h1m1 0h1m1 0h1m1 0h1m1 0h2m-25 1h1m2 0h2m2 0h1m4 0h1m1 0h1m1 0h1m3 0h1m1 0h1m1 0h1m-25 1h1m2 0h5m1 0h2m1 0h2m2 0h5m1 0h1m-15 1h1m1 0h1m1 0h1m1 0h3m3 0h1m1 0h1m-23 1h7m2 0h3m1 0h2m1 0h1m1 0h1m1 0h2m2 0h1m-25 1h1m5 0h1m4 0h1m4 0h1m3 0h1m2 0h2m-25 1h1m1 0h3m1 0h1m4 0h3m1 0h8m-23 1h1m1 0h3m1 0h1m2 0h1m1 0h3m4 0h2m1 0h1m1 0h2m-25 1h1m1 0h3m1 0h1m5 0h1m4 0h1m4 0h1m1 0h1m-25 1h1m5 0h1m2 0h1m2 0h1m2 0h2m1 0h3m3 0h1m-25 1h7m1 0h1m1 0h2m2 0h3m1 0h1m2 0h1m2 0h1" data-page-node-id="jEC0FxCfD3tikjEcqVxM6v"/></g></svg></div>
+      <div class="qtext" data-page-node-id="rmqGVWRFkwwDLmWSHBKm1k">
+        <h2 data-page-node-id="U9fcFQUvRCp31JdlVDCIbd">手机扫一下，直接下载</h2>
+        <p data-page-node-id="CvsO0bhgk7kIVXHjwHzMBc">用手机<strong style="color:var(--soft);font-weight:400" data-page-node-id="yht1swCm2DObNVmPhn4vy3">相机</strong>或浏览器扫左边的码，会跳到下载页，点下载即可。</p>
+        <p data-page-node-id="lBjDL8I8tcISbbRz3af9Yu">下载完点开 APK，系统问「允许安装未知应用」时选<strong style="color:var(--soft);font-weight:400" data-page-node-id="qluDGxEO4HvMsvCuVSc9kb">允许</strong>——这是自己打包的 debug 签名包，正常提示。</p>
+        <div class="urlbox" data-page-node-id="NegsmJMQAkidruzlyIshbg">
+          <code id="url" data-page-node-id="sUMiEs0E8iXGisLdRkUQSa">http://192.168.2.23:8080/</code>
+          <button class="copy" id="copyBtn" data-page-node-id="TPoSg8rm15NRwJVItEmxM2">复制链接</button>
+        </div>
+      </div>
+    </div>
+    <div class="warn" data-page-node-id="x5y4jrevqZmGs6H66zElTz">
+      手机必须和这台电脑连<strong data-page-node-id="4DMqNqEn8Oj0hfKpE5xvDY">同一个 WiFi</strong>，且这个页面在下载完成前不要关闭（我开的是临时服务，关掉链接就失效）。
+    </div>
+  </div>
+
+  <div class="card" data-page-node-id="6B5K8ugVuSOlZr0SH3mhA0">
+    <h3 data-page-node-id="VbHszaUAtWEWL0REEePgwU">方式二 · 数据线 / 传文件</h3>
+    <div class="alt" data-page-node-id="v7GwNdWsxj6m3L2D6kHgyA">
+      <div class="alt-item is-rec" data-page-node-id="hJVI62l9lkMtCasSvCnQsf">
+        <div class="num" data-page-node-id="02l1HGIC4xWcvci6EeDd7D">1</div>
+        <div class="alt-body" data-page-node-id="xUHVyEFaVWGxw1Uo5ZDpCS">
+          <b data-page-node-id="J4CVERhW04NukB9HLIFUsW">USB 调试安装</b>
+          <p data-page-node-id="QhfMBEuKqnVkBgwrZIRvzw">手机「设置 → 关于手机」连点版本号 7 次开开发者模式 → 开发者选项里打开 USB 调试 → 插线，手机上点「允许」→ 电脑上执行：</p>
+          <pre data-page-node-id="Ucba1QjrE76sgrSccEz4dH">adb install -r "med-reminder-debug.apk"
+# adb 在 %LOCALAPPDATA%/Android/Sdk/platform-tools/，装了 Android Studio 才有</pre>
+          <p style="margin-top:6px" data-page-node-id="fFDhm8ofnycyv7LS43dZhD">插好线跟我说一声，我可以直接帮你装。</p>
+        </div>
+      </div>
+      <div class="alt-item" data-page-node-id="Bqoat9iBInCN2EVASvWKw2">
+        <div class="num" data-page-node-id="shVHBxlXqHzuZRohCAF4oL">2</div>
+        <div class="alt-body" data-page-node-id="tyYVvwmQGpqO8cRHW58rRM">
+          <b data-page-node-id="0lGQAIC0yB3vc9lD4unZNk">发文件到手机</b>
+          <p data-page-node-id="q8L1ZUWWQBbJrUGVWp1rsa">把 <code style="color:var(--soft)" data-page-node-id="epzkwBf3MYKaSDgE6uFlSZ">med-reminder-debug.apk</code> 通过微信 / QQ / 网盘发到手机，用手机文件管理器点开安装。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-page-node-id="HgMKW1Km1qFsXWLk0nOaDN">
+    <span class="eyebrow" data-page-node-id="mY2EgpTEHFB67GH5nYlvB8">装好后 · 必做两件事</span>
+    <div class="todo" style="margin-top:18px" data-page-node-id="g1fNawoE7Wi7DBjPj6a1Hs">
+      <div class="todo-item" data-page-node-id="oqM2MWD4BCBNSnQpdScLJt">
+        <div class="chk" data-page-node-id="AhJKQiDDCgMesqICUz8gMg"></div>
+        <div data-page-node-id="KiBUZfJ2EjQD9HcxIzPDab">
+          <b data-page-node-id="UBNWJCF7sDzxnwfJmtxJPs">允许通知权限</b>
+          <p data-page-node-id="SsPIKk8TaMmUIa1s8xDnjJ">第一次打开 App 会弹窗问，务必点「允许」。这是提醒能响的前提。</p>
+        </div>
+      </div>
+      <div class="todo-item" data-page-node-id="ljcy3lP5WI3PuHX1w7lSWZ">
+        <div class="chk" data-page-node-id="snMLb3w7YbljKooiiUGFQI"></div>
+        <div data-page-node-id="CEGy8B3ssCRHDLSmjGq57c">
+          <b data-page-node-id="KYBtaLpPoPJz5R0jZInnVo">加电池白名单</b>
+          <p data-page-node-id="vrBJlZIyXKVCC6WtR1zYgZ">小米 / 华为 / OPPO / vivo 会杀后台闹钟：设置 → 应用 → 定时服药提醒 → 电池选「无限制 / 不优化」，并打开「自启动」。否则提醒可能延迟几分钟。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot" data-page-node-id="q13AtwNXs0GLwX5XxuKwTv">
+    这是 debug 签名的自测包，适合自己用或发给家人。要正式上架应用商店，需要换成 release 签名并做混淆。
+  </p>
+
+</div>
+<script>
+document.getElementById('copyBtn').onclick = function(){
+  var t = document.getElementById('url').textContent;
+  var b = this;
+  if (navigator.clipboard) { navigator.clipboard.writeText(t); }
+  b.textContent = '已复制'; b.style.color = '#FF7A17'; b.style.borderColor = '#FF7A17';
+  setTimeout(function(){ b.textContent='复制链接'; b.style.color=''; b.style.borderColor=''; }, 1600);
+};
+</script>
+</body>
+</html>

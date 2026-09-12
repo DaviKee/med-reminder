@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 设计稿令牌：近黑画布 + 唯一强调色 sunset -->
+    <color name="colorPrimary">#0A0A0A</color>
+    <color name="colorPrimaryDark">#0A0A0A</color>
+    <color name="colorAccent">#FF7A17</color>
+    <color name="splash_bg">#0A0A0A</color>
+</resources>

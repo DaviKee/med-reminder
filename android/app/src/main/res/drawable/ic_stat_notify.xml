@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏小图标：Android 要求纯白 + 透明底，这里用胶囊剪影 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group android:translateX="12" android:translateY="12">
+        <group android:rotation="-45">
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:pathData="M-7.5,-3.2 h15 a3.2,3.2 0 0 1 0,6.4 h-15 a3.2,3.2 0 0 1 0,-6.4 z" />
+        </group>
+    </group>
+</vector>
