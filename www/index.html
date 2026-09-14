@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>定时服药提醒</title>
 <meta name="description" content="自定义药品与服药间隔，每天首次打卡后自动排程当天提醒。">
 <meta name="theme-color" content="#0A0A0A">
@@ -56,7 +56,7 @@
   <div class="scrim" id="scrim"></div>
 
   <!-- Add / Edit med sheet -->
-  <div class="sheet" id="sheetMed">
+  <div class="sheet" id="sheetMed" role="dialog" aria-modal="true" aria-label="添加或编辑药品">
     <div class="sheet-grip"></div>
     <div class="sheet-head">
       <span class="sheet-title" id="sheetTitle">添加药品</span>
@@ -102,12 +102,12 @@
 
   <!-- Skip confirm dialog -->
   <div class="dlg-wrap" id="dlgSkip">
-    <div class="dlg">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="skipTitle">
       <div class="badge badge-56">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 5.5 12 12l-7 6.5M13 5.5 20 12l-7 6.5" stroke="#FF7A17" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="dlg-text">
-        <div class="dlg-title">跳过本次服药？</div>
+        <div class="dlg-title" id="skipTitle">跳过本次服药？</div>
         <div class="dlg-body" id="skipBody">这次将记为未服用，会影响今日依从率。</div>
       </div>
       <div class="strip">
@@ -123,7 +123,7 @@
 
   <!-- Reminder dialog -->
   <div class="dlg-wrap" id="dlgRemind">
-    <div class="dlg">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="remindName">
       <div class="badge badge-56">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6.4 10.2a5.6 5.6 0 0 1 11.2 0c0 3.9 1.4 5.4 1.4 5.4H5s1.4-1.5 1.4-5.4Z" stroke="#FF7A17" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.9 18.6a2.3 2.3 0 0 0 4.2 0" stroke="#FF7A17" stroke-width="1.6" stroke-linecap="round"/></svg>
       </div>
@@ -136,6 +136,26 @@
         <button class="btn btn-primary" id="remindDone">已服用</button>
         <button class="btn btn-ghost" id="remindSnooze">10 分钟后提醒</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Data backup / export / restore dialog -->
+  <div class="dlg-wrap" id="dlgData">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent" id="dataEyebrow">BACKUP</span>
+        <div class="dlg-title" id="dataTitle">导出备份</div>
+        <div class="dlg-body" id="dataHint"></div>
+      </div>
+      <textarea class="data-area" id="dataArea" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      <input type="file" id="pickBackup" class="hidden" accept="application/json,.json,text/plain">
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="dataClose">关闭</button>
+        <button class="btn btn-accent" id="dataCopy">复制</button>
+      </div>
+      <button class="btn btn-ghost" id="dataDownload">下载 .json 文件</button>
+      <button class="btn btn-ghost hidden" id="dataPick">从文件选择</button>
+      <button class="btn btn-primary hidden" id="dataApply">恢复</button>
     </div>
   </div>
 

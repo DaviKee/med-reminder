@@ -57,12 +57,34 @@
     window.MedNotify.sync(list);
   }
 
+  /* 逾期太久的待服剂量不再补响 —— 启动与「恢复备份」共用同一套判断 */
+  function silenceOverdue() {
+    var now = nowMin();
+    todayDoses().forEach(function (d) {
+      if (d.status === 'pending' && d.time < now && now - d.time > 30) S.notified[d.id] = 1;
+    });
+  }
+
   function todayDoses() {
     var k = todayKey();
     if (!S.doses[k]) S.doses[k] = [];
     return S.doses[k];
   }
   function medById(id) { for (var i = 0; i < S.meds.length; i++) if (S.meds[i].id === id) return S.meds[i]; return null; }
+
+  /* 旧版本（≤ 2026-09-14）首次启动会写入两条示例药品，让新用户误以为那是自己的药。
+   * 这里只「识别 + 交给用户一键删除」，绝不静默删除 —— 万一同名的是真实药品，静默删掉就是数据事故。 */
+  var LEGACY_SAMPLE_NAMES = ['维生素 D3', '阿莫西林'];
+  function legacySampleMeds() {
+    var used = {};
+    Object.keys(S.doses).forEach(function (k) {
+      (S.doses[k] || []).forEach(function (d) { used[d.medId] = 1; });
+    });
+    return S.meds.filter(function (m) {
+      return LEGACY_SAMPLE_NAMES.indexOf(m.name) >= 0 && !used[m.id];
+    });
+  }
+
   function todayDoseCount(medId) {
     return todayDoses().filter(function (d) { return d.medId === medId; }).length;
   }
@@ -215,24 +237,32 @@
       html += '<div class="sect" style="gap:10px">'
         + '<span class="eyebrow">TODAY</span>'
         + '<h1 class="h1">今天还没打卡</h1>'
-        + '<p class="body">早晨第一次服药后点下方按钮，我们会按你设定的间隔依次提醒今天的每一次。</p>'
+        + '<p class="body">每天第一次服药后点下方按钮打卡，我们会按你设定的间隔，依次提醒今天的每一次。</p>'
         + '</div>';
 
-      html += '<div class="sect">'
-        + '<span class="eyebrow">MY MEDS</span>'
-        + '<div class="list">';
       if (!S.meds.length) {
-        html += '<div class="card"><p class="body" style="text-align:center">还没有药品，先去「药品」页添加。</p></div>';
+        // ---- 首次使用：空态引导（此处过去会预置两条示例药品，已移除）----
+        html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
+          + '<span class="eyebrow">HOW IT WORKS · 三步</span>'
+          + '<p class="body" style="color:var(--sub)">1 · 在「药品」页添加药名和服药间隔</p>'
+          + '<p class="body" style="color:var(--sub)">2 · 每天第一次服药后，点「打卡」</p>'
+          + '<p class="body" style="color:var(--sub)">3 · 之后按间隔自动提醒，锁屏、息屏也会响</p>'
+          + '<p class="meta" style="margin-top:2px">注意：不打卡就不会有提醒 —— 打卡是当天排程的起点。</p>'
+          + '</div>'
+          + '<button class="btn btn-primary" id="btnFirstMed">添加第一个药品</button>';
       } else {
+        html += '<div class="sect">'
+          + '<span class="eyebrow">MY MEDS</span>'
+          + '<div class="list">';
         S.meds.forEach(function (m) { html += medCardHtml(m, true); });
-      }
-      html += '</div>';
-      if (S.meds.length > 1) html += '<p class="hint" style="margin-top:-4px">点击卡片可只打卡某一种药。</p>';
-      html += '</div>';
+        html += '</div>';
+        if (S.meds.length > 1) html += '<p class="hint" style="margin-top:-4px">点击卡片可只打卡某一种药。</p>';
+        html += '</div>';
 
-      html += '<div style="padding-top:4px">'
-        + '<button class="btn btn-primary" id="btnCheckin"' + (S.meds.length ? '' : ' disabled style="opacity:.4"') + '>打卡 · 开始今天的提醒</button>'
-        + '</div>';
+        html += '<div style="padding-top:4px">'
+          + '<button class="btn btn-primary" id="btnCheckin">打卡 · 开始今天的提醒</button>'
+          + '</div>';
+      }
     } else {
       // ---- 已打卡 ----
       var p = progress();
@@ -330,6 +360,8 @@
       render();
       toast(n ? '已打卡 · 今天共排了 ' + todayDoses().length + ' 次提醒' : '今天已经打过卡了');
     };
+    var fm = $('#btnFirstMed');
+    if (fm) fm.onclick = function () { setTab('meds'); openSheet(null); };
     var e = $('#btnEarly');
     if (e) e.onclick = function () {
       var nxt = nextPending(); if (!nxt) return;
@@ -379,10 +411,30 @@
       html += '</div>';
     }
     html += '<p class="hint" style="margin-top:-8px">点击任意药品，可修改名称与服药间隔。</p>';
+
+    var legacy = legacySampleMeds();
+    if (legacy.length) {
+      html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
+        + '<span class="eyebrow">SAMPLE · 示例数据</span>'
+        + '<p class="body">检测到 ' + legacy.length + ' 个从未使用过的示例药品（'
+        + esc(legacy.map(function (m) { return m.name; }).join('、'))
+        + '）。旧版本首次启动时会自动生成它们，不是你手动添加的。</p>'
+        + '<button class="btn btn-ghost" id="btnDropLegacy" style="height:44px;font-size:14px">删除这 ' + legacy.length + ' 项</button>'
+        + '</div>';
+    }
+
     host.innerHTML = html;
 
     var add = $('#btnAdd');
     if (add) add.onclick = function () { openSheet(null); };
+    var dl = $('#btnDropLegacy');
+    if (dl) dl.onclick = function () {
+      var ids = legacySampleMeds().map(function (m) { return m.id; });
+      if (!ids.length) return;
+      S.meds = S.meds.filter(function (m) { return ids.indexOf(m.id) < 0; });
+      save(); render();
+      toast('已删除 ' + ids.length + ' 个示例药品');
+    };
     $$('.meditem').forEach(function (el) {
       el.onclick = function () { openSheet(el.getAttribute('data-med')); };
     });
@@ -424,6 +476,16 @@
     html += '<p class="hint" style="margin-top:-8px">每次服药后打卡，记录会自动更新。</p>';
 
     html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
+      + '<span class="eyebrow">DATA · 备份</span>'
+      + '<p class="body">记录只存在这台手机上：清缓存、换手机都会丢，也没法直接拿给医生看。定期导出留一份。</p>'
+      + '<div class="btnrow" style="margin-top:2px">'
+      + '<button class="btn btn-primary" id="btnBackup" style="height:44px;font-size:14px">导出备份</button>'
+      + '<button class="btn btn-ghost" id="btnCsv" style="height:44px;font-size:14px">导出 CSV</button>'
+      + '</div>'
+      + '<button class="btn btn-ghost" id="btnRestore" style="height:44px;font-size:14px">从备份恢复</button>'
+      + '</div>';
+
+    html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
       + '<span class="eyebrow">DEBUG · 验收用</span>'
       + '<p class="body">想立刻确认提醒能不能正常响？点下面按钮，10 秒后会收到一条测试通知（息屏 / 锁屏也能测，不会写入任何服药记录）。</p>'
       + '<button class="btn btn-ghost" id="btnTest" style="align-self:flex-start;margin-top:2px">测试提醒 · 10 秒后响一次</button>'
@@ -433,6 +495,12 @@
 
     var tb = $('#btnTest');
     if (tb) tb.onclick = testReminder;
+    var bb = $('#btnBackup');
+    if (bb) bb.onclick = function () { openDataDlg('backup'); };
+    var bc = $('#btnCsv');
+    if (bc) bc.onclick = function () { openDataDlg('csv'); };
+    var br = $('#btnRestore');
+    if (br) br.onclick = function () { openDataDlg('restore'); };
   }
 
   function calcStreak() {
@@ -587,6 +655,179 @@
     }
   }
 
+  /* ---------------- 备份 / 导出 / 恢复 ----------------
+   * 记录默认只存在本机，清缓存或换机即全丢。这里给两条零依赖的出路：
+   *   · JSON 备份 —— 可完整恢复（含药品与全部剂量）
+   *   · CSV      —— 给人看（就诊时打印或发给医生）
+   * 不依赖任何 Capacitor 插件：Android WebView 里 a[download] 常常不生效，
+   * 所以「复制到剪贴板」是主路径，「下载文件」是浏览器上的加分项。 */
+  var BACKUP_FORMAT = 'medreminder.backup';
+  var BACKUP_VERSION = 1;
+
+  var dataMode = null;       // backup | csv | restore
+  var restoreArmed = false;  // 恢复需点两次，避免误覆盖
+
+  function buildBackup() {
+    // notified 是当天的提醒登记簿，属临时状态，不进备份
+    return {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      app: 'MedReminder',
+      exportedAt: new Date().toISOString(),
+      data: { meds: S.meds, doses: S.doses }
+    };
+  }
+
+  /* 导入前严格校验：宁可拒绝，也不要让半截数据覆盖掉用户现有记录 */
+  function parseBackup(txt) {
+    if (!txt || !String(txt).trim()) return { err: '请先粘贴备份内容' };
+    var o;
+    try { o = JSON.parse(txt); } catch (e) { return { err: '内容不是合法 JSON，可能复制不完整' }; }
+    if (!o || o.format !== BACKUP_FORMAT) return { err: '这不是本 App 导出的备份' };
+    if (typeof o.version !== 'number' || o.version > BACKUP_VERSION) return { err: '备份来自更新版本的 App' };
+    if (!o.data || !Array.isArray(o.data.meds) || !o.data.doses || typeof o.data.doses !== 'object') {
+      return { err: '备份内容不完整' };
+    }
+    var badMed = !o.data.meds.every(function (m) {
+      return m && typeof m.id === 'string' && typeof m.name === 'string' && typeof m.interval === 'number';
+    });
+    if (badMed) return { err: '备份里的药品数据有问题' };
+    return { ok: o };
+  }
+
+  function csvCell(v) {
+    var s = String(v == null ? '' : v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function buildCsv() {
+    var rows = [['日期', '计划时刻', '实际服药时刻', '药品', '间隔(小时)', '状态']];
+    Object.keys(S.doses).sort().forEach(function (k) {
+      (S.doses[k] || []).slice().sort(function (a, b) { return a.time - b.time; }).forEach(function (d) {
+        var m = medById(d.medId);
+        rows.push([
+          k,
+          minToStr(d.time),
+          (d.status === 'taken' && d.takenAt) ? minToStr(minOfDay(d.takenAt)) : '',
+          m ? m.name : '已删除药品',
+          m ? m.interval : '',
+          d.status === 'taken' ? '已服用' : (d.status === 'skipped' ? '已跳过' : '待服用')
+        ]);
+      });
+    });
+    return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
+  }
+  function doseRecordCount() {
+    var n = 0;
+    Object.keys(S.doses).forEach(function (k) { n += (S.doses[k] || []).length; });
+    return n;
+  }
+
+  function downloadText(filename, text, mime) {
+    try {
+      var blob = new Blob([text], { type: mime + ';charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1500);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { return legacyCopy(); }
+      );
+    }
+    return Promise.resolve(legacyCopy());
+  }
+  /* 剪贴板权限在各 WebView 上差异很大，兜底用「全选 + execCommand」 */
+  function legacyCopy() {
+    var ta = $('#dataArea');
+    if (!ta) return false;
+    var ro = ta.readOnly;
+    ta.readOnly = false;
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.readOnly = ro;
+    try { ta.setSelectionRange(0, 0); } catch (e) { /* ignore */ }
+    return ok;
+  }
+
+  function openDataDlg(mode) {
+    dataMode = mode;
+    restoreArmed = false;
+    var ta = $('#dataArea');
+    var isRestore = mode === 'restore';
+    ta.value = '';
+    ta.readOnly = !isRestore;
+
+    if (mode === 'backup') {
+      $('#dataEyebrow').textContent = 'BACKUP';
+      $('#dataTitle').textContent = '导出备份';
+      $('#dataHint').textContent = '复制下面全部内容，存进备忘录或网盘。换手机、清缓存后可用它完整恢复。';
+      ta.value = JSON.stringify(buildBackup(), null, 2);
+    } else if (mode === 'csv') {
+      $('#dataEyebrow').textContent = 'CSV';
+      $('#dataTitle').textContent = '导出服药记录';
+      $('#dataHint').textContent = doseRecordCount()
+        ? '下面是全部服药记录（计划时刻 / 实际服药时刻 / 状态），复制后粘进 Excel，或直接发给医生。'
+        : '还没有任何服药记录，导出内容只有表头。';
+      ta.value = buildCsv();
+    } else {
+      $('#dataEyebrow').textContent = 'RESTORE';
+      $('#dataTitle').textContent = '从备份恢复';
+      $('#dataHint').textContent = '把备份内容粘贴到下面（或点「从文件选择」），再点「恢复」。这会覆盖当前全部药品与记录。';
+    }
+
+    $('#dataCopy').classList.toggle('hidden', isRestore);
+    $('#dataDownload').classList.toggle('hidden', isRestore || !ta.value);
+    $('#dataPick').classList.toggle('hidden', !isRestore);
+    $('#dataApply').classList.toggle('hidden', !isRestore);
+    var ap = $('#dataApply');
+    ap.textContent = '恢复';
+    ap.classList.remove('btn-accent');
+    ap.classList.add('btn-primary');
+    $('#dataDownload').textContent = mode === 'csv' ? '下载 .csv 文件' : '下载 .json 文件';
+    openDlg($('#dlgData'));
+  }
+
+  function applyRestore() {
+    var r = parseBackup($('#dataArea').value);
+    if (r.err) { toast(r.err); return; }
+    var d = r.ok.data;
+    var nMed = d.meds.length;
+    var nDay = Object.keys(d.doses).length;
+    if (!restoreArmed) {           // 第一次点：只做提示，不动数据
+      restoreArmed = true;
+      var b = $('#dataApply');
+      b.textContent = '再点一次 · 覆盖当前数据';
+      b.classList.remove('btn-primary');
+      b.classList.add('btn-accent');
+      toast('将覆盖现有内容（' + nMed + ' 个药品 · ' + nDay + ' 天记录）');
+      return;
+    }
+    restoreArmed = false;
+    S.meds = d.meds;
+    S.doses = d.doses;
+    S.notified = {};      // 提醒登记簿重建，避免旧标记把今天的提醒压掉
+    silenceOverdue();     // 与启动逻辑一致：过期太久的不补响
+    save();               // 内含 syncNotifications()
+    closeDlg($('#dlgData'));
+    render();
+    syncNotifications();
+    toast('已恢复 ' + nMed + ' 个药品 · ' + nDay + ' 天记录');
+  }
+
   /* ---------------- esc ---------------- */
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -610,19 +851,10 @@
 
   /* ---------------- boot ---------------- */
   function boot() {
-    // 首屏种子数据，避免空态
-    if (!S.meds.length && !Object.keys(S.doses).length) {
-      S.meds = [
-        { id: uid(), name: '维生素 D3', interval: 8 },
-        { id: uid(), name: '阿莫西林', interval: 6 }
-      ];
-      save();
-    }
+    // 不再预置任何示例药品：服药场景里「看起来像真药」的假数据会造成误导，
+    // 用户可能以为自己在吃阿莫西林。空态改为引导（见 renderToday 的 HOW IT WORKS）。
     // 过期提醒静默
-    var now = nowMin();
-    todayDoses().forEach(function (d) {
-      if (d.status === 'pending' && d.time < now && now - d.time > 30) S.notified[d.id] = 1;
-    });
+    silenceOverdue();
     save();
 
     $$('.tab').forEach(function (t) {
@@ -697,6 +929,53 @@
       }
       closeDlg($('#dlgRemind')); remindDose = null; render(); toast('10 分钟后再提醒你');
     };
+
+    /* ---- 备份 / 导出 / 恢复 ---- */
+    $('#dataClose').onclick = function () { restoreArmed = false; closeDlg($('#dlgData')); };
+    $('#dataCopy').onclick = function () {
+      var txt = $('#dataArea').value;
+      if (!txt) { toast('没有可复制的内容'); return; }
+      copyText(txt).then(function (ok) {
+        toast(ok ? '已复制到剪贴板' : '复制失败，请长按文本框全选后手动复制');
+      });
+    };
+    $('#dataDownload').onclick = function () {
+      var isCsv = dataMode === 'csv';
+      var txt = $('#dataArea').value;
+      if (!txt) { toast('没有可导出的内容'); return; }
+      // CSV 前置 BOM，Excel 才会按 UTF-8 解析中文
+      var ok = downloadText(
+        'medreminder-' + (isCsv ? 'records' : 'backup') + '-' + fmtDate(new Date()) + (isCsv ? '.csv' : '.json'),
+        (isCsv ? '\ufeff' : '') + txt,
+        isCsv ? 'text/csv' : 'application/json'
+      );
+      toast(ok ? '已开始下载；若手机没有下载目录，改用「复制」' : '当前环境不支持下载，请改用「复制」');
+    };
+    $('#dataPick').onclick = function () { $('#pickBackup').click(); };
+    $('#pickBackup').onchange = function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      var fr = new FileReader();
+      fr.onload = function () { $('#dataArea').value = String(fr.result || ''); toast('已读入文件，确认内容后点「恢复」'); };
+      fr.readAsText(f);
+      e.target.value = '';   // 允许重复选择同一个文件
+    };
+    $('#dataApply').onclick = applyRestore;
+
+    /* Esc 关闭浮层。只对「非打断式」浮层生效：
+     * 提醒弹窗仍要求用户明确选择「已服用 / 稍后」，不能被一键抹掉。 */
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' && e.key !== 'Esc') return;
+      var closable = $$('.dlg-wrap.show').filter(function (el) {
+        return el.id === 'dlgData' || el.id === 'dlgSkip';
+      });
+      if (closable.length) {
+        restoreArmed = false;
+        closeDlg(closable[closable.length - 1]);
+        return;
+      }
+      if ($('#sheetMed').classList.contains('show')) closeSheet();
+    });
 
     if (window.MedNotify && window.MedNotify.native) {
       window.MedNotify.init(onNotifyAction);
