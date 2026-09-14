@@ -22,7 +22,6 @@
     return minToStr(ds.time);
   }
   function todayKey() { return fmtDate(new Date()); }
-  function dailyCount(interval) { return Math.max(1, Math.floor(24 / interval)); }
 
   /* ---------------- state ---------------- */
   var KEY = 'medreminder.v1';
@@ -374,7 +373,7 @@
         html += '<button class="meditem" data-med="' + m.id + '">'
           + '<span class="badge badge-36" style="color:#DADBDF">' + ICON.pill + '</span>'
           + '<span class="medinfo"><span class="n">' + esc(m.name) + '</span>'
-          + '<span class="m">每 ' + m.interval + ' 小时 · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : ('每日约 ' + dailyCount(m.interval) + ' 次')) + '</span></span>'
+          + '<span class="m">每 ' + m.interval + ' 小时 · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '打卡后开始计时') + '</span></span>'
           + ICON.chev + '</button>';
       });
       html += '</div>';
