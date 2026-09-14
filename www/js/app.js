@@ -13,6 +13,14 @@
   function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function nowMin() { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
   function minToStr(m) { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }
+  function minOfDay(ms) { var d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); }
+  /* 展示用：已服用的剂量显示**真实打卡时刻**（takenAt），未服用/跳过显示计划时刻。
+   * 旧记录没有 takenAt（此字段 2026-09-14 前只写不读），用 ≈ 标出这是按计划推定、非真实打卡。 */
+  function doseClockHtml(ds) {
+    if (ds.status === 'taken' && ds.takenAt) return minToStr(minOfDay(ds.takenAt));
+    if (ds.status === 'taken') return '<span title="旧记录：按计划时刻推定，非真实打卡时刻">≈' + minToStr(ds.time) + '</span>';
+    return minToStr(ds.time);
+  }
   function todayKey() { return fmtDate(new Date()); }
   function dailyCount(interval) { return Math.max(1, Math.floor(24 / interval)); }
 
@@ -86,6 +94,59 @@
     var n = 0;
     S.meds.forEach(function (m) { if (checkIn(m.id)) n++; });
     return n;
+  }
+
+  /* 记录一次服药：写入真实打卡时刻，并让同一药品后续未服的剂量按「实际服药时刻 + 间隔」顺延。
+   * 这是 2026-09-14 修掉的核心缺陷 —— 此前整天的计划在当天第一次打卡时就一次算死，
+   * 迟服不会顺延，且界面上永远显示计划时刻。 */
+  function markTaken(dose, takenMs) {
+    dose.status = 'taken';
+    dose.takenAt = takenMs;
+    return rollForward(dose, takenMs);
+  }
+
+  /* 顺延：把该药今天**排在这一针之后**的 pending，从 takenMs 起按间隔重排。
+   * 只顺延「时间在原计划之后」的剂量 —— 更早且已逾期的剂量不受影响，
+   * 否则它们会被推到次日而遭丢弃，等于把漏服记录抹掉。
+   * 越过今天 24:00 的不再排（留到明天重新打卡），避免出现当天永不触发的死条目。 */
+  function rollForward(dose, takenMs) {
+    var med = medById(dose.medId);
+    if (!med) return { shifted: 0, dropped: 0 };
+    var step = med.interval * 60;
+    var plannedAt = dose.time;
+    var rest = todayDoses()
+      .filter(function (d) { return d.medId === dose.medId && d.status === 'pending' && d.time > plannedAt; })
+      .sort(function (a, b) { return a.time - b.time; });
+    var base = minOfDay(takenMs) + step;
+    var dropIds = [], shifted = 0;
+    rest.forEach(function (d, i) {
+      var t = base + i * step;
+      if (t >= 1440) { dropIds.push(d.id); return; }
+      d.time = t;
+      S.notified[d.id] = 0;   // 时刻变了，允许按新时刻重新提醒
+      shifted++;
+    });
+    if (dropIds.length) {
+      S.doses[todayKey()] = todayDoses().filter(function (d) { return dropIds.indexOf(d.id) < 0; });
+    }
+    reindexMed(dose.medId);
+    return { shifted: shifted, dropped: dropIds.length };
+  }
+
+  /* 顺延后重排序号，保证「第 N / 共 M 次」仍然正确 */
+  function reindexMed(medId) {
+    var arr = todayDoses()
+      .filter(function (d) { return d.medId === medId; })
+      .sort(function (a, b) { return a.time - b.time; });
+    arr.forEach(function (d, i) { d.idx = i; d.total = arr.length; });
+  }
+
+  /* 打卡后的提示语：说清真实时刻，以及后续是否顺延 */
+  function takenToast(med, takenMs, r) {
+    var s = '已记录 ' + minToStr(minOfDay(takenMs)) + ' · ' + (med ? med.name : '');
+    if (r && r.shifted) s += '，后续 ' + r.shifted + ' 次已顺延';
+    if (r && r.dropped) s += '，' + r.dropped + ' 次越过零点不再提醒';
+    return s;
   }
 
   function sortedDoses() {
@@ -202,11 +263,14 @@
           right = '<span class="dose-s"><span class="txt">待服用</span></span>';
         }
         html += '<div class="dose">'
-          + '<div class="dose-l"><span class="' + tCls + '">' + minToStr(ds.time) + '</span>'
+          + '<div class="dose-l"><span class="' + tCls + '">' + doseClockHtml(ds) + '</span>'
           + '<span class="' + nCls + '">' + esc(med ? med.name : '已删除药品') + '</span></div>'
           + right + '</div>';
       });
       html += '</div>';
+      if (sorted.some(function (ds) { return ds.status === 'taken' && !ds.takenAt; })) {
+        html += '<p class="hint" style="margin-top:-4px">带 ≈ 的时刻是旧记录，按当时的计划时刻推定，不是真实打卡时刻。</p>';
+      }
 
       // 今天还没打卡的药
       var unchecked = S.meds.filter(function (m) {
@@ -222,7 +286,7 @@
 
       if (nxt) {
         html += '<div class="btnrow">'
-          + '<button class="btn btn-primary" id="btnEarly">提前服药</button>'
+          + '<button class="btn btn-primary" id="btnEarly">现在服用</button>'
           + '<button class="btn btn-ghost" id="btnSkip">跳过本次</button>'
           + '</div>';
       } else if (!unchecked.length) {
@@ -271,9 +335,10 @@
     if (e) e.onclick = function () {
       var nxt = nextPending(); if (!nxt) return;
       var med = medById(nxt.medId);
-      nxt.status = 'taken'; nxt.takenAt = Date.now();
+      var at = Date.now();
+      var r = markTaken(nxt, at);
       save(); render();
-      toast('已记录 ' + minToStr(nxt.time) + ' · ' + (med ? med.name : ''));
+      toast(takenToast(med, at, r));
     };
     var s = $('#btnSkip');
     if (s) s.onclick = function () {
@@ -496,9 +561,11 @@
     if (!ds) return;
     if (action === 'taken') {
       if (ds.status !== 'pending') return;
-      ds.status = 'taken'; ds.takenAt = Date.now();
+      var at = Date.now();
+      var med = medById(ds.medId);
+      var r = markTaken(ds, at);
       if (window.MedNotify) window.MedNotify.cancelOne(ds.id);
-      save(); render(); toast('已记录服药');
+      save(); render(); toast(takenToast(med, at, r));
     } else if (action === 'snooze') {
       ds.time = Math.min(1439, ds.time + 10);
       S.notified[ds.id] = 0;
@@ -614,8 +681,15 @@
     };
 
     $('#remindDone').onclick = function () {
-      if (remindDose) { remindDose.status = 'taken'; remindDose.takenAt = Date.now(); save(); }
-      closeDlg($('#dlgRemind')); remindDose = null; render(); toast('已记录服药');
+      var msg = '已记录服药';
+      if (remindDose) {
+        var at = Date.now();
+        var med = medById(remindDose.medId);
+        var r = markTaken(remindDose, at);
+        msg = takenToast(med, at, r);
+        save();
+      }
+      closeDlg($('#dlgRemind')); remindDose = null; render(); toast(msg);
     };
     $('#remindSnooze').onclick = function () {
       if (remindDose) {
