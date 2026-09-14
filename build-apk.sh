@@ -14,8 +14,11 @@ find_java() {
     local p; p="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
     [ -x "$p/bin/java" ] && { echo "$p"; return; }
   fi
-  for p in "C:/Program Files/Microsoft/jdk-17" "C:/Program Files/Java/jdk-17" \
-           "C:/Program Files/Eclipse Adoptium/jdk-17" \
+  # 用通配匹配带小版本号的目录（如 jdk-17.0.20.101-hotspot）；
+  # 未匹配的 glob 会原样保留，[ -x ] 判定失败即可安全跳过。
+  for p in "C:/Program Files/Microsoft"/jdk-17* \
+           "C:/Program Files/Java"/jdk-17* \
+           "C:/Program Files/Eclipse Adoptium"/jdk-17* \
            "C:/Program Files/Android/Android Studio/jbr" \
            "C:/Users/davik/.workbuddy/binaries/android/jdk17"; do
     [ -x "$p/bin/java" ] && { echo "$p"; return; }
