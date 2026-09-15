@@ -57,12 +57,25 @@
     window.MedNotify.sync(list);
   }
 
-  /* 逾期太久的待服剂量不再补响 —— 启动与「恢复备份」共用同一套判断 */
+  /* 逾期太久的待服剂量不再补响 —— 启动与「恢复备份」共用同一套判断。
+   * 注意：这只是「不再响」，不等于「算你服了」或「算你跳过」——
+   * 剂量本身仍是 pending，由 missedDoses() 识别成「已错过」交给用户处理。 */
   function silenceOverdue() {
     var now = nowMin();
     todayDoses().forEach(function (d) {
-      if (d.status === 'pending' && d.time < now && now - d.time > 30) S.notified[d.id] = 1;
+      if (d.status === 'pending' && d.time < now && now - d.time > MISS_GRACE_MIN) S.notified[d.id] = 1;
     });
+  }
+
+  /* 「已错过」判定：仍是待服，但计划时刻已经过去很久。
+   * 过去这些剂量被静默标记为已通知、界面上却依然写着「待服用」——
+   * 用户既不知道自己漏了药，也无从补记。现在显式暴露出来。 */
+  var MISS_GRACE_MIN = 30;
+  function isMissed(d) {
+    return d.status === 'pending' && nowMin() - d.time > MISS_GRACE_MIN;
+  }
+  function missedDoses() {
+    return sortedDoses().filter(isMissed);
   }
 
   function todayDoses() {
@@ -226,11 +239,10 @@
       + '<span class="meta">' + (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + wk + '</span>'
       + '<span class="eyebrow">MED TRACKER</span></div>';
 
-    if (window.MedNotify && window.MedNotify.native && notifyPerm === 'denied') {
-      html += '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer">'
-        + '<span style="font-size:14px;line-height:20px;color:#FF7A17">通知权限未开启</span>'
-        + '<span class="meta">锁屏和息屏时收不到服药提醒，点这里去开启。</span></button>';
-    }
+    /* 权限提示：原生与浏览器两种模式下都可能有权限问题，
+     * 之前只在原生 + denied 时提示，PWA 用户被拒授权后既收不到提醒也无任何说明。 */
+    var permCard = permCardHtml();
+    if (permCard) html += permCard;
 
     if (!list.length) {
       // ---- 未打卡 ----
@@ -275,6 +287,16 @@
         + '<p class="body" id="countdown">' + countdownText(nxt) + '</p>'
         + '</div>';
 
+      // 漏服可见化：显式告诉用户「漏了几次」，并给一键补记入口
+      var missed = missedDoses();
+      if (missed.length) {
+        html += '<button class="card card-miss" id="btnMissAll" style="display:flex;flex-direction:column;gap:6px;width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent">'
+          + '<span style="font-size:14px;line-height:20px;color:#FF7A17">今天漏了 ' + missed.length + ' 次服药</span>'
+          + '<span class="meta">' + missed.map(function (d) { return minToStr(d.time); }).join('、')
+          + ' 这几次没有打卡记录。已经吃过就点这里补记，没吃就留意一下。</span>'
+          + '<span class="meta" style="color:#FF7A17">点此把漏掉的都记为已服用</span></button>';
+      }
+
       html += '<div class="card sched" style="padding-left:20px;padding-right:20px;padding-top:8px;padding-bottom:8px">';
       sorted.forEach(function (ds) {
         var med = medById(ds.medId);
@@ -286,12 +308,17 @@
           right = '<span class="dose-s">' + ICON.check + '<span class="txt">已服用</span></span>';
         } else if (ds.status === 'skipped') {
           right = '<span class="dose-s"><span class="txt">已跳过</span></span>';
+        } else if (isMissed(ds)) {
+          // 已错过：不只是文案，给一个能补记的按钮，别让用户没法挽救
+          right = '<button class="btn-miss" data-makeup="' + esc(ds.id) + '" '
+            + 'aria-label="补记 ' + esc(minToStr(ds.time)) + ' 这次服药">已错过 · 补记</button>';
         } else if (isNext) {
           right = '<span class="pill accent">待服用</span>';
         } else {
           right = '<span class="dose-s"><span class="txt">待服用</span></span>';
         }
-        html += '<div class="dose">'
+        var rowMiss = isMissed(ds) ? ' dose-miss' : '';
+        html += '<div class="dose' + rowMiss + '">'
           + '<div class="dose-l"><span class="' + tCls + '">' + doseClockHtml(ds) + '</span>'
           + '<span class="' + nCls + '">' + esc(med ? med.name : '已删除药品') + '</span></div>'
           + right + '</div>';
@@ -337,8 +364,39 @@
 
   function bindToday() {
     var perm = $('#btnPerm');
-    if (perm) perm.onclick = function () {
-      if (window.MedNotify) window.MedNotify.requestPermission().then(function (p) { notifyPerm = p; render(); });
+    if (perm) perm.onclick = function () { askNotify(); };
+
+    /* 补记：把「已错过」的剂量记为已服用。
+     * 真实服药时刻无从得知（用户是事后补记），所以 takenAt 用「现在」——
+     * 显示上会带 ≈ 前缀，与真实打卡区分（doseClockHtml 已支持）。
+     * 补记只改状态、不触发顺延：scheduleShift 依赖 taked 顺序，事后补记会把
+     * 后续剂量推乱，反而制造虚假排程。 */
+    function makeUp(dose, silent) {
+      if (!dose || dose.status !== 'pending') return false;
+      dose.status = 'taken';
+      dose.takenAt = Date.now();
+      dose.makeup = true;      // 标记为补记，导出 CSV 时可与真实打卡区分
+      if (window.MedNotify) window.MedNotify.cancelOne(dose.id);
+      return true;
+    }
+    $$('[data-makeup]').forEach(function (el) {
+      el.onclick = function (ev) {
+        ev.stopPropagation();
+        var id = el.getAttribute('data-makeup');
+        var l = todayDoses(), ds = null;
+        for (var i = 0; i < l.length; i++) if (l[i].id === id) { ds = l[i]; break; }
+        if (!makeUp(ds)) { toast('这次已经处理过了'); render(); return; }
+        save(); render(); syncNotifications();
+        toast('已补记 ' + minToStr(ds.time) + ' 这次服药');
+      };
+    });
+    var missAll = $('#btnMissAll');
+    if (missAll) missAll.onclick = function () {
+      var n = 0;
+      missedDoses().forEach(function (d) { if (makeUp(d)) n++; });
+      if (!n) { render(); return; }
+      save(); render(); syncNotifications();
+      toast('已补记 ' + n + ' 次服药');
     };
     $$('[data-checkin]').forEach(function (el) {
       el.onclick = function () {
@@ -611,12 +669,18 @@
     } catch (e) { /* ignore */ }
   }
   function askNotify() {
-    if (window.MedNotify) {
+    if (window.MedNotify && window.MedNotify.native) {
       window.MedNotify.requestPermission().then(function (p) { notifyPerm = p; render(); });
       return;
     }
+    // 浏览器：只有 default 时才允许弹授权框，denied 时浏览器会静默忽略，
+    // 此时不刷新权限也不假报成功，让权限卡继续显示引导用户手动改。
     try {
-      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(function () { notifyPerm = browserPerm(); render(); });
+      } else {
+        notifyPerm = browserPerm(); render();
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -836,6 +900,65 @@
   }
 
   /* ---------------- render dispatcher ---------------- */
+  /* ---------------- 通知权限状态 ----------------
+   * notifyPerm 取值：granted / denied / prompt(未申请，浏览器) / unsupported / unknown
+   * 原生：来自 LocalNotifications.checkPermissions()
+   * 浏览器：来自 Notification.permission（default → prompt）
+   * 只有 denied 才是「用户已经拒绝」，需要引导去系统/浏览器设置里改。 */
+  function permCardHtml() {
+    var isNative = !!(window.MedNotify && window.MedNotify.native);
+
+    // 浏览器不支持通知：页面必须开着才提醒，说清楚，别让用户以为装完就万事大吉
+    if (!isNative && notifyPerm === 'unsupported') {
+      return '<div class="card" style="display:flex;flex-direction:column;gap:6px;border-color:#8A8F98">'
+        + '<span style="font-size:14px;line-height:20px;color:var(--sub)">当前环境不支持通知</span>'
+        + '<span class="meta">提醒只在 App 页面前台时弹出，切走或锁屏不会响。装到手机上才能锁屏提醒。</span></div>';
+    }
+
+    // 未申请：不吓唬用户，只在浏览器模式提示，点了才发起授权
+    if (!isNative && notifyPerm === 'prompt') {
+      return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer;-webkit-tap-highlight-color:transparent">'
+        + '<span style="font-size:14px;line-height:20px;color:#FF7A17">还没开启通知</span>'
+        + '<span class="meta">开启后才能及时收到服药提醒，点这里授权。</span></button>';
+    }
+
+    // 已被拒绝：原生引导去系统设置，浏览器只能让用户去浏览器设置里改
+    if (notifyPerm === 'denied') {
+      var hint = isNative
+        ? '锁屏和息屏时收不到服药提醒。点这里重新发起授权；若系统不再弹窗，请到「设置 → 应用 → MedReminder → 通知」里手动打开。'
+        : '浏览器已拒绝通知，需要到浏览器的网站权限设置里把通知改回「允许」，然后刷新页面。';
+      return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer;-webkit-tap-highlight-color:transparent">'
+        + '<span style="font-size:14px;line-height:20px;color:#FF7A17">通知权限被拒绝 · 收不到提醒</span>'
+        + '<span class="meta">' + hint + '</span></button>';
+    }
+
+    return '';
+  }
+
+  /* 浏览器模式下把 Notification.permission 映射成与原生一致的取值。
+   * 统一从 window 上取，避免 "检查 window、读取全局" 的不一致。 */
+  function browserPerm() {
+    try {
+      var N = window.Notification || (typeof Notification !== 'undefined' ? Notification : null);
+      if (!N) return 'unsupported';
+      var p = N.permission;
+      if (p === 'granted') return 'granted';
+      if (p === 'denied') return 'denied';
+      return 'prompt';   // default
+    } catch (e) { return 'unsupported'; }
+  }
+
+  function refreshPerm() {
+    if (window.MedNotify && window.MedNotify.native) {
+      window.MedNotify.checkPermissions().then(function (p) {
+        if (p !== 'unsupported' && p !== 'unknown') { notifyPerm = p; render(); }
+      });
+      return;
+    }
+    var b = browserPerm();
+    if (b !== notifyPerm) { notifyPerm = b; render(); }
+  }
+
   function render() {
     renderToday(); renderMeds(); renderRecords();
   }
@@ -979,13 +1102,17 @@
 
     if (window.MedNotify && window.MedNotify.native) {
       window.MedNotify.init(onNotifyAction);
-      window.MedNotify.checkPermissions().then(function (p) { notifyPerm = p; render(); });
+      refreshPerm();
+    } else {
+      // 浏览器模式过去从不检查权限，导致被拒后没有任何提示
+      notifyPerm = browserPerm();
     }
     render();
     syncNotifications();
     setTab('today');
     tick();
     setInterval(tick, 1000);
+    setInterval(refreshPerm, 5000);   // 用户可能刚去系统设置里改了权限，回到前台要能自动反映
 
     // 跨天自动刷新
     var lastDay = todayKey();

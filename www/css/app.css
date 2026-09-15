@@ -75,6 +75,18 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
 .dose-s{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 .dose-s .txt{font-size:12px;line-height:16px;color:var(--muted);white-space:nowrap}
 
+/* 漏服可见化：已错过的行 + 补记按钮。触摸目标按 44×44 最小值给足 */
+.dose-miss{position:relative}
+.dose-miss .dose-t{color:#FF7A17}
+.btn-miss{
+  flex:0 0 auto;min-height:44px;padding:0 12px;border-radius:9999px;
+  border:1px solid #FF7A17;background:transparent;color:#FF7A17;
+  font-size:12px;line-height:16px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+.btn-miss:active{background:rgba(255,122,23,.16)}
+.card-miss{border-color:#FF7A17;text-align:left}
+.card-miss:active{background:#1D1D1D}
+
 /* med list item */
 .meditem{
   display:flex;align-items:center;gap:14px;width:100%;text-align:left;
