@@ -14,17 +14,21 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;height:100%}
 body{
   background:#000;color:var(--text);font-family:var(--font-sans);
   display:flex;justify-content:center;overscroll-behavior-y:none;
   -webkit-font-smoothing:antialiased;
+  overflow:hidden;   /* 禁止整页滚动 —— 滚动交给 main，底部导航才能常驻 */
 }
 button{font-family:inherit}
 
 .phone{
   position:relative;width:100%;max-width:430px;
-  min-height:100vh;min-height:100dvh;
+  /* 必须是定高而不是 min-height：min-height 会让容器随内容长高，
+     main 的 overflow-y 随之失效、整页滚动把底部导航推走。
+     定高后 main 才会内部滚动，tabbar 在三个选项卡里都常驻。 */
+  height:100%;
   background:var(--bg);display:flex;flex-direction:column;overflow:hidden;
   /* 让出系统状态栏高度 —— 状态栏交给系统绘制，这里只负责不被它压住 */
   padding-top:env(safe-area-inset-top);

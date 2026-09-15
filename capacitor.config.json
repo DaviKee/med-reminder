@@ -4,7 +4,8 @@
   "webDir": "www",
   "android": {
     "backgroundColor": "#0A0A0A",
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "zoomEnabled": true
   },
   "plugins": {
     "LocalNotifications": {

@@ -547,6 +547,7 @@
       + '<span class="eyebrow">DEBUG · 验收用</span>'
       + '<p class="body">想立刻确认提醒能不能正常响？点下面按钮，10 秒后会收到一条测试通知（息屏 / 锁屏也能测，不会写入任何服药记录）。</p>'
       + '<button class="btn btn-ghost" id="btnTest" style="align-self:flex-start;margin-top:2px">测试提醒 · 10 秒后响一次</button>'
+      + diagHtml()
       + '</div>';
 
     host.innerHTML = html;
@@ -944,15 +945,47 @@
     } catch (e) { return 'unsupported'; }
   }
 
+  /* 最近一次原生探测结果。既用于判定，也用于 DEBUG 卡自检展示 ——
+   * 真机验收时「看不到权限卡」若只靠猜，会来回折腾好几轮。 */
+  var permProbe = null;
+  var lastProbeSig = '';
+
   function refreshPerm() {
     if (window.MedNotify && window.MedNotify.native) {
-      window.MedNotify.checkPermissions().then(function (p) {
-        if (p !== 'unsupported' && p !== 'unknown') { notifyPerm = p; render(); }
+      window.MedNotify.probe().then(function (p) {
+        var sig = JSON.stringify(p);
+        // 只在探测结果真的变化时重绘。每 5 秒无条件 render() 会重建视图 DOM，
+        // 打断用户滚动与输入（innerHTML 一换，滚动位置就回顶）。
+        if (sig === lastProbeSig) return;
+        lastProbeSig = sig;
+        permProbe = p;
+
+        var next;
+        if (window.MedNotify.isBlocked(p)) next = 'denied';
+        else if (p.display === 'granted') next = 'granted';
+        else next = 'unknown';
+
+        if (next !== notifyPerm) notifyPerm = next;
+        render();
       });
       return;
     }
     var b = browserPerm();
     if (b !== notifyPerm) { notifyPerm = b; render(); }
+  }
+
+  /* DEBUG 卡的自检行：把原生探测到的原始值直接显示出来。
+   * 「看不到权限卡」若只靠猜，会来回折腾好几轮；显示实际读数可以一次定位。 */
+  function diagHtml() {
+    if (!(window.MedNotify && window.MedNotify.native)) {
+      return '<p class="hint">通知模式：浏览器（无系统闹钟，页面关掉就不响）</p>';
+    }
+    var p = permProbe;
+    if (!p) return '<p class="hint">通知状态：读取中…</p>';
+    return '<p class="hint">通知状态：权限 ' + esc(p.display)
+      + ' · App 开关 ' + (p.enabled === null ? '读不到' : (p.enabled ? '开' : '关'))
+      + ' · 渠道 ' + (p.channelFound ? ('importance ' + p.channelImportance) : '未创建')
+      + '</p>';
   }
 
   function render() {

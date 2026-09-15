@@ -160,6 +160,53 @@
     }).then(function () { return true; }).catch(function (e) { console.warn('notify test', e); return false; });
   }
 
+  /* 通知可用性综合探测。
+   * 只看 checkPermissions() 不够：用户可能只关掉「本 App 的这一个通知渠道」，
+   * 此时 App 级开关仍开着、checkPermissions() 报 granted，但提醒实际收不到。
+   * 所以三路一起看：权限状态 / App 级开关 / 本渠道重要性。
+   * 任一信号为「收不到」即视为不可用 —— 提醒类 App 宁可与误报多提示，也不能静默失效。 */
+  function probe() {
+    if (!NATIVE) return Promise.resolve({ native: false });
+    var r = { native: true, display: 'unknown', enabled: null, channelFound: false, channelImportance: null };
+
+    return Promise.resolve()
+      .then(function () {
+        return LN.checkPermissions().then(function (x) { r.display = (x && x.display) || 'unknown'; });
+      })
+      .catch(function () { /* 保留 unknown */ })
+      .then(function () {
+        if (typeof LN.areEnabled !== 'function') return null;
+        return LN.areEnabled().then(function (x) { r.enabled = !!(x && x.value); });
+      })
+      .catch(function () { /* 保留 null */ })
+      .then(function () {
+        if (typeof LN.listChannels !== 'function') return null;
+        return LN.listChannels().then(function (x) {
+          var list = (x && (x.channels || x.notificationChannels)) || (Array.isArray(x) ? x : []);
+          for (var i = 0; i < list.length; i++) {
+            var ch = list[i];
+            if (ch && ch.id === CHANNEL) {
+              r.channelFound = true;
+              r.channelImportance = (typeof ch.importance === 'number') ? ch.importance : null;
+              break;
+            }
+          }
+        });
+      })
+      .catch(function () { /* 渠道查询失败不算致命 */ })
+      .then(function () { return r; });
+  }
+
+  /* 综合判定：是否真的收不到提醒 */
+  function isBlocked(p) {
+    if (!p || !p.native) return false;
+    if (p.display === 'denied') return true;
+    if (p.enabled === false) return true;
+    // importance 0 = IMPORTANCE_NONE，用户把这条渠道单独关掉了
+    if (p.channelImportance === 0) return true;
+    return false;
+  }
+
   window.MedNotify = {
     native: NATIVE,
     init: init,
@@ -167,6 +214,8 @@
     test: test,
     cancelOne: cancelOne,
     checkPermissions: checkPermissions,
-    requestPermission: requestPermission
+    requestPermission: requestPermission,
+    probe: probe,
+    isBlocked: isBlocked
   };
 })();
