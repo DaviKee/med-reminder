@@ -626,10 +626,6 @@
 
   /* ---------------- reminder ---------------- */
   function tick() {
-    // clock
-    var d = new Date();
-    $('#sbTime').textContent = d.getHours() + ':' + pad(d.getMinutes());
-
     var cd = $('#countdown');
     if (cd) cd.textContent = countdownText(nextPending());
 

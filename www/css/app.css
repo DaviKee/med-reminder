@@ -26,16 +26,9 @@ button{font-family:inherit}
   position:relative;width:100%;max-width:430px;
   min-height:100vh;min-height:100dvh;
   background:var(--bg);display:flex;flex-direction:column;overflow:hidden;
-}
-
-/* ---------- status bar ---------- */
-.statusbar{
-  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;height:calc(52px + env(safe-area-inset-top));
+  /* 让出系统状态栏高度 —— 状态栏交给系统绘制，这里只负责不被它压住 */
   padding-top:env(safe-area-inset-top);
 }
-.sb-time{font-family:var(--font-num);font-size:15px;font-weight:600;letter-spacing:-.2px}
-.sb-icons{display:flex;align-items:center;gap:6px}
 
 /* ---------- views ---------- */
 main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
