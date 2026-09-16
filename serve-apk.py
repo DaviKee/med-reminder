@@ -8,13 +8,36 @@
 """
 import http.server
 import os
+import re
 import socketserver
 import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-APK = "med-reminder-debug.apk"
-APK_PATH = os.path.join(ROOT, APK)
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+
+
+def find_apk():
+    """取目录里最新构建的 APK。
+
+    产物名形如 MedReminder-v1.0.8-2026-09-16.apk，带版本号。按 mtime 取最新，
+    这样加了版本号也不用每次改本脚本，而且绝不会手滑装到旧包。"""
+    cands = [f for f in os.listdir(ROOT)
+             if f.lower().endswith(".apk") and os.path.isfile(os.path.join(ROOT, f))]
+    if not cands:
+        return None
+    cands.sort(key=lambda f: os.path.getmtime(os.path.join(ROOT, f)), reverse=True)
+    return cands[0]
+
+
+def apk_version(name):
+    """从文件名里取版本号。取不到就退回通用文案，不要瞎猜。"""
+    m = re.search(r"-v(\d+\.\d+\.\d+)-", name or "")
+    return "v" + m.group(1) if m else "最新版"
+
+
+# 找不到 APK 时给一个不存在的名字，后续统一走 404，不用到处判空
+APK = find_apk() or "MedReminder.apk"
+APK_PATH = os.path.join(ROOT, APK)
 
 
 def host_ip():
@@ -84,7 +107,7 @@ PAGE = """<!DOCTYPE html>
 <body>
   <div class="cap"></div>
   <h1>定时服药提醒</h1>
-  <p class="meta">v1.0 · __SIZE__ · Android 8.0+</p>
+  <p class="meta">__VER__ · __SIZE__ · Android 8.0+</p>
 
   <a class="btn" href="/apk">下载安装包</a>
 
@@ -133,7 +156,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not os.path.exists(APK_PATH):
                 self._send(404, b"APK not found", "text/plain; charset=utf-8")
                 return
-            page = PAGE.replace("__SIZE__", human(os.path.getsize(APK_PATH)))
+            page = (PAGE.replace("__SIZE__", human(os.path.getsize(APK_PATH)))
+                        .replace("__VER__", apk_version(APK)))
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             return
 
@@ -176,6 +200,8 @@ if __name__ == "__main__":
         print("  电脑上看说明：  http://%s:%d/" % (ip, PORT))
         print("  手机扫码后打开：http://%s:%d/" % (ip, PORT))
         print("  APK 直链：     http://%s:%d/apk" % (ip, PORT))
+        print("  版本：         %s" % apk_version(APK))
+        print("  文件：         %s" % APK)
         print("  文件大小：     %s" % human(os.path.getsize(APK_PATH)))
         print("-" * 52)
         print("  手机需与本机同一 WiFi。装好后 Ctrl+C 关掉即可。")

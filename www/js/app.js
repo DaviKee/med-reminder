@@ -9,6 +9,22 @@
   var pad = function (n) { return String(n).padStart(2, '0'); };
   var uid = function () { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); };
 
+  /* ---------------- 版本号（单一来源） ----------------
+   * 只在这里改一处：build-apk.sh 会自动读出这两个值，用于
+   * ① 命名 APK 文件  ② 同步 android/app/build.gradle 的 versionName / versionCode。
+   *
+   * 为什么 App 内也要显示：装上手机之后没法确认装的是哪个版本。前几轮验收都是靠
+   * 「某个功能有没有出现」反推版本，很容易搞混 —— 秦老师也提了这个问题。
+   * 现在记录页 DEBUG 卡会直接写出「版本 vX.Y.Z · 日期 · 提交号」。
+   *
+   * 编号规则（v主.次.修订）：
+   *   修订 +1  修 bug
+   *   次   +1  加功能
+   *   主   +1  不兼容变更（数据格式之类）
+   * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
+  var APP_VERSION = '1.0.8';
+  var APP_BUILD = '2026-09-16';
+
   /* ---------------- date / time helpers ---------------- */
   function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function nowMin() { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
@@ -737,6 +753,7 @@
       + '<p class="body">想立刻确认提醒能不能正常响？点下面按钮，10 秒后会收到一条测试通知（息屏 / 锁屏也能测，不会写入任何服药记录）。</p>'
       + '<button class="btn btn-ghost" id="btnTest" style="align-self:flex-start;margin-top:2px">测试提醒 · 10 秒后响一次</button>'
       + diagHtml()
+      + '<p class="hint">版本 v' + esc(APP_VERSION) + ' · ' + esc(APP_BUILD) + '</p>'
       + '</div>';
 
     host.innerHTML = html;

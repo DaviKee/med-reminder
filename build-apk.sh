@@ -67,6 +67,34 @@ if [ ! -d node_modules ]; then
   npm install --no-audit --no-fund
 fi
 
+# ---------- 版本号（单一来源：www/js/app.js 顶部） ----------
+# 必须放在编译之前：versionName 要写进 APK，编译后再改就没用了。
+VER="$(sed -n "s/^  var APP_VERSION = '\([^']*\)';.*/\1/p" www/js/app.js | head -1)"
+BUILDDATE="$(sed -n "s/^  var APP_BUILD = '\([^']*\)';.*/\1/p" www/js/app.js | head -1)"
+
+if [ -z "$VER" ]; then
+  echo "✗ 没能从 www/js/app.js 读到 APP_VERSION —— 出包中止。"
+  echo "  版本号是产物命名、Android versionName 以及「手机上装的是哪一版」的唯一依据，不能缺。"
+  exit 1
+fi
+[ -z "$BUILDDATE" ] && BUILDDATE="$(date +%Y-%m-%d)"
+
+# versionCode 由语义版本确定性推导，不用单独维护：
+#   v1.0.8 -> 1*10000 + 0*100 + 8 = 10008
+MAJ="${VER%%.*}"; REST="${VER#*.}"; MIN="${REST%%.*}"; PAT="${REST##*.}"
+VCODE=$(( MAJ * 10000 + MIN * 100 + PAT ))
+
+# ---------- 同步版本到原生工程 ----------
+# 这样「设置 → 应用 → 定时服药提醒」里也能看到版本号，便于和 APK 文件对上。
+GRADLE="android/app/build.gradle"
+if [ -f "$GRADLE" ]; then
+  sed -i.bak "s/^\( *versionCode \).*/\1$VCODE/" "$GRADLE"
+  sed -i.bak "s/^\( *versionName \).*/\1\"$VER\"/" "$GRADLE"
+  rm -f "$GRADLE.bak"
+fi
+
+echo "  版本  : v$VER ($BUILDDATE)  versionCode=$VCODE"
+
 # ---------- 同步 + 编译 ----------
 echo "→ 同步 www/ 到原生工程…"
 ./node_modules/.bin/cap sync android
@@ -76,7 +104,13 @@ cd android
 ./gradlew assembleDebug --no-daemon --console=plain | tail -5
 cd ..
 
-cp android/app/build/outputs/apk/debug/app-debug.apk med-reminder-debug.apk
+# 产物带版本号，避免「手里这个包是哪一版」再次搞混。
+# 同时清掉上一版产物，保证目录里永远只有一个待安装包（serve-apk.py 取最新那个）。
+OUT="MedReminder-v${VER}-${BUILDDATE}.apk"
+rm -f MedReminder-v*.apk med-reminder-debug.apk
+cp android/app/build/outputs/apk/debug/app-debug.apk "$OUT"
+
 echo ""
-echo "✓ 打包完成：$(pwd)/med-reminder-debug.apk"
+echo "✓ 打包完成：$(pwd)/$OUT"
+echo "  版本 v$VER  ·  $BUILDDATE  ·  versionCode $VCODE"
 echo "  装到手机：python serve-apk.py  然后手机扫码"
