@@ -497,20 +497,42 @@
     return '距下次服药还有 ' + (h ? h + ' 小时 ' + m + ' 分' : m + ' 分钟');
   }
 
+  /* 权限卡点击：**先真正申请一次，拿不到再跳系统设置**。
+   *
+   * 上一版写的是「denied 就直接跳设置，不再申请」—— 那是错的。
+   * Android 官方文档说用户在弹窗选「不允许」与「在系统设置里手动关闭」**效果相似**，
+   * 但**再请求时是否弹窗并不等价**：手动关闭相当于 revoke，多数设备上重新申请
+   * 仍会弹出授权框。上一版把这条路砍掉了，等于白白丢掉唯一一次能直接授权的机会
+   * （秦老师真机反馈：「双清后第一次能授权，手动关闭后再点就拿不到权限」）。
+   *
+   * 现在的行为：能弹窗的设备一次点击就授权成功；系统性不再弹窗（或用户再次拒绝）时，
+   * 自动落到系统设置页 —— 那是唯一 100% 有效的路径。两条路都走通。
+   * 抽成具名函数而非内联，是为了这段分支能被测试直接覆盖。 */
+  function onPermCardTap() {
+    if (window.MedNotify && window.MedNotify.native) {
+      permAction = '申请中…';
+      window.MedNotify.requestPermission().then(function (p) {
+        if (p === 'granted') {
+          permAction = '申请成功 · 已授权';
+          notifyPerm = 'granted'; render();
+          toast('通知已开启');
+          return;
+        }
+        permAction = '申请未通过（' + p + '）→ 跳系统设置';
+        window.MedNotify.openSettings().then(function (ok) {
+          toast(ok
+            ? '请在系统设置里打开「通知」'
+            : '请到「设置 → 应用 → 定时服药提醒 → 通知」手动打开');
+        });
+      });
+      return;
+    }
+    askNotify();
+  }
+
   function bindToday() {
     var perm = $('#btnPerm');
-    if (perm) perm.onclick = function () {
-      /* 已被拒绝时系统不会再弹授权框 —— 再调 requestPermission 是无效的。
-       * 此时唯一有效的路径是把用户直接送到系统设置页（原生插件提供）。
-       * 插件不存在或跳转失败时，退回文字指引，不能变成点了没反应。 */
-      if (notifyPerm === 'denied' && window.MedNotify && window.MedNotify.native) {
-        window.MedNotify.openSettings().then(function (ok) {
-          if (!ok) toast('请到「设置 → 应用 → 定时服药提醒 → 通知」手动打开');
-        });
-        return;
-      }
-      askNotify();
-    };
+    if (perm) perm.onclick = onPermCardTap;
 
     /* 补记：把「已错过」的剂量记为已服用。
      * 真实服药时刻无从得知（用户是事后补记），所以 takenAt 用「现在」——
@@ -1098,13 +1120,13 @@
         + '<span class="meta">开启后才能及时收到服药提醒，点这里授权。</span></button>';
     }
 
-    // 已被拒绝：原生模式下点卡片直接跳系统设置页；浏览器只能让用户去浏览器设置里改
+    // 权限不可用：原生下点卡片先重新申请，拿不到再跳系统设置页；浏览器只能让用户去浏览器设置里改
     if (notifyPerm === 'denied') {
       var hint = isNative
-        ? '锁屏和息屏时收不到服药提醒。点这里打开系统通知设置；也可以在「设置 → 应用 → 定时服药提醒 → 通知」里手动打开。'
+        ? '锁屏和息屏时收不到服药提醒。点这里重新申请；若系统不再弹授权框，会自动打开系统设置页，请在那里把「通知」打开。'
         : '浏览器已拒绝通知，需要到浏览器的网站权限设置里把通知改回「允许」，然后刷新页面。';
       return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-        + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">通知权限被拒绝 · 收不到提醒</span>'
+        + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">通知未开启 · 收不到提醒</span>'
         + '<span class="meta">' + hint + '</span></button>';
     }
 
@@ -1128,6 +1150,9 @@
    * 真机验收时「看不到权限卡」若只靠猜，会来回折腾好几轮。 */
   var permProbe = null;
   var lastProbeSig = '';
+  /* 权限卡点击后走过的步骤。权限跳转是唯一没法远程验证的环节 ——
+   * 把结果直接显示在 DEBUG 卡上，比来回猜快得多。 */
+  var permAction = '';
 
   function refreshPerm() {
     if (window.MedNotify && window.MedNotify.native) {
@@ -1164,7 +1189,8 @@
     return '<p class="hint">通知状态：权限 ' + esc(p.display)
       + ' · App 开关 ' + (p.enabled === null ? '读不到' : (p.enabled ? '开' : '关'))
       + ' · 渠道 ' + (p.channelFound ? ('importance ' + p.channelImportance) : '未创建')
-      + '</p>';
+      + '</p>'
+      + (permAction ? '<p class="hint">上次点击权限卡：' + esc(permAction) + '</p>' : '');
   }
 
   /* ---------------- 存储 UI（D-1） ---------------- */
@@ -1435,6 +1461,12 @@
     tick();
     setInterval(tick, 1000);
     setInterval(refreshPerm, 5000);   // 用户可能刚去系统设置里改了权限，回到前台要能自动反映
+    /* 从系统设置页回来时立刻重查一次。只靠 5 秒轮询最坏要等 5 秒，用户会以为「改了没用」；
+     * 而且 App 在后台时 JS 定时器本就被系统暂停，所以「回到前台」这个时机比轮询更准。 */
+    if (window.MedNotify && window.MedNotify.native) {
+      var AppP = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+      if (AppP) AppP.addListener('appStateChange', function (st) { if (st.isActive) refreshPerm(); });
+    }
 
     // 跨天自动刷新
     var lastDay = todayKey();
