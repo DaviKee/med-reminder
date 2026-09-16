@@ -234,3 +234,20 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
 .empty{padding:36px 20px;text-align:center;font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted)}
+
+/* ---------- 存储告警与状态（D-1） ---------- */
+/* 写失败告警卡：红描边、左对齐、可点。跨今日页与记录页显示。 */
+.card-alert{
+  display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
+  cursor:pointer;border-color:#FF3B30;-webkit-tap-highlight-color:transparent;
+}
+.card-alert .alert-title{font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF3B30}
+.card-alert .alert-cta{
+  font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));
+  color:#FF3B30;font-weight:600;margin-top:2px;
+}
+/* 存储占用条 */
+.bar{height:6px;border-radius:9999px;background:var(--inner);overflow:hidden}
+.bar > i{display:block;height:100%;border-radius:9999px;transition:width .2s}
+/* 禁用态：清理对话框未选范围时，确认键必须是灰的，而不是「点了没反应」 */
+.btn:disabled{opacity:.4;pointer-events:none}

@@ -39,9 +39,110 @@
   }
   var S = load();
   var notifyPerm = 'unknown';   // granted / denied / unsupported / unknown
+
+  /* ---------------- 存储安全（D-1） ----------------
+   * 原写法是 `try { setItem } catch (e) { /* ignore *\/ }` —— 配额满时一句话都不说。
+   * 对服药记录来说这比崩溃更糟：用户以为记录还在，其实最近的改动早已没了。
+   *
+   * 现在把失败做成**持续可见的状态**：只要写不进去，界面上就一直挂着，直到恢复。
+   *
+   * 一个关键事实（决定了告警文案）：setItem 是原子的，要么全写成功要么抛异常，
+   * 不会写一半。所以失败**不会损坏已存数据** —— 磁盘上仍是上一次成功写入的完整版本。
+   * 失败的含义是「最近的改动没存上」，不是「数据坏了」。 */
+  var storageError = null;        // null | { kind:'quota'|'other', msg, at }
+  var storageRefreshQueued = false;
+
+  /* 各实现（Chromium / Firefox / 旧 WebView）对配额异常的命名不一致，三种都认 */
+  function isQuotaError(e) {
+    if (!e) return false;
+    return e.name === 'QuotaExceededError'
+        || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+        || e.code === 22 || e.code === 1014;
+  }
+
+  /* save() 会在 render 过程中被调用，不能同步再 render（会递归）—— 排队到下一轮事件循环。
+   * first 判断保证失败状态持续存在时不会反复排队，避免异步死循环。 */
+  function queueStorageRefresh() {
+    if (storageRefreshQueued) return;
+    storageRefreshQueued = true;
+    setTimeout(function () { storageRefreshQueued = false; render(); }, 0);
+  }
+
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+    try {
+      localStorage.setItem(KEY, JSON.stringify(S));
+      if (storageError) { storageError = null; queueStorageRefresh(); }  // 恢复后自动撤下告警
+    } catch (e) {
+      var first = !storageError;
+      storageError = {
+        kind: isQuotaError(e) ? 'quota' : 'other',
+        msg: (e && (e.name || e.message)) || '未知错误',
+        at: Date.now()
+      };
+      if (first) queueStorageRefresh();
+    }
     syncNotifications();
+  }
+
+  /* localStorage 在 Android WebView 里通常是 5 MB（部分实现 10 MB），按保守的 5 MB 估算占比 */
+  var STORAGE_BUDGET = 5 * 1024 * 1024;
+
+  function storageStats() {
+    var raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) { /* ignore */ }
+    var bytes = raw ? raw.length * 2 : 0;      // localStorage 按 UTF-16 计，每字符 2 字节
+    var keys = Object.keys(S.doses || {});
+    var doses = 0;
+    keys.forEach(function (k) { doses += (S.doses[k] || []).length; });
+    return {
+      bytes: bytes,
+      kb: Math.round(bytes / 1024),
+      days: keys.length,
+      doses: doses,
+      pct: Math.min(100, Math.round(bytes / STORAGE_BUDGET * 100))
+    };
+  }
+
+  /* 回收孤儿 notified：id 对应的剂量早已不存在 → 这条标记永远不会再被读到。
+   * 纯垃圾回收，不碰任何用户可见数据，所以可以在 boot 时自动执行。 */
+  function gcNotified() {
+    var alive = {}, removed = 0;
+    Object.keys(S.doses || {}).forEach(function (k) {
+      (S.doses[k] || []).forEach(function (d) { alive[d.id] = 1; });
+    });
+    Object.keys(S.notified || {}).forEach(function (id) {
+      if (!alive[id]) { delete S.notified[id]; removed++; }
+    });
+    return removed;
+  }
+
+  /* 「预览」与「执行」共用同一套判定 —— 保证用户看到的数字就是实际会被删的数量。
+   * keepDays = 0 表示不清理。**今天的记录永不删**：它是当前排程的依据，删了 App 立刻错乱。 */
+  function cleanTargets(keepDays) {
+    if (!keepDays) return [];
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - keepDays);
+    var limit = fmtDate(cutoff), today = todayKey();
+    return Object.keys(S.doses || {}).filter(function (k) {
+      return k < today && k < limit;      // YYYY-MM-DD 的字典序即时间序
+    });
+  }
+  function cleanPreview(keepDays) {
+    var keys = cleanTargets(keepDays), n = 0;
+    keys.forEach(function (k) { n += (S.doses[k] || []).length; });
+    return { days: keys.length, doses: n };
+  }
+  function cleanOldRecords(keepDays) {
+    var keys = cleanTargets(keepDays);
+    if (!keys.length) return { days: 0, doses: 0, freed: 0 };
+    var before = storageStats().bytes, n = 0;
+    keys.forEach(function (k) {
+      n += (S.doses[k] || []).length;
+      delete S.doses[k];
+    });
+    gcNotified();     // 告知标记要跟着回收，否则 doses 删了体积也降不下来
+    save();
+    return { days: keys.length, doses: n, freed: Math.max(0, before - storageStats().bytes) };
   }
 
   /* ---------------- 字号缩放 ----------------
@@ -269,6 +370,9 @@
     html += '<div class="card-row" style="padding:0 0 4px">'
       + '<span class="meta">' + (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + wk + '</span>'
       + '<span class="eyebrow">MED TRACKER</span></div>';
+
+    /* 存储写失败比收不到提醒更严重 —— 前者意味着数据正在丢，所以排在权限提示前面 */
+    html += storageAlertHtml();
 
     /* 权限提示：原生与浏览器两种模式下都可能有权限问题，
      * 之前只在原生 + denied 时提示，PWA 用户被拒授权后既收不到提醒也无任何说明。 */
@@ -545,6 +649,8 @@
     var host = $('#recordsView');
     var html = '<h1 class="h1">服药记录</h1>';
 
+    html += storageAlertHtml();
+
     // week dots
     var d = new Date();
     var dow = (d.getDay() + 6) % 7; // Monday = 0
@@ -591,6 +697,9 @@
         }).join('')
       + '</div></div>';
 
+    /* 存储状态卡放在备份卡之前：先知道「还剩多少空间」，再决定要不要导出/清理 */
+    html += storageCardHtml();
+
     html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
       + '<span class="eyebrow">DATA · 备份</span>'
       + '<p class="body">记录只存在这台手机上：清缓存、换手机都会丢，也没法直接拿给医生看。定期导出留一份。</p>'
@@ -628,6 +737,8 @@
     if (bc) bc.onclick = function () { openDataDlg('csv'); };
     var br = $('#btnRestore');
     if (br) br.onclick = function () { openDataDlg('restore'); };
+    var bcl = $('#btnClean');
+    if (bcl) bcl.onclick = openCleanDlg;
   }
 
   function calcStreak() {
@@ -1056,6 +1167,92 @@
       + '</p>';
   }
 
+  /* ---------------- 存储 UI（D-1） ---------------- */
+
+  /* 写失败告警卡：**跨页可见**（今日页与记录页都放）。
+   * 用户可能整天停在今日页打卡，只在记录页提示等于没提示。 */
+  function storageAlertHtml() {
+    if (!storageError) return '';
+    var quota = storageError.kind === 'quota';
+    var title = quota ? '数据没能保存 · 本地存储已满' : '数据没能保存';
+    /* 文案里刻意说清「已存的数据没坏」——否则用户第一反应是「我的记录全没了」 */
+    var body = quota
+      ? '最近的改动没写进手机。重启 App 会退回上一次保存成功的状态，之前的记录没丢。请先导出备份，再清理旧记录。'
+      : '写入失败：' + storageError.msg + '。请先导出备份，避免记录丢失。';
+    /* 用 data 属性而非 id 绑定：这张卡在两个视图里各出现一次，用 id 会产生重复 id */
+    return '<button class="card card-alert" data-storage-fix="1">'
+      + '<span class="alert-title">⚠︎ ' + title + '</span>'
+      + '<span class="meta">' + esc(body) + '</span>'
+      + '<span class="alert-cta">去处理 →</span></button>';
+  }
+
+  /* 存储状态卡：让「什么时候会满」提前可见，而不是等它满了才知道 */
+  function storageCardHtml() {
+    var st = storageStats();
+    var level, note;
+    if (storageError)      { level = 'err';  note = '写入失败，新数据没能存进手机。请先导出备份，再清理旧记录。'; }
+    else if (st.pct >= 85) { level = 'err';  note = '已接近上限，随时可能写不进去。请立即导出备份并清理旧记录。'; }
+    else if (st.pct >= 70) { level = 'warn'; note = '占用偏高。建议导出备份后清理旧记录。'; }
+    else                   { level = 'ok';   note = '记录只存在这台手机上，清缓存或换手机会丢，建议定期导出备份。'; }
+
+    var color = level === 'err' ? '#FF3B30' : (level === 'warn' ? '#FF7A17' : '#3ECF8E');
+    var barW = st.pct > 0 ? Math.max(2, st.pct) : 0;   // 有数据至少画一小段，0% 的空条看起来像坏了
+
+    return '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
+      + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
+      + '<span class="eyebrow">STORAGE · 本地存储</span>'
+      + '<span class="meta">' + st.days + ' 天 · ' + st.doses + ' 条</span></div>'
+      + '<div class="bar" role="img" aria-label="已用 ' + st.pct + '%"><i style="width:' + barW + '%;background:' + color + '"></i></div>'
+      + '<p class="body" style="margin:0">已用约 ' + st.kb + ' KB / 5 MB（' + st.pct + '%）。' + esc(note) + '</p>'
+      + '<button class="btn btn-ghost" id="btnClean" style="height:44px;font-size:calc(14px * var(--fs));align-self:flex-start">清理旧记录</button>'
+      + '</div>';
+  }
+
+  /* 清理对话框。默认停在「不清理」，且**必须用户主动点确认** —— 破坏性操作不设默认值。 */
+  var CLEAN_LEVELS = [
+    { label: '90 天', keep: 90 },
+    { label: '180 天', keep: 180 },
+    { label: '1 年', keep: 365 },
+    { label: '不清理', keep: 0 }
+  ];
+  var cleanKeep = 0;
+
+  function renderCleanRow() {
+    var row = $('#cleanRow');
+    if (!row) return;
+    row.innerHTML = CLEAN_LEVELS.map(function (lv) {
+      var on = lv.keep === cleanKeep;
+      return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-clean="' + lv.keep + '"'
+        + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + lv.label + '</button>';
+    }).join('');
+    $$('[data-clean]').forEach(function (el) {
+      el.onclick = function () {
+        cleanKeep = parseInt(el.getAttribute('data-clean'), 10) || 0;
+        renderCleanRow();
+        renderCleanPreview();
+        var btn = $('#cleanConfirm');
+        if (btn) btn.disabled = cleanKeep === 0;   // 「不清理」= 什么都不做，确认键就该是灰的
+      };
+    });
+  }
+  function renderCleanPreview() {
+    var pv = $('#cleanPreview');
+    if (!pv) return;
+    if (!cleanKeep) { pv.textContent = '不清理 · 保留全部记录'; return; }
+    var r = cleanPreview(cleanKeep);
+    pv.textContent = r.days
+      ? ('保留最近 ' + cleanKeep + ' 天 · 删除 ' + r.days + ' 天 / ' + r.doses + ' 条')
+      : ('保留最近 ' + cleanKeep + ' 天 · 没有可删的记录');
+  }
+  function openCleanDlg() {
+    cleanKeep = 0;          // 每次都从「不清理」开始，避免误触上一次的档位
+    renderCleanRow();
+    renderCleanPreview();
+    var btn = $('#cleanConfirm');
+    btn.disabled = true;    // 没选范围就不让点，避免「点了没反应」
+    openDlg($('#dlgClean'));
+  }
+
   function render() {
     renderToday(); renderMeds(); renderRecords();
   }
@@ -1078,6 +1275,7 @@
     // 用户可能以为自己在吃阿莫西林。空态改为引导（见 renderToday 的 HOW IT WORKS）。
     // 过期提醒静默
     silenceOverdue();
+    gcNotified();     // 回收孤儿告知标记（纯垃圾回收，不碰用户可见数据），再 save 一并写回
     save();
 
     $$('.tab').forEach(function (t) {
@@ -1132,6 +1330,30 @@
         if (l[i].id === pendingSkipId) { l[i].status = 'skipped'; break; }
       }
       save(); pendingSkipId = null; closeDlg($('#dlgSkip')); render(); toast('已跳过本次');
+    };
+
+    /* ---- 存储（D-1） ---- */
+    /* 告警卡会随两个视图的 innerHTML 重建而消失，静态 onclick 绑不住 —— 用事件委托，
+     * 只绑一次、永久有效。 */
+    document.addEventListener('click', function (ev) {
+      var el = ev.target && ev.target.closest ? ev.target.closest('[data-storage-fix]') : null;
+      if (!el) return;
+      /* 数据正在丢，第一优先是把已有记录抢救出来 —— 直接开导出备份，
+       * 而不是先让用户自己去找入口。备份后回到记录页就能看到清理入口。 */
+      setTab('records');
+      openDataDlg('backup');
+    });
+
+    $('#cleanCancel').onclick = function () { closeDlg($('#dlgClean')); };
+    $('#cleanConfirm').onclick = function () {
+      if (!cleanKeep) return;                       // 按钮本应是禁用态，这里是兜底
+      var r = cleanOldRecords(cleanKeep);
+      closeDlg($('#dlgClean'));
+      cleanKeep = 0;
+      render();
+      if (!r.days) { toast('没有可清理的记录'); return; }
+      /* 不承诺释放多少 KB：localStorage 的实际占用由实现决定，估算值报出来容易对不上 */
+      toast('已清理 ' + r.days + ' 天 / ' + r.doses + ' 条记录');
     };
 
     $('#remindDone').onclick = function () {
@@ -1190,7 +1412,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape' && e.key !== 'Esc') return;
       var closable = $$('.dlg-wrap.show').filter(function (el) {
-        return el.id === 'dlgData' || el.id === 'dlgSkip';
+        return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean';
       });
       if (closable.length) {
         restoreArmed = false;
