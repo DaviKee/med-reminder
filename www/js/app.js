@@ -44,6 +44,37 @@
     syncNotifications();
   }
 
+  /* ---------------- 字号缩放 ----------------
+   * 用独立的 localStorage key，不写进主状态 —— 这样备份格式（BACKUP_VERSION 1）完全不用动，
+   * 也不会影响导入校验。
+   * 实现：只改 CSS 变量 --fs；CSS 里所有 font-size/line-height 都写成 calc(Npx * var(--fs))，
+   * 而 padding/margin 保持 px 不变 —— 所以只有文字变大，布局骨架不动。 */
+  var FS_KEY = 'medreminder.fontScale.v1';
+  var FS_LEVELS = [
+    { label: '小', v: 0.9 },
+    { label: '标准', v: 1 },
+    { label: '大', v: 1.15 },
+    { label: '特大', v: 1.3 }
+  ];
+  var fontScale = 1;
+
+  function loadFontScale() {
+    var raw = null;
+    try { raw = localStorage.getItem(FS_KEY); } catch (e) { /* ignore */ }
+    var v = parseFloat(raw);
+    for (var i = 0; i < FS_LEVELS.length; i++) if (FS_LEVELS[i].v === v) return v;
+    return 1;   // 默认「标准」，与改造前逐像素一致
+  }
+  function applyFontScale(v, persist) {
+    fontScale = v;
+    document.documentElement.style.setProperty('--fs', String(v));
+    if (persist) { try { localStorage.setItem(FS_KEY, String(v)); } catch (e) { /* ignore */ } }
+  }
+  function fsLabel() {
+    for (var i = 0; i < FS_LEVELS.length; i++) if (FS_LEVELS[i].v === fontScale) return FS_LEVELS[i].label;
+    return '标准';
+  }
+
   /* ---------------- 后台通知登记 ---------------- */
   function dateAt(min) { var d = new Date(); d.setHours(Math.floor(min / 60), min % 60, 0, 0); return d; }
   function syncNotifications() {
@@ -220,7 +251,7 @@
       + (clickable ? ' data-checkin="' + m.id + '"' : '')
       + ' style="display:flex;flex-direction:column;gap:14px;text-align:left;color:inherit;font:inherit">'
       + '<div class="card-row">'
-      + '<span style="font-size:16px;line-height:22px">' + esc(m.name) + '</span>'
+      + '<span style="font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs))">' + esc(m.name) + '</span>'
       + '<span class="pill">每 ' + m.interval + ' 小时</span>'
       + '</div>'
       + '<p class="meta">' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次 · 已排程') : ('每 ' + m.interval + ' 小时 · 打卡后开始计时')) + '</p>'
@@ -283,7 +314,7 @@
 
       html += '<div class="sect" style="gap:10px">'
         + '<span class="eyebrow">NEXT DOSE · ' + p.done + ' / ' + p.total + '</span>'
-        + '<h1 class="h1 num" style="font-size:40px;line-height:44px">' + (nxt ? minToStr(nxt.time) : '已完成') + '</h1>'
+        + '<h1 class="h1 num" style="font-size:calc(40px * var(--fs));line-height:calc(44px * var(--fs))">' + (nxt ? minToStr(nxt.time) : '已完成') + '</h1>'
         + '<p class="body" id="countdown">' + countdownText(nxt) + '</p>'
         + '</div>';
 
@@ -291,7 +322,7 @@
       var missed = missedDoses();
       if (missed.length) {
         html += '<button class="card card-miss" id="btnMissAll" style="display:flex;flex-direction:column;gap:6px;width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-          + '<span style="font-size:14px;line-height:20px;color:#FF7A17">今天漏了 ' + missed.length + ' 次服药</span>'
+          + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">今天漏了 ' + missed.length + ' 次服药</span>'
           + '<span class="meta">' + missed.map(function (d) { return minToStr(d.time); }).join('、')
           + ' 这几次没有打卡记录。已经吃过就点这里补记，没吃就留意一下。</span>'
           + '<span class="meta" style="color:#FF7A17">点此把漏掉的都记为已服用</span></button>';
@@ -364,7 +395,18 @@
 
   function bindToday() {
     var perm = $('#btnPerm');
-    if (perm) perm.onclick = function () { askNotify(); };
+    if (perm) perm.onclick = function () {
+      /* 已被拒绝时系统不会再弹授权框 —— 再调 requestPermission 是无效的。
+       * 此时唯一有效的路径是把用户直接送到系统设置页（原生插件提供）。
+       * 插件不存在或跳转失败时，退回文字指引，不能变成点了没反应。 */
+      if (notifyPerm === 'denied' && window.MedNotify && window.MedNotify.native) {
+        window.MedNotify.openSettings().then(function (ok) {
+          if (!ok) toast('请到「设置 → 应用 → 定时服药提醒 → 通知」手动打开');
+        });
+        return;
+      }
+      askNotify();
+    };
 
     /* 补记：把「已错过」的剂量记为已服用。
      * 真实服药时刻无从得知（用户是事后补记），所以 takenAt 用「现在」——
@@ -477,7 +519,7 @@
         + '<p class="body">检测到 ' + legacy.length + ' 个从未使用过的示例药品（'
         + esc(legacy.map(function (m) { return m.name; }).join('、'))
         + '）。旧版本首次启动时会自动生成它们，不是你手动添加的。</p>'
-        + '<button class="btn btn-ghost" id="btnDropLegacy" style="height:44px;font-size:14px">删除这 ' + legacy.length + ' 项</button>'
+        + '<button class="btn btn-ghost" id="btnDropLegacy" style="height:44px;font-size:calc(14px * var(--fs))">删除这 ' + legacy.length + ' 项</button>'
         + '</div>';
     }
 
@@ -533,14 +575,30 @@
 
     html += '<p class="hint" style="margin-top:-8px">每次服药后打卡，记录会自动更新。</p>';
 
+    /* 字号：只放大文字，不动布局。老年人看不清小字是真实痛点，而整页缩放会带来左右拖动。
+     * 放在这里而不是做成双指手势 —— 手势缩放文字是非标准交互，且会与列表滚动抢事件；
+     * 档位按钮可发现、可预期，也符合「文字可放大到 200% 而不丢内容」的无障碍要求。 */
+    html += '<div class="card" style="display:flex;flex-direction:column;gap:12px">'
+      + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
+      + '<span class="eyebrow">显示 · 字号</span>'
+      + '<span class="meta" id="fsNow">' + esc(fsLabel()) + '</span></div>'
+      + '<p class="body" style="margin:0">只放大文字，页面布局不变。</p>'
+      + '<div class="chip-row" id="fsRow">'
+      + FS_LEVELS.map(function (lv) {
+          var on = lv.v === fontScale;
+          return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-fs="' + lv.v + '"'
+            + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + lv.label + '</button>';
+        }).join('')
+      + '</div></div>';
+
     html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
       + '<span class="eyebrow">DATA · 备份</span>'
       + '<p class="body">记录只存在这台手机上：清缓存、换手机都会丢，也没法直接拿给医生看。定期导出留一份。</p>'
       + '<div class="btnrow" style="margin-top:2px">'
-      + '<button class="btn btn-primary" id="btnBackup" style="height:44px;font-size:14px">导出备份</button>'
-      + '<button class="btn btn-ghost" id="btnCsv" style="height:44px;font-size:14px">导出 CSV</button>'
+      + '<button class="btn btn-primary" id="btnBackup" style="height:44px;font-size:calc(14px * var(--fs))">导出备份</button>'
+      + '<button class="btn btn-ghost" id="btnCsv" style="height:44px;font-size:calc(14px * var(--fs))">导出 CSV</button>'
       + '</div>'
-      + '<button class="btn btn-ghost" id="btnRestore" style="height:44px;font-size:14px">从备份恢复</button>'
+      + '<button class="btn btn-ghost" id="btnRestore" style="height:44px;font-size:calc(14px * var(--fs))">从备份恢复</button>'
       + '</div>';
 
     html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
@@ -554,6 +612,16 @@
 
     var tb = $('#btnTest');
     if (tb) tb.onclick = testReminder;
+
+    $$('[data-fs]').forEach(function (el) {
+      el.onclick = function () {
+        var v = parseFloat(el.getAttribute('data-fs'));
+        if (v === fontScale) return;
+        applyFontScale(v, true);
+        render();
+        toast('字号已设为「' + fsLabel() + '」');
+      };
+    });
     var bb = $('#btnBackup');
     if (bb) bb.onclick = function () { openDataDlg('backup'); };
     var bc = $('#btnCsv');
@@ -908,24 +976,24 @@
     // 浏览器不支持通知：页面必须开着才提醒，说清楚，别让用户以为装完就万事大吉
     if (!isNative && notifyPerm === 'unsupported') {
       return '<div class="card" style="display:flex;flex-direction:column;gap:6px;border-color:#8A8F98">'
-        + '<span style="font-size:14px;line-height:20px;color:var(--sub)">当前环境不支持通知</span>'
+        + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:var(--sub)">当前环境不支持通知</span>'
         + '<span class="meta">提醒只在 App 页面前台时弹出，切走或锁屏不会响。装到手机上才能锁屏提醒。</span></div>';
     }
 
     // 未申请：不吓唬用户，只在浏览器模式提示，点了才发起授权
     if (!isNative && notifyPerm === 'prompt') {
       return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-        + '<span style="font-size:14px;line-height:20px;color:#FF7A17">还没开启通知</span>'
+        + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">还没开启通知</span>'
         + '<span class="meta">开启后才能及时收到服药提醒，点这里授权。</span></button>';
     }
 
-    // 已被拒绝：原生引导去系统设置，浏览器只能让用户去浏览器设置里改
+    // 已被拒绝：原生模式下点卡片直接跳系统设置页；浏览器只能让用户去浏览器设置里改
     if (notifyPerm === 'denied') {
       var hint = isNative
-        ? '锁屏和息屏时收不到服药提醒。点这里重新发起授权；若系统不再弹窗，请到「设置 → 应用 → MedReminder → 通知」里手动打开。'
+        ? '锁屏和息屏时收不到服药提醒。点这里打开系统通知设置；也可以在「设置 → 应用 → 定时服药提醒 → 通知」里手动打开。'
         : '浏览器已拒绝通知，需要到浏览器的网站权限设置里把通知改回「允许」，然后刷新页面。';
       return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-        + '<span style="font-size:14px;line-height:20px;color:#FF7A17">通知权限被拒绝 · 收不到提醒</span>'
+        + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">通知权限被拒绝 · 收不到提醒</span>'
         + '<span class="meta">' + hint + '</span></button>';
     }
 
@@ -1003,6 +1071,9 @@
 
   /* ---------------- boot ---------------- */
   function boot() {
+    // 字号必须最先应用：晚于首次 render 会先按默认字号画一遍再跳变，肉眼可见闪一下
+    applyFontScale(loadFontScale(), false);
+
     // 不再预置任何示例药品：服药场景里「看起来像真药」的假数据会造成误导，
     // 用户可能以为自己在吃阿莫西林。空态改为引导（见 renderToday 的 HOW IT WORKS）。
     // 过期提醒静默

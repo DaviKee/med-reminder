@@ -207,6 +207,16 @@
     return false;
   }
 
+  /* 跳到系统通知设置页。原生侧由本项目的 AppSettingsPlugin 提供 ——
+   * Capacitor 官方没有这个 API（@capacitor/app 只有 exitApp/getInfo/minimizeApp 等）。
+   * 权限被拒后系统不再弹窗，只能用户手动去设置里开，所以这个跳转是必要的。
+   * 浏览器/PWA 没有等价能力，返回 false 让调用方降级成文字指引。 */
+  function openSettings() {
+    var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppSettings;
+    if (!P) return Promise.resolve(false);
+    return P.openNotificationSettings().then(function () { return true; }).catch(function () { return false; });
+  }
+
   window.MedNotify = {
     native: NATIVE,
     init: init,
@@ -216,6 +226,7 @@
     checkPermissions: checkPermissions,
     requestPermission: requestPermission,
     probe: probe,
-    isBlocked: isBlocked
+    isBlocked: isBlocked,
+    openSettings: openSettings
   };
 })();
