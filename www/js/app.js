@@ -200,6 +200,20 @@
     document.documentElement.style.setProperty('--fs', String(v));
     if (persist) { try { localStorage.setItem(FS_KEY, String(v)); } catch (e) { /* ignore */ } }
   }
+  /* 一次性提示：把"字可以调大"告诉需要它的人（A-1） */
+  var FS_HINT_KEY = 'medreminder.fsHint.v1';
+  function fsHintDismissed() {
+    try { return localStorage.getItem(FS_HINT_KEY) === '1'; } catch (e) { return true; }
+  }
+  function dismissFsHint() {
+    try { localStorage.setItem(FS_HINT_KEY, '1'); } catch (e) { /* ignore */ }
+  }
+  function fsHintHtml() {
+    return '<button class="card" id="btnFsHint" style="display:flex;flex-direction:column;gap:6px;width:100%;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent">'
+      + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs))">字太小看不清？</span>'
+      + '<span class="meta">到「记录」页可以把字调大（大 / 特大），布局不会乱。点这里去看看。</span></button>';
+  }
+
   function fsLabel() {
     for (var i = 0; i < FS_LEVELS.length; i++) if (FS_LEVELS[i].v === fontScale) return FS_LEVELS[i].label;
     return '标准';
@@ -643,6 +657,10 @@
     var permCard = permCardHtml();
     if (permCard) html += permCard;
 
+    /* 字号可调，但入口在「记录」页 —— 真正需要它的人（尤其上了年纪的）不会去找。
+     * 首次启动提示一次，点过永不再出现；字号已不是标准值时也不提示。 */
+    if (fontScale === 1 && !fsHintDismissed()) html += fsHintHtml();
+
     if (!list.length) {
       // ---- 未打卡 ----
       html += '<div class="sect" style="gap:10px">'
@@ -857,6 +875,14 @@
   function bindToday() {
     var perm = $('#btnPerm');
     if (perm) perm.onclick = onPermCardTap;
+
+    var fsh = $('#btnFsHint');
+    if (fsh) fsh.onclick = function () {
+      dismissFsHint();
+      setTab('records');
+      render();
+      toast('字号档位在下面「显示 · 字号」里');
+    };
 
     /* 补记：把「已错过」的剂量记为已服用。
      * 真实服药时刻无从得知（用户是事后补记），所以 takenAt 用「现在」——
@@ -1278,12 +1304,76 @@
     stepVal = med ? med.interval : 8;
     $('#deleteMed').classList.toggle('hidden', !med);
     renderPreview();
+    /* 浮层打开时把焦点带进去（键盘用户不用满屏找输入框） */
+    lastFocus = document.activeElement || null;
     $('#sheetMed').classList.add('show');
     setScrim(true); openCount++;
+    var nf = $('#medName');
+    if (nf) { try { nf.focus(); } catch (e) { /* ignore */ } }
   }
-  function closeSheet() { $('#sheetMed').classList.remove('show'); setScrim(false); openCount = 0; }
-  function openDlg(el) { el.classList.add('show'); openCount++; }
-  function closeDlg(el) { el.classList.remove('show'); openCount = 0; }
+  function closeSheet() {
+    $('#sheetMed').classList.remove('show'); setScrim(false); openCount = 0;
+    if (lastFocus && document.contains && document.contains(lastFocus)) {
+      try { lastFocus.focus(); } catch (e) { /* ignore */ }
+    }
+    lastFocus = null;
+  }
+  /* ---------------- 浮层焦点管理（A-3） ----------------
+   * 键盘 / 读屏 / 开关设备用户需要三件事：
+   *   ① 打开浮层时焦点跟着进去（否则 Tab 还在背后的页面上跑）
+   *   ② Tab 不跑出浮层（焦点陷阱）
+   *   ③ 关闭后焦点回到打开它的那个元素（否则"掉"到页面开头，得重新找位置）
+   * 之前只有 role="dialog" + Esc，缺这三条。 */
+  var lastFocus = null;
+
+  function focusables(root) {
+    var sel = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),'
+      + 'textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    return $$(sel, root).filter(function (el) {
+      return !el.classList.contains('hidden') && el.offsetParent !== null;
+    });
+  }
+
+  function openDlg(el) {
+    if (!el) return;
+    lastFocus = document.activeElement || null;
+    el.classList.add('show');
+    openCount++;
+    /* 焦点移进浮层：优先第一个可聚焦元素；没有就把浮层本身设为可聚焦再聚焦 */
+    var f = focusables(el);
+    if (f.length) { try { f[0].focus(); } catch (e) { /* ignore */ } }
+    else {
+      el.setAttribute('tabindex', '-1');
+      try { el.focus(); } catch (e) { /* ignore */ }
+    }
+  }
+
+  function closeDlg(el) {
+    if (!el) return;
+    el.classList.remove('show');
+    openCount = 0;
+    /* 焦点还给触发它的元素 */
+    if (lastFocus && document.contains && document.contains(lastFocus)) {
+      try { lastFocus.focus(); } catch (e) { /* ignore */ }
+    }
+    lastFocus = null;
+  }
+
+  /* Tab 焦点陷阱。返回 true 表示已处理（调用方不用再管）。
+   * 只在有浮层显示时生效 —— 没有浮层时保持浏览器默认行为。 */
+  function trapTab(ev) {
+    var shown = $$('.dlg-wrap.show').concat($$('.sheet.show'));
+    if (!shown.length) return false;
+    var top = shown[shown.length - 1];
+    var f = focusables(top);
+    if (!f.length) return false;
+    var first = f[0], last = f[f.length - 1];
+    var act = document.activeElement;
+    var inside = top.contains(act);
+    if (ev.shiftKey && (act === first || !inside)) { ev.preventDefault(); try { last.focus(); } catch (e) {} return true; }
+    if (!ev.shiftKey && (act === last || !inside)) { ev.preventDefault(); try { first.focus(); } catch (e) {} return true; }
+    return false;
+  }
 
   /* ---------------- sheet: stepper + save ---------------- */
   var stepVal = 8, editingId = null, pendingSkipId = null;
@@ -1989,6 +2079,7 @@
     /* Esc 关闭浮层。只对「非打断式」浮层生效：
      * 提醒弹窗仍要求用户明确选择「已服用 / 稍后」，不能被一键抹掉。 */
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') { trapTab(e); return; }
       if (e.key !== 'Escape' && e.key !== 'Esc') return;
       var closable = $$('.dlg-wrap.show').filter(function (el) {
         return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean'

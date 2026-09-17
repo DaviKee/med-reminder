@@ -18,6 +18,9 @@
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;height:100%}
+/* 关掉 WebView 的自动字体放大（font boosting）—— 我们有自己的字号档位，
+   两套缩放叠加会让"标准档"在不同设备上大小不一、布局不可预期。 */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
   background:#000;color:var(--text);font-family:var(--font-sans);
   display:flex;justify-content:center;overscroll-behavior-y:none;
@@ -104,11 +107,14 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
 /* week dots */
 .week{display:flex;justify-content:space-between}
 .day{display:flex;flex-direction:column;align-items:center;gap:8px}
-.day .lb{font-size:calc(11px * var(--fs));line-height:calc(14px * var(--fs));color:var(--muted)}
-.day .lb.on{color:var(--text)}
-.dot{width:10px;height:10px;border-radius:9999px;background:var(--line-2)}
-.dot.fill{background:#fff;border:0}
-.dot.today{background:var(--accent);border:0}
+.day .lb{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
+.day .lb.on{color:var(--text);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+/* 周视图圆点：用**形状**区分状态，不只靠颜色 —— 色盲 / 灰度屏 / 强光下都要能分辨。
+   无记录 = 空心细圈；已服 = 实心；今天 = 粗环 + 中心点（三者在形状上互不相同）。 */
+.dot{width:12px;height:12px;border-radius:9999px;background:transparent;border:1.5px solid var(--line-2);box-sizing:border-box}
+.dot.fill{background:#fff;border:1.5px solid #fff}
+.dot.today{background:transparent;border:2px solid var(--accent);position:relative}
+.dot.today::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:4px;height:4px;border-radius:9999px;background:var(--accent)}
 .statrow{display:flex;gap:12px}
 .stat{flex:1 1 0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px;display:flex;flex-direction:column;gap:8px}
 .stat .v{display:flex;align-items:baseline;gap:2px}
@@ -141,7 +147,7 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
   border:0;background:transparent;color:var(--muted);border-radius:26px;cursor:pointer;padding:0;
 }
 .tab svg{width:18px;height:18px}
-.tab span{font-size:calc(11px * var(--fs));line-height:calc(14px * var(--fs));font-weight:500}
+.tab span{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));font-weight:500}
 .tab.active{background:#fff;color:#0A0A0A}
 
 /* ---------- overlays ---------- */
@@ -267,3 +273,22 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
 
 /* 已延后的剂量标记。计划时刻保持原样，这里只说明「响铃被推到几点」 */
 .snooze-tag{font-size:calc(11px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted);white-space:nowrap}
+
+
+/* ---------- 无障碍（A-2 / A-5） ---------- */
+/* A-2 触摸目标补到 44×44 —— 但**不改布局尺寸**：用透明伪元素扩大命中区。
+   直接把按钮改成 44×44 会把标题行撑高、把药名挤掉，属于"修一个坏三个"。 */
+.icon-btn,.cam-btn{position:relative}
+.icon-btn::after,.cam-btn::after{
+  content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:44px;height:44px;
+}
+
+/* 键盘 / 开关设备需要的可见焦点环。浏览器默认 outline 在纯黑背景上几乎看不见 */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+
+/* A-5 尊重系统的「减少动态效果」设置：不做无谓的位移/淡入动画 */
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:.001ms !important;animation-duration:.001ms !important;animation-iteration-count:1 !important}
+  .scrim{transition:none}
+}
