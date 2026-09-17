@@ -259,7 +259,13 @@
     var rel = relName(doseId);
     return camera().getPhoto({
       resultType: 'uri',           // 官方推荐：大图不要用 Base64
-      source: 'camera',
+      /* ⚠️ 这里必须是**全大写**的 'CAMERA'。
+       * Java 侧是 `settings.setSource(CameraSource.valueOf(call.getString("source", ...)))`，
+       * 枚举名全大写；小写会抛 IllegalArgumentException 被 catch 掉、**静默降级成 PROMPT**，
+       * 表现就是每次拍照都弹出「从相册选择 / 拍照」的底部选择框。
+       * 需求是「只允许现场拍」，所以这里既不能写小写、也不要传 promptLabel* 参数
+       * （那些只在 PROMPT 模式用，传了反而像在暗示要走选择框）。 */
+      source: 'CAMERA',
       quality: 60,                 // 药盒上的药名要能看清；再低就可能糊到没法辨认
       width: 1024,
       correctOrientation: true,    // 不加这个，Android 上竖拍的照片可能横过来

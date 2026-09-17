@@ -22,7 +22,7 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.2.1';
+  var APP_VERSION = '1.2.2';
   var APP_BUILD = '2026-09-17';
 
   /* ---------------- date / time helpers ---------------- */
@@ -427,6 +427,22 @@
   }
 
   /* 顺延后重排序号，保证「第 N / 共 M 次」仍然正确 */
+  /* 删除药品。两件事缺一不可：
+   *   ① **撤掉今天该药已经排进系统的通知**。旧实现只清了 App 内的剂量数组，
+   *      系统闹钟照旧会响；点开时那一刻 doseId 已经查不到了（onNotifyAction 里
+   *      `if (!ds) return;`）—— 表现就是「点了没反应」。
+   *   ② **保留历史记录**。吃过药的事实不该因为药品被删掉而消失，
+   *      否则按药统计和依从率会凭空变好看。 */
+  function deleteMed(id) {
+    var med = medById(id);
+    if (!med) return null;
+    var todays = todayDoses().filter(function (d) { return d.medId === id; });
+    todays.forEach(function (d) { if (window.MedNotify) window.MedNotify.cancelOne(d.id); });
+    S.meds = S.meds.filter(function (m) { return m.id !== id; });
+    S.doses[todayKey()] = todayDoses().filter(function (d) { return d.medId !== id; });
+    return { name: med.name, doses: todays.length };
+  }
+
   function reindexMed(medId) {
     var arr = todayDoses()
       .filter(function (d) { return d.medId === medId; })
@@ -1084,7 +1100,7 @@
       });
       html += '</div>';
     }
-    html += '<p class="hint" style="margin-top:-8px">点击任意药品，可修改名称与服药间隔。</p>';
+    html += '<p class="hint" style="margin-top:-8px">点任意药品，可以改名称、改服药间隔，或者删掉它。</p>';
 
     var legacy = legacySampleMeds();
     if (legacy.length) {
@@ -1420,6 +1436,17 @@
    *   ③ 关闭后焦点回到打开它的那个元素（否则"掉"到页面开头，得重新找位置）
    * 之前只有 role="dialog" + Esc，缺这三条。 */
   var lastFocus = null;
+
+  /* ---------------- 通用二次确认（破坏性操作专用） ----------------
+   * 删药品、清记录这类动作不可逆，必须先问一遍再执行。 */
+  var confirmCb = null;
+  function askConfirm(title, body, okText, cb) {
+    confirmCb = cb || null;
+    $('#confirmTitle').textContent = title;
+    $('#confirmBody').textContent = body;
+    $('#confirmOk').textContent = okText || '确认';
+    openDlg($('#dlgConfirm'));
+  }
 
   function focusables(root) {
     var sel = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),'
@@ -2101,9 +2128,27 @@
 
     $('#deleteMed').onclick = function () {
       if (!editingId) return;
-      S.meds = S.meds.filter(function (m) { return m.id !== editingId; });
-      S.doses[todayKey()] = todayDoses().filter(function (d) { return d.medId !== editingId; });
-      save(); closeSheet(); render(); toast('已删除');
+      var id = editingId;
+      var med = medById(id);
+      var n = todayDoses().filter(function (d) { return d.medId === id; }).length;
+      askConfirm(
+        '删除「' + (med ? med.name : '这个药品') + '」？',
+        '删除后不再提醒它' + (n ? '，今天的 ' + n + ' 次提醒也会一并取消' : '')
+          + '。历史服药记录会保留，不会丢数据。',
+        '确认删除',
+        function () {
+          var r = deleteMed(id);
+          save(); closeSheet(); render();
+          toast('已删除 ' + (r ? r.name : ''));
+        });
+    };
+
+    $('#confirmCancel').onclick = function () { confirmCb = null; closeDlg($('#dlgConfirm')); };
+    $('#confirmOk').onclick = function () {
+      var cb = confirmCb;
+      confirmCb = null;
+      closeDlg($('#dlgConfirm'));
+      if (cb) cb();
     };
 
     $('#skipCancel').onclick = function () { pendingSkipId = null; closeDlg($('#dlgSkip')); };

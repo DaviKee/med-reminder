@@ -124,7 +124,13 @@ def main():
         ('拍照-L1 质量校验', 'function qualityIssue(a)' in PHOTO),
         ('拍照-L2 防重复', 'function isDuplicate(h)' in PHOTO and 'function hamming(a, b)' in PHOTO),
         ('拍照-放行优先原则', '宁可放行，不可误伤' in photo),   # ★ 这句只在注释里，故意查未剥离文本
+        ('拍照-只允许现场拍（禁相册）', "source: 'CAMERA'" in PHOTO and "source: 'camera'" not in PHOTO),
+        ('拍照-不传 promptLabel', 'promptLabel' not in PHOTO),
         ('拍照-5 个打卡入口', APP.count('photoGate({') >= 5),
+        ('药品-删除走二次确认', 'function deleteMed(id)' in APP and 'askConfirm(' in APP),
+        ('药品-删除撤掉系统通知', 'window.MedNotify.cancelOne(d.id)' in APP),
+        ('药品-删除保留历史记录', 'deleteMed' in APP and 'd.medId !== id' in APP),
+        ('药品-有通用确认框', 'id="dlgConfirm"' in html and 'id="confirmOk"' in html),
         # 前几轮成果
         ('B-1 snooze 独立字段', 'function snoozeDose(d)' in APP and 'snoozeUntil' in APP),
         ('B-1 不再篡改计划时刻', 'ds.time = Math.min(1439' not in APP),

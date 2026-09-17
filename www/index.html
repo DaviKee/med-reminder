@@ -112,6 +112,23 @@
     </div>
   </div>
 
+  <!-- Generic confirm dialog（破坏性操作用，避免误触即生效） -->
+  <div class="dlg-wrap" id="dlgConfirm">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="badge badge-56">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5h15M9.5 6.5V4.8c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3v1.7M6.5 6.5l.9 12.1c.05.7.65 1.2 1.35 1.2h6.5c.7 0 1.3-.5 1.35-1.2l.9-12.1" stroke="#FF7A17" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 10.5v6M13.5 10.5v6" stroke="#FF7A17" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <div class="dlg-text">
+        <div class="dlg-title" id="confirmTitle">确认删除？</div>
+        <div class="dlg-body" id="confirmBody"></div>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="confirmCancel">取消</button>
+        <button class="btn btn-accent" id="confirmOk">确认删除</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Reminder dialog -->
   <div class="dlg-wrap" id="dlgRemind">
     <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="remindName">
