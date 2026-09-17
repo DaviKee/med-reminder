@@ -22,7 +22,7 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.2.0';
+  var APP_VERSION = '1.2.1';
   var APP_BUILD = '2026-09-17';
 
   /* ---------------- date / time helpers ---------------- */
@@ -1258,6 +1258,20 @@
     var tb = $('#btnTest');
     if (tb) tb.onclick = testReminder;
 
+    var pb = $('#btnPurgeNotif');
+    if (pb) pb.onclick = function () {
+      if (!(window.MedNotify && window.MedNotify.purge)) { toast('当前是浏览器模式，没有系统通知可清'); return; }
+      toast('正在清除并重新登记…');
+      window.MedNotify.purge().then(function () { return window.MedNotify.stat(); })
+        .then(function (s) {
+          lastProbeSig = null;          // 让诊断行立刻刷新
+          permProbe = permProbe || null;
+          refreshPerm();
+          if (s && s.delivered) toast('仍剩 ' + s.delivered + ' 条在通知栏，可手动左滑划掉');
+          else toast('已清除全部已登记的提醒');
+        });
+    };
+
     $$('[data-fs]').forEach(function (el) {
       el.onclick = function () {
         var v = parseFloat(el.getAttribute('data-fs'));
@@ -1551,7 +1565,15 @@
 
   /* 锁屏通知上的按钮 / 点通知体 / 回到前台 */
   function onNotifyAction(action, doseId) {
-    if (action === 'resume') { render(); syncNotifications(); return; }
+    if (action === 'resume') {
+      render();
+      syncNotifications();
+      /* 回到前台顺手清掉通知栏里**已经显示出来**的提醒：
+       * 用户已经在看 App 了，那些提醒已经没有意义；而且它们很可能是刚才被系统
+       * 一次性投递出来的（息屏/休眠期间到期的会被攒着，唤醒时一起弹）。 */
+      if (window.MedNotify && window.MedNotify.clearDelivered) window.MedNotify.clearDelivered();
+      return;
+    }
     var l = todayDoses(), ds = null;
     for (var i = 0; i < l.length; i++) if (l[i].id === doseId) { ds = l[i]; break; }
     if (!ds) return;
@@ -1580,7 +1602,16 @@
   function testReminder() {
     if (window.MedNotify && window.MedNotify.native) {
       window.MedNotify.test(10000).then(function (ok) {
-        toast(ok ? '已登记测试提醒，请留意锁屏 / 通知栏（约 10 秒后）' : '测试提醒登记失败，请确认通知权限已开');
+        if (!ok) { toast('测试提醒登记失败，请确认通知权限已开'); return; }
+        /* 报一下系统里现在排了几条：测试提醒是**固定 id、先取消再登记**，
+         * 所以无论点多少次，这个数字里只应该算它 1 条。 */
+        var st = window.MedNotify.stat ? window.MedNotify.stat() : Promise.resolve(null);
+        st.then(function (s) {
+          lastProbeSig = null;
+          refreshPerm();
+          toast('已登记测试提醒，约 10 秒后响一条'
+            + (s && s.pending != null ? '（系统当前排程共 ' + s.pending + ' 条）' : ''));
+        });
       });
     } else {
       toast('10 秒后弹出测试提醒（浏览器需保持本页面打开）');
@@ -1821,6 +1852,8 @@
   /* 最近一次原生探测结果。既用于判定，也用于 DEBUG 卡自检展示 ——
    * 真机验收时「看不到权限卡」若只靠猜，会来回折腾好几轮。 */
   var permProbe = null;
+  /* 通知的两项计数（系统排程 / 通知栏显示）。用于诊断「一次冒出一堆通知」。 */
+  var notifyStat = null;
   var lastProbeSig = '';
   /* 权限卡点击后走过的步骤。权限跳转是唯一没法远程验证的环节 ——
    * 把结果直接显示在 DEBUG 卡上，比来回猜快得多。 */
@@ -1829,12 +1862,19 @@
   function refreshPerm() {
     if (window.MedNotify && window.MedNotify.native) {
       window.MedNotify.probe().then(function (p) {
-        var sig = JSON.stringify(p);
+        /* 顺带取一次通知计数。它不进权限判定，只用于诊断显示 ——
+         * 但「一次冒出来一堆通知」这种问题，没有数字就只能靠猜。 */
+        var st = window.MedNotify.stat ? window.MedNotify.stat() : Promise.resolve(null);
+        return st.then(function (ns) { return { p: p, ns: ns }; });
+      }).then(function (r) {
+        var p = r.p, ns = r.ns;
+        var sig = JSON.stringify(p) + '|' + JSON.stringify(ns);
         // 只在探测结果真的变化时重绘。每 5 秒无条件 render() 会重建视图 DOM，
         // 打断用户滚动与输入（innerHTML 一换，滚动位置就回顶）。
         if (sig === lastProbeSig) return;
         lastProbeSig = sig;
         permProbe = p;
+        notifyStat = ns;
 
         var next;
         if (window.MedNotify.isBlocked(p)) next = 'denied';
@@ -1890,6 +1930,14 @@
       + ' · 渠道 ' + (p.channelFound ? ('importance ' + p.channelImportance) : '未创建')
       + '</p>'
       + (permAction ? '<p class="hint">上次点击权限卡：' + esc(permAction) + '</p>' : '')
+      + (notifyStat
+          ? '<p class="hint">系统排程：' + (notifyStat.pending == null ? '读不到' : notifyStat.pending + ' 条')
+            + ' · 通知栏显示：' + (notifyStat.delivered == null ? '读不到' : notifyStat.delivered + ' 条')
+            + (notifyStat.test ? '（含 1 条测试）' : '') + '</p>'
+          : '')
+      + '<button class="btn btn-ghost" id="btnPurgeNotif" style="align-self:flex-start;margin-top:2px">清除全部提醒通知</button>'
+      + '<p class="hint">点它会取消系统里所有已登记的提醒，并按今天的排程重新登记一遍。'
+      + '通知栏里堆了重复的、或者早就过期的提醒时用它。</p>'
       + plugLine();
   }
 
@@ -2217,6 +2265,10 @@
 
     if (window.MedNotify && window.MedNotify.native) {
       window.MedNotify.init(onNotifyAction);
+      /* 启动先彻底清场：把插件持久化存储里遗留的通知（含手机重启后会被插件
+       * 「复活」的僵尸）全部取消，再排今天的。doSync 内部会等这个 Promise 完成，
+       * 所以这里不必关心先后顺序。 */
+      window.MedNotify.purge();
       refreshPerm();
     } else {
       // 浏览器模式过去从不检查权限，导致被拒后没有任何提示

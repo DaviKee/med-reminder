@@ -18,6 +18,40 @@
   var handler = null;
   var timer = null;
   var lastList = [];
+  var syncBusy = false;      // doSync 串行化，见下面的说明
+  var syncQueued = null;
+  var bootPurge = null;      // 启动清场的 Promise；排程要等它完成
+
+  /* 测试通知用**固定 id**。
+   * 旧实现是 1 + Math.floor(Math.random() * 2000000000) —— 点几次就在系统里留几条，
+   * 而且随机 id 谁也认不出来，事后没有任何办法取消它们。 */
+  var TEST_ID = 990000001;
+
+  /* 已排通知 id 的**落盘**台账。这是兜底：首选是直接问插件 getPending() 要权威清单，
+   * 万一插件没这个方法（或调用失败），还得有东西可取消。 */
+  var PENDING_KEY = 'medreminder.notifPending.v1';
+  var pendingIds = {};
+  function loadPendingIds() {
+    try {
+      var r = localStorage.getItem(PENDING_KEY);
+      var o = r ? JSON.parse(r) : null;
+      pendingIds = (o && typeof o === 'object') ? o : {};
+    } catch (e) { pendingIds = {}; }
+  }
+  function savePendingIds() {
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(pendingIds)); } catch (e) { /* ignore */ }
+  }
+  function markPending(ids) {
+    for (var i = 0; i < ids.length; i++) pendingIds[ids[i]] = 1;
+    savePendingIds();
+  }
+  function pendingList() {
+    var out = [];
+    for (var k in pendingIds) if (Object.prototype.hasOwnProperty.call(pendingIds, k)) out.push(parseInt(k, 10));
+    return out;
+  }
+  loadPendingIds();
+  function asRefs(ids) { return ids.map(function (n) { return { id: n }; }); }
 
   /* 字符串 doseId → Android 通知 id（必须是 32 位 int）。
    * 用持久化映射表分配自增整数 id，彻底避免哈希碰撞导致不同剂量覆盖同一条通知。 */
@@ -93,15 +127,63 @@
     return LN.requestPermissions().then(function (r) { return r.display; }).catch(function () { return 'unknown'; });
   }
 
+  /* 取消本 App 排着的**全部**通知。
+   *
+   * v1.2.1 最重要的一处修复，起因是反馈「点一次测试提醒，冒出来 6 个通知」。
+   *
+   * 旧实现是 if (!NATIVE || !scheduled.length) return; —— scheduled 是个**内存变量**，
+   * App 被系统杀掉或用户上划关闭就归零。于是**插件持久化存储里的那些通知，
+   * 再也没有任何代码去清**，全成了僵尸。僵尸的下场见插件源码
+   * LocalNotificationRestoreReceiver.onReceive：
+   *
+   *     if (at != null && at.before(new Date())) {
+   *         // modify the scheduled date in order to show notifications that would
+   *         // have been delivered while device was off.
+   *         long newDateTime = new Date().getTime() + 15 * 1000;
+   *         schedule.setAt(new Date(newDateTime));
+   *     }
+   *
+   * 也就是说，**手机每次开机（BOOT_COMPLETED / QUICKBOOT_POWERON），插件都会把
+   * 存储里所有「关机期间本该响」的通知改成「开机后 15 秒」再响一遍**。
+   * 攒了几条，开机 15 秒后就一起弹几条 —— 这就是「一次冒出一堆提醒」的完整成因。
+   *
+   * 所以现在：**先问插件要权威清单（getPending），把存储里的全清掉**；
+   * 拿不到清单时退回自建台账。两个来源都清，才算真的干净。 */
   function cancelAll() {
-    if (!NATIVE || !scheduled.length) return Promise.resolve();
-    var ids = scheduled;
+    if (!NATIVE) return Promise.resolve();
     scheduled = [];
-    return LN.cancel({ notifications: ids }).catch(function () {});
+
+    function viaStorage() {
+      if (typeof LN.getPending !== 'function') return Promise.resolve(false);
+      return LN.getPending()
+        .then(function (r) {
+          var list = (r && r.notifications) || [];
+          if (!list.length) return true;
+          return LN.cancel({ notifications: list.map(function (n) { return { id: n.id }; }) })
+            .then(function () { return true; })
+            .catch(function () { return false; });
+        })
+        .catch(function () { return false; });
+    }
+
+    return viaStorage().then(function (ok) {
+      if (ok) { pendingIds = {}; savePendingIds(); return; }
+      /* 插件没提供 getPending（或调用失败）→ 退回自建台账 */
+      var ids = pendingList();
+      pendingIds = {}; savePendingIds();
+      if (!ids.length) return;
+      return LN.cancel({ notifications: asRefs(ids) }).catch(function () {});
+    });
   }
 
   function doSync(list) {
     if (!NATIVE || !inited) return Promise.resolve();
+    /* 串行化。两次 doSync 交错时，后一次会在前一次 schedule 落地之前就发出自己的
+     * cancel，两边各排一份，先落地的那份就成了没人认领的僵尸。
+     * 中间状态本来也没人关心，排队只处理最后一次即可。 */
+    if (syncBusy) { syncQueued = list; return Promise.resolve(); }
+    syncBusy = true;
+
     var now = Date.now();
     var items = list.filter(function (x) { return x.at.getTime() > now + 5000; }).map(function (x) {
       return {
@@ -114,15 +196,25 @@
         extra: { doseId: x.id }
       };
     });
-    return cancelAll()
+    /* 等启动清场跑完再排 —— 否则可能自己把自己刚排的取消掉 */
+    return (bootPurge || Promise.resolve())
+      .then(function () { return cancelAll(); })
       .then(function () {
         if (!items.length) return null;
         return LN.schedule({ notifications: items });
       })
       .then(function () {
-        scheduled = items.map(function (i) { return { id: i.id }; });
+        var ids = items.map(function (i) { return i.id; });
+        scheduled = ids.map(function (n) { return { id: n }; });
+        markPending(ids);
       })
-      .catch(function (e) { console.warn('notify sync', e); });
+      .catch(function (e) { console.warn('notify sync', e); })
+      .then(function () {
+        syncBusy = false;
+        var q = syncQueued;
+        syncQueued = null;
+        if (q) doSync(q);
+      });
   }
 
   /* 合并抖动：一次改动会触发多次 save，避免反复 cancel/schedule */
@@ -135,7 +227,9 @@
 
   function cancelOne(doseId) {
     if (!NATIVE) return;
-    LN.cancel({ notifications: [{ id: idOf(doseId) }] }).catch(function () {});
+    var n = idOf(doseId);
+    if (pendingIds[n]) { delete pendingIds[n]; savePendingIds(); }
+    LN.cancel({ notifications: [{ id: n }] }).catch(function () {});
   }
 
   /* 测试提醒：delayMs 毫秒后响一次，用于真机验收，不写入任何服药数据。
@@ -146,18 +240,73 @@
       if (handler) setTimeout(function () { handler('open', 'test'); }, delayMs);
       return Promise.resolve(!NATIVE);
     }
-    var nid = 1 + Math.floor(Math.random() * 2000000000); // 测试通知用随机 id，不写入持久化映射表
-    return LN.schedule({
-      notifications: [{
-        title: '测试提醒',
-        body: '这是一条测试通知，确认提醒能正常响。',
-        id: nid,
-        schedule: { at: new Date(Date.now() + delayMs), allowWhileIdle: true },
-        channelId: CHANNEL,
-        actionTypeId: ACTIONS,
-        extra: { doseId: 'test' }
-      }]
-    }).then(function () { return true; }).catch(function (e) { console.warn('notify test', e); return false; });
+    /* 固定 id + **先取消再登记** —— 点多少次，系统里都只有一条测试通知。
+     * （旧实现的随机 id 会让测试通知越点越多，而且它们谁也取消不掉。） */
+    return LN.cancel({ notifications: [{ id: TEST_ID }] })
+      .catch(function () { /* 本来就不存在，正常 */ })
+      .then(function () {
+        return LN.schedule({
+          notifications: [{
+            title: '测试提醒',
+            body: '这是一条测试通知，确认提醒能正常响。',
+            id: TEST_ID,
+            schedule: { at: new Date(Date.now() + delayMs), allowWhileIdle: true },
+            channelId: CHANNEL,
+            actionTypeId: ACTIONS,
+            extra: { doseId: 'test' }
+          }]
+        });
+      })
+      .then(function () { return true; })
+      .catch(function (e) { console.warn('notify test', e); return false; });
+  }
+
+  /* 会话开始的彻底清场：取消插件存储里的全部遗留 + 清空通知栏。
+   * 目的是让 App **每次打开都从一个干净的通知状态开始** —— 只有这样，
+   * 手机重启时 RestoreReceiver 才没有东西可以「复活」。
+   * 返回一个 Promise，doSync 会等它完成。 */
+  function purge() {
+    if (!NATIVE) return Promise.resolve(0);
+    var p = cancelAll().then(function () {
+      if (typeof LN.removeAllDeliveredNotifications !== 'function') return 0;
+      return LN.removeAllDeliveredNotifications().then(function () { return 1; }).catch(function () { return 0; });
+    }).catch(function () { return 0; });
+    bootPurge = p;
+    return p;
+  }
+
+  /* 只清通知栏里**已经显示出来**的，不动已排的闹钟。
+   * 用在「回到前台」：用户已经在看 App 了，通知栏里那些提醒已经没有意义；
+   * 而且它们很可能是刚刚被系统一次性投递出来的（休眠期间攒下的），
+   * 留着只会让人以为「怎么又冒出来一堆」。 */
+  function clearDelivered() {
+    if (!NATIVE || typeof LN.removeAllDeliveredNotifications !== 'function') return Promise.resolve(0);
+    return LN.removeAllDeliveredNotifications().catch(function () {});
+  }
+
+  /* 诊断：系统里到底排着几条、通知栏里显示着几条。
+   * 「冒出一堆通知」这类问题，光看代码猜不出来，得有数字。 */
+  function stat() {
+    if (!NATIVE) return Promise.resolve({ native: false, pending: null, delivered: null, test: false });
+    var r = { native: true, pending: null, delivered: null, test: false };
+    return Promise.resolve()
+      .then(function () {
+        if (typeof LN.getPending !== 'function') return null;
+        return LN.getPending().then(function (x) {
+          var list = (x && x.notifications) || [];
+          r.pending = list.length;
+          for (var i = 0; i < list.length; i++) if (list[i] && Number(list[i].id) === TEST_ID) r.test = true;
+        });
+      })
+      .catch(function () { /* 保留 null */ })
+      .then(function () {
+        if (typeof LN.getDeliveredNotifications !== 'function') return null;
+        return LN.getDeliveredNotifications().then(function (x) {
+          r.delivered = ((x && x.notifications) || []).length;
+        });
+      })
+      .catch(function () { /* 保留 null */ })
+      .then(function () { return r; });
   }
 
   /* 通知可用性综合探测。
@@ -268,6 +417,9 @@
     init: init,
     sync: sync,
     test: test,
+    purge: purge,
+    clearDelivered: clearDelivered,
+    stat: stat,
     cancelOne: cancelOne,
     checkPermissions: checkPermissions,
     requestPermission: requestPermission,
