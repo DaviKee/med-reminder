@@ -213,7 +213,12 @@
       .filter(function (d) { return d.status === 'pending'; })
       .map(function (d) {
         var m = medById(d.medId);
-        return { id: d.id, timeStr: minToStr(d.time), medName: m ? m.name : '服药', at: dateAt(d.time) };
+        /* 系统通知的**响铃时刻**用 dueAt（延后过就按延后时刻），
+         * 但正文里仍写计划时刻 —— 用户关心的是"这次药本来该几点吃"。
+         * 延后过则把延后时刻一并说清，避免"通知怎么晚响了"的困惑。 */
+        var t = minToStr(d.time);
+        if (d.snoozeUntil != null) t += '（已延后至 ' + minToStr(d.snoozeUntil) + '）';
+        return { id: d.id, timeStr: t, medName: m ? m.name : '服药', at: dateAt(dueAt(d)) };
       });
     window.MedNotify.sync(list);
   }
@@ -233,7 +238,9 @@
    * 用户既不知道自己漏了药，也无从补记。现在显式暴露出来。 */
   var MISS_GRACE_MIN = 30;
   function isMissed(d) {
-    return d.status === 'pending' && nowMin() - d.time > MISS_GRACE_MIN;
+    /* 按「下次响铃时刻」算，而不是原计划时刻：用户主动延后 10 分钟后，
+     * 宽限期也应该从延后时刻起算，否则一延后就立刻被判成漏服。 */
+    return d.status === 'pending' && nowMin() - dueAt(d) > MISS_GRACE_MIN;
   }
   function missedDoses() {
     return sortedDoses().filter(isMissed);
@@ -348,6 +355,13 @@
     if (r && r.shifted) s += '，后续 ' + r.shifted + ' 次已顺延';
     if (r && r.dropped) s += '，' + r.dropped + ' 次越过零点不再提醒';
     return s;
+  }
+
+  /* 已延后的剂量在排程行上标出来。不标的话，用户会以为"刚才明明延后了，
+   * 怎么列表还是原来的时间"——其实计划时刻本就该保持原样，是响铃时刻变了。 */
+  function snoozeTag(ds) {
+    if (!ds || ds.status !== 'pending' || ds.snoozeUntil == null) return '';
+    return '<span class="snooze-tag">延后至 ' + esc(minToStr(ds.snoozeUntil)) + '</span>';
   }
 
   /* 按 id 在全部日期里找剂量 —— 照片可能属于历史记录，不只今天 */
@@ -510,8 +524,65 @@
   function sortedDoses() {
     return todayDoses().slice().sort(function (a, b) { return a.time - b.time; });
   }
+
+  /* ---------------- 延后（snooze） ----------------
+   * 设计要点：**snooze 绝不写 d.time**。
+   * d.time 是「计划服药时刻」——排程表的显示依据，也是顺延（rollForward）调整的对象。
+   * 旧实现是 `ds.time = Math.min(1439, ds.time + 10)`，两个问题：
+   *   ① 语义错位：snooze 是「下次响铃晚一点」，不该改计划时刻；
+   *      改一次排程表上的显示时刻就被永久改掉（08:00 → 08:10），原始计划时间丢失，
+   *      snooze 三次就偏 30 分钟。这是数据正确性问题，不是边界问题。
+   *   ② 越界钳制：23:55 延后 10 分钟 → 1445 被钳成 1439（23:59），
+   *      用户以为延后 10 分钟、实际只延后 4 分钟。
+   * 现在改为独立字段 d.snoozeUntil 记录「下次响铃时刻」，d.time 始终是原计划时刻。 */
+  var SNOOZE_MIN = 10;
+
+  /* 剂量的下次响铃时刻（分钟数）。没有延后过就是原计划时刻。 */
+  function dueAt(d) {
+    if (!d) return 0;
+    return (d.snoozeUntil != null) ? d.snoozeUntil : d.time;
+  }
+
+  /* 按「下次响铃时刻」排序 —— 倒计时和"下一条该吃的"要用它，
+   * 而排程表仍按计划时刻排序（sortedDoses），两者语义不同，不能混用。 */
+  function sortedByDue() {
+    return todayDoses().slice().sort(function (a, b) { return dueAt(a) - dueAt(b); });
+  }
+
+  /* 延后一次。只改 snoozeUntil / snoozeCount，**不动 d.time**。
+   * 跨零点不延后：排到次日会与「明天首次打卡才排程」的模型冲突（计划 §10 Q2），
+   * 所以明确告知，而不是悄悄钳到 23:59。 */
+  function snoozeDose(d) {
+    if (!d || d.status !== 'pending') return { ok: false, reason: 'not-pending' };
+    var base = dueAt(d);
+    var next = base + SNOOZE_MIN;
+    if (next >= 1440) {
+      /* 不再延后。标记已通知，避免 tick 立刻又弹一次；剂量本身仍是 pending，
+       * 过了宽限期会被识别成「已错过」并出现在漏服卡里，用户仍可补记。 */
+      S.notified[d.id] = 1;
+      return { ok: false, reason: 'past-midnight', base: base };
+    }
+    d.snoozeUntil = next;
+    d.snoozeCount = (d.snoozeCount || 0) + 1;
+    S.notified[d.id] = 0;
+    return { ok: true, at: next, count: d.snoozeCount };
+  }
+
+  /* 延后结果的提示文案 —— 通知栏按钮与页面内弹窗共用同一套语义 */
+  function snoozeToast(r) {
+    if (r && r.ok) {
+      return '已延后 ' + SNOOZE_MIN + ' 分钟，' + minToStr(r.at) + ' 再提醒你'
+        + (r.count > 1 ? '（第 ' + r.count + ' 次）' : '');
+    }
+    if (r && r.reason === 'past-midnight') {
+      return '已过零点，今天不再延后；这次记为未处理，明早可以补记';
+    }
+    return '这条已经处理过了';
+  }
   function nextPending() {
-    var l = sortedDoses();
+    /* 用「下次响铃时刻」排序：若 08:00 那次被延后到 08:20，而 08:10 那次正常，
+     * 下一条该吃的应该是 08:10 那条 —— 按计划时刻排序会给出错误答案。 */
+    var l = sortedByDue();
     for (var i = 0; i < l.length; i++) if (l[i].status === 'pending') return l[i];
     return null;
   }
@@ -646,9 +717,9 @@
           right = '<button class="btn-miss" data-makeup="' + esc(ds.id) + '" '
             + 'aria-label="补记 ' + esc(minToStr(ds.time)) + ' 这次服药">已错过 · 补记</button>';
         } else if (isNext) {
-          right = '<span class="pill accent">待服用</span>';
+          right = snoozeTag(ds) + '<span class="pill accent">待服用</span>';
         } else {
-          right = '<span class="dose-s"><span class="txt">待服用</span></span>';
+          right = snoozeTag(ds) + '<span class="dose-s"><span class="txt">待服用</span></span>';
         }
         var rowMiss = isMissed(ds) ? ' dose-miss' : '';
         html += '<div class="dose' + rowMiss + '">'
@@ -689,7 +760,7 @@
 
   function countdownText(nxt) {
     if (!nxt) return '今天已无待服用的药。';
-    var diff = nxt.time - nowMin();
+    var diff = dueAt(nxt) - nowMin();
     if (diff <= 0) return '现在就该吃药了。';
     var h = Math.floor(diff / 60), m = diff % 60;
     return '距下次服药还有 ' + (h ? h + ' 小时 ' + m + ' 分' : m + ' 分钟');
@@ -963,15 +1034,71 @@
 
     // stats
     var streak = calcStreak();
-    var rate = calcAdherence();
+    var ads = adherenceStats(histMedId);
+    var selMed = histMedId ? medById(histMedId) : null;
     html += '<div class="statrow">'
       + '<div class="stat"><span class="eyebrow">STREAK</span><span class="meta">连续打卡</span>'
       + '<span class="v"><span class="n">' + streak + '</span><span class="u">天</span></span></div>'
-      + '<div class="stat"><span class="eyebrow">ADHERENCE</span><span class="meta">本月依从率</span>'
-      + '<span class="v"><span class="n">' + (rate === null ? '—' : rate) + '</span><span class="u">%</span></span></div>'
+      + '<div class="stat"><span class="eyebrow">ADHERENCE</span><span class="meta">本月依从率'
+      + (selMed ? ' · ' + esc(selMed.name) : '') + '</span>'
+      + '<span class="v"><span class="n">' + (ads.rate === null ? '—' : ads.rate) + '</span><span class="u">%</span></span></div>'
       + '</div>';
 
+    /* 明细必须露出来：只说一个百分比，用户没法判断它是怎么来的，
+     * 也看不出"补记"被算在了哪里。 */
+    if (ads.total) {
+      html += '<p class="hint" style="margin-top:-8px">真实打卡 ' + ads.real
+        + ' · 补记 ' + ads.makeup + ' · 跳过 ' + ads.skipped + ' · 漏服 ' + ads.missed
+        + (ads.makeup ? '（依从率只算真实打卡，补记不计入）' : '') + '</p>';
+    }
     html += '<p class="hint" style="margin-top:-8px">每次服药后打卡，记录会自动更新。</p>';
+
+    /* ---- 历史记录：按天列出，可按药筛选 ----
+     * 之前记录页只有周点与两个统计，看不到"具体哪天哪次吃了什么" ——
+     * 对需要长期追踪服药规律的用户来说，等于没有记录页。 */
+    if (S.meds.length) {
+      html += '<div class="chip-row" id="histFilter">'
+        + '<button class="chip fs-chip' + (histMedId ? '' : ' on') + '" data-hist=""'
+        + ' aria-pressed="' + (histMedId ? 'false' : 'true') + '">全部</button>'
+        + S.meds.map(function (m) {
+            var on = histMedId === m.id;
+            return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-hist="' + esc(m.id) + '"'
+              + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(m.name) + '</button>';
+          }).join('')
+        + '</div>';
+    }
+
+    var hdays = historyDays(HIST_DAYS).filter(function (k) {
+      return !histMedId || (S.doses[k] || []).some(function (x) { return x.medId === histMedId; });
+    });
+    if (hdays.length) {
+      html += '<div class="sect"><span class="eyebrow">HISTORY · 近 ' + HIST_DAYS + ' 天</span>';
+      hdays.forEach(function (k) {
+        var arr = (S.doses[k] || [])
+          .filter(function (x) { return !histMedId || x.medId === histMedId; })
+          .slice().sort(function (a, b) { return a.time - b.time; });
+        html += '<div class="card sched">'
+          + '<span class="eyebrow" style="display:block;margin:6px 0 2px">' + esc(histDayLabel(k)) + '</span>';
+        arr.forEach(function (x) {
+          var m = medById(x.medId);
+          var lbl = histStatusLabel(x, k);
+          var cam = x.photo
+            ? '<button class="cam-btn" data-photo="' + esc(x.id) + '" aria-label="查看这次服药的照片">' + ICON.cam + '</button>'
+            : '';
+          html += '<div class="dose">'
+            + '<div class="dose-l"><span class="dose-t">' + esc(minToStr(x.time)) + '</span>'
+            + '<span class="dose-n' + (x.status === 'taken' ? '' : ' dim') + '">'
+            + esc(m ? m.name : '已删除药品') + '</span></div>'
+            + '<span class="dose-s"><span class="txt' + (lbl === '已错过' ? ' no-shot' : '') + '">'
+            + esc(lbl) + '</span>' + cam + '</span>'
+            + '</div>';
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<p class="hint">还没有服药记录。回到「今天」打卡后，这里会按天列出来。</p>';
+    }
 
     /* 拍照打卡统计。跳过率单独列出来 —— 它是这个功能该收紧还是放宽的依据。 */
     var ph = photoTally();
@@ -1041,6 +1168,22 @@
     if (br) br.onclick = function () { openDataDlg('restore'); };
     var bcl = $('#btnClean');
     if (bcl) bcl.onclick = openCleanDlg;
+
+    /* 按药筛选。选中只影响统计与下面的历史列表，不动任何数据。 */
+    $$('[data-hist]').forEach(function (el) {
+      el.onclick = function () {
+        var v = el.getAttribute('data-hist');
+        histMedId = v ? v : null;
+        render();
+      };
+    });
+    /* 历史行里的相机图标：点开看当时的照片 */
+    $$('[data-photo]').forEach(function (el) {
+      el.onclick = function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        openPhoto(el.getAttribute('data-photo'));
+      };
+    });
   }
 
   function calcStreak() {
@@ -1060,20 +1203,68 @@
     if (!arr) return false;
     return arr.some(function (x) { return x.status === 'taken'; });
   }
-  function calcAdherence() {
+  /* 依从率统计（medId 为空则统计全部药品）。
+   *
+   * ⚠️ 必须把「补记」与「真实打卡」分开。一键补记（btnMissAll）会把漏服标成 taken，
+   * 混在一起算的话点一下就能把依从率刷到 100%，这个数字就彻底不可信了 ——
+   * 而这正是补记功能自己带来的副作用。分子只算**真实打卡**（无 makeup 标记）。
+   *
+   * 分母用「已结算剂量」= 真实打卡 + 补记 + 主动跳过 + 已过宽限期的漏服。
+   * 旧实现只算 taken/skipped，把漏服排除在分母外 → 漏得越多数字反而越好看。 */
+  function adherenceStats(medId) {
     var d = new Date();
     var prefix = d.getFullYear() + '-' + pad(d.getMonth() + 1);
-    var taken = 0, missed = 0;
+    var tk = todayKey(), now = nowMin();
+    var st = { real: 0, makeup: 0, skipped: 0, missed: 0, total: 0, rate: null };
     Object.keys(S.doses).forEach(function (k) {
       if (k.indexOf(prefix) !== 0) return;
-      S.doses[k].forEach(function (x) {
-        if (x.status === 'taken') taken++;
-        else if (x.status === 'skipped') missed++;
+      var isToday = k === tk;
+      (S.doses[k] || []).forEach(function (x) {
+        if (medId && x.medId !== medId) return;
+        if (x.status === 'taken') { if (x.makeup) st.makeup++; else st.real++; return; }
+        if (x.status === 'skipped') { st.skipped++; return; }
+        /* 只把「已过宽限期」的 pending 算作漏服：未来的剂量不能算漏；
+         * 历史日期上的 pending 一律算漏。 */
+        if (x.status === 'pending' && (!isToday || now - dueAt(x) > MISS_GRACE_MIN)) st.missed++;
       });
     });
-    var total = taken + missed;
-    if (!total) return null;
-    return Math.round(taken / total * 100);
+    st.total = st.real + st.makeup + st.skipped + st.missed;
+    st.rate = st.total ? Math.round(st.real / st.total * 100) : null;
+    return st;
+  }
+
+  /* 旧的百分比入口（按药筛选时由调用方直接传 medId） */
+  function calcAdherence(medId) {
+    return adherenceStats(medId).rate;
+  }
+
+  /* 记录页的药品筛选：null = 全部 */
+  var histMedId = null;
+  var HIST_DAYS = 14;
+
+  /* 近 N 天里「有记录」的日期键，新的在前 */
+  function historyDays(limit) {
+    return Object.keys(S.doses)
+      .filter(function (k) { return (S.doses[k] || []).length; })
+      .sort().reverse().slice(0, limit || HIST_DAYS);
+  }
+
+  /* 历史分组标题：今天单独标出来，其余用"月-日 周X" */
+  function histDayLabel(k) {
+    if (k === todayKey()) return '今天 · ' + k;
+    var wd = ['日', '一', '二', '三', '四', '五', '六'];
+    var p = k.split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    return k.slice(5) + ' 周' + wd[d.getDay()];
+  }
+
+  /* 历史行的状态文案。历史日期上的 pending 一律是「已错过」，
+   * 不能拿 isMissed() 直接判（它按"现在"算）。 */
+  function histStatusLabel(x, k) {
+    if (x.status === 'taken') return x.makeup ? '补记' : '已服用';
+    if (x.status === 'skipped') return '已跳过';
+    if (k !== todayKey() || nowMin() - dueAt(x) > MISS_GRACE_MIN) return '已错过';
+    return '未到时间';
   }
 
   /* ---------------- overlays ---------------- */
@@ -1117,8 +1308,9 @@
       var ds = list[i];
       if (ds.status !== 'pending') continue;
       if (S.notified[ds.id]) continue;
-      if (ds.time > now) continue;
-      if (now - ds.time > 30) { S.notified[ds.id] = 1; save(); continue; } // 过期太久，静默
+      var due = dueAt(ds);                 // 延后过就按延后时刻；原计划时刻不动
+      if (due > now) continue;
+      if (now - due > 30) { S.notified[ds.id] = 1; save(); continue; } // 过期太久，静默
       S.notified[ds.id] = 1; save();
       // 前台（App 可见）弹页面内提醒，确保开屏也看得见；
       // 后台 / 锁屏 / 息屏由系统通知负责，无需此处处理
@@ -1135,7 +1327,9 @@
     var med = medById(ds.medId);
     remindDose = ds;
     $('#remindName').textContent = med ? med.name : '服药时间';
-    $('#remindMeta').textContent = minToStr(ds.time) + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · 每 ' + (med ? med.interval : '-') + ' 小时';
+    $('#remindMeta').textContent = minToStr(ds.time)
+      + (ds.snoozeUntil != null ? ('（已延后至 ' + minToStr(ds.snoozeUntil) + '）') : '')
+      + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · 每 ' + (med ? med.interval : '-') + ' 小时';
     openDlg($('#dlgRemind'));
     fireNotification(med, ds);
   }
@@ -1182,9 +1376,8 @@
         save(); render(); toast(takenToast(med, at, r));
       });
     } else if (action === 'snooze') {
-      ds.time = Math.min(1439, ds.time + 10);
-      S.notified[ds.id] = 0;
-      save(); render(); toast('10 分钟后再提醒你');
+      var sr = snoozeDose(ds);
+      save(); render(); toast(snoozeToast(sr));
     } else if (action === 'open') {
       if (ds.status === 'pending') showReminder(ds); else render();
     }
@@ -1753,11 +1946,12 @@
       });
     };
     $('#remindSnooze').onclick = function () {
+      var msg = '这条已经处理过了';
       if (remindDose) {
-        remindDose.time = Math.min(1439, remindDose.time + 10);
-        S.notified[remindDose.id] = 0; save();
+        msg = snoozeToast(snoozeDose(remindDose));
+        save();
       }
-      closeDlg($('#dlgRemind')); remindDose = null; render(); toast('10 分钟后再提醒你');
+      closeDlg($('#dlgRemind')); remindDose = null; render(); toast(msg);
     };
 
     /* ---- 备份 / 导出 / 恢复 ---- */
