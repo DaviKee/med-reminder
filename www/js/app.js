@@ -200,6 +200,23 @@
     document.documentElement.style.setProperty('--fs', String(v));
     if (persist) { try { localStorage.setItem(FS_KEY, String(v)); } catch (e) { /* ignore */ } }
   }
+  /* ---------------- 首次添加药品时引导授权（F-3） ----------------
+   * 原来只有"打卡时"才引导，于是"设完药、还没到打卡点"这段空窗期里，
+   * 用户并不知道自己收不到提醒 —— 对提醒类 App 这是最要命的静默失效。
+   * 只引导一次：已 granted 不必、已 denied 交给权限卡（反复弹窗只会招人烦）。 */
+  var GUIDE_KEY = 'medreminder.notifyGuide.v1';
+  function guideNotified() { return readJSON(GUIDE_KEY) === '1'; }
+  function markGuided() { writeJSON(GUIDE_KEY, '1'); }
+
+  function guideNotifyOnce() {
+    if (guideNotified()) return;
+    if (notifyPerm === 'granted') return;      // 已经能收到，别打扰
+    if (notifyPerm === 'denied') return;       // 已明确收不到 → 用权限卡引导（那里还能跳系统设置）
+    markGuided();
+    askNotify();
+    toast('顺手把通知权限开一下，锁屏时才能收到提醒');
+  }
+
   /* 一次性提示：把"字可以调大"告诉需要它的人（A-1） */
   var FS_HINT_KEY = 'medreminder.fsHint.v1';
   function fsHintDismissed() {
@@ -331,6 +348,49 @@
    * 只顺延「时间在原计划之后」的剂量 —— 更早且已逾期的剂量不受影响，
    * 否则它们会被推到次日而遭丢弃，等于把漏服记录抹掉。
    * 越过今天 24:00 的不再排（留到明天重新打卡），避免出现当天永不触发的死条目。 */
+  /* ---------------- 跨天剂量的可见化（B-2） ----------------
+   * rollForward 会丢弃越过零点的剂量（22:00 打卡 + 8 小时间隔 → 次日 06:00 那次不排）。
+   * 这是**设计取舍**（排到次日会与「明天首次打卡才排程」的模型冲突），但过去只在
+   * toast 里一闪而过，用户很难意识到"今天少了一次"。
+   * 现在改成今日页常驻一条说明，关闭后当天不再出现。
+   *
+   * ⚠️ 不能存进 S：load() 只还原 meds / doses / notified，额外的顶层键下次启动就没了。
+   * 用独立 key 也让备份格式保持不动。 */
+  var DROP_KEY = 'medreminder.dropped.v1';
+  var DROP_ACK_KEY = 'medreminder.droppedAck.v1';
+
+  function readJSON(k) {
+    try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : null; } catch (e) { return null; }
+  }
+  function writeJSON(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ }
+  }
+  function noteDropped(n) {
+    if (!n) return;
+    var cur = readJSON(DROP_KEY), today = todayKey();
+    if (cur && cur.date === today) cur.n = (cur.n || 0) + n;
+    else cur = { date: today, n: n, at: Date.now() };
+    writeJSON(DROP_KEY, cur);
+  }
+  function droppedToday() {
+    var cur = readJSON(DROP_KEY);
+    if (!cur || cur.date !== todayKey() || !cur.n) return 0;
+    return cur.n;
+  }
+  function droppedAcked() { return readJSON(DROP_ACK_KEY) === todayKey(); }
+  function ackDropped() { writeJSON(DROP_ACK_KEY, todayKey()); }
+
+  function droppedCardHtml() {
+    var n = droppedToday();
+    if (!n || droppedAcked()) return '';
+    return '<div class="card card-miss" style="display:flex;flex-direction:column;gap:6px">'
+      + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">有 ' + n
+      + ' 次服药排到了次日，今天不再提醒</span>'
+      + '<span class="meta">这次打卡比较晚，按间隔本该排到明天凌晨。今天不会再响，建议明早打卡后补记一次。</span>'
+      + '<button class="btn btn-ghost" id="btnDropAck" style="align-self:flex-start;min-height:44px;margin-top:2px">知道了</button>'
+      + '</div>';
+  }
+
   function rollForward(dose, takenMs) {
     var med = medById(dose.medId);
     if (!med) return { shifted: 0, dropped: 0 };
@@ -350,6 +410,7 @@
     });
     if (dropIds.length) {
       S.doses[todayKey()] = todayDoses().filter(function (d) { return dropIds.indexOf(d.id) < 0; });
+      noteDropped(dropIds.length);   // 让"今天少了一次"这件事在页面上留得住，而不是只飘一下
     }
     reindexMed(dose.medId);
     return { shifted: shifted, dropped: dropIds.length };
@@ -715,6 +776,8 @@
           + '<span class="meta" style="color:#FF7A17">点此把漏掉的都记为已服用</span></button>';
       }
 
+      html += droppedCardHtml();
+
       html += '<div class="card sched" style="padding-left:20px;padding-right:20px;padding-top:8px;padding-bottom:8px">';
       sorted.forEach(function (ds) {
         var med = medById(ds.medId);
@@ -876,6 +939,13 @@
   function bindToday() {
     var perm = $('#btnPerm');
     if (perm) perm.onclick = onPermCardTap;
+
+    var da = $('#btnDropAck');
+    if (da) da.onclick = function () {
+      ackDropped();
+      render();
+      toast('已隐藏，明天若又跨越零点会再提示');
+    };
 
     var fsh = $('#btnFsHint');
     if (fsh) fsh.onclick = function () {
@@ -1916,6 +1986,7 @@
     $('#stepPlus').onclick = function () { stepVal++; clampStep(); renderPreview(); };
 
     $('#saveMed').onclick = function () {
+      var isFirstMed = false;
       var name = $('#medName').value.trim();
       if (!name) { toast('请填写药品名称'); $('#medName').focus(); return; }
       if (editingId) {
@@ -1940,8 +2011,12 @@
       } else {
         S.meds.push({ id: uid(), name: name, interval: stepVal });
         toast('已添加 ' + name);
+        isFirstMed = true;
       }
       save(); closeSheet(); render();
+      /* 首次添加药品后主动引导一次通知授权（F-3）——放在 closeSheet 之后，
+       * 否则系统权限弹窗会盖在药品编辑浮层上，关掉它才能继续操作。 */
+      if (!editingId && isFirstMed) guideNotifyOnce();
     };
 
     $('#deleteMed').onclick = function () {
