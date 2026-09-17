@@ -22,7 +22,7 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.1.0';
+  var APP_VERSION = '1.1.1';
   var APP_BUILD = '2026-09-17';
 
   /* ---------------- date / time helpers ---------------- */
@@ -1411,17 +1411,30 @@
 
   /* DEBUG 卡的自检行：把原生探测到的原始值直接显示出来。
    * 「看不到权限卡」若只靠猜，会来回折腾好几轮；显示实际读数可以一次定位。 */
+  /* 已注册的 Capacitor 插件清单。
+   * 加这一行是因为踩过一个很隐蔽的坑：项目没有打包器，插件必须靠 <script> 引入
+   * 才会注册进 Capacitor.Plugins；少了这一步，判断条件能通过、调用却失败，
+   * 表现成「功能没反应」而且没有任何报错。有了这行，一眼就能看出插件在不在。 */
+  function plugLine() {
+    var c = window.Capacitor;
+    var names = (c && c.Plugins) ? Object.keys(c.Plugins).sort() : [];
+    return '<p class="hint">已注册插件：'
+      + (names.length ? esc(names.join(' / ')) : '无 —— 插件 JS 未加载')
+      + '</p>';
+  }
+
   function diagHtml() {
     if (!(window.MedNotify && window.MedNotify.native)) {
-      return '<p class="hint">通知模式：浏览器（无系统闹钟，页面关掉就不响）</p>';
+      return '<p class="hint">通知模式：浏览器（无系统闹钟，页面关掉就不响）</p>' + plugLine();
     }
     var p = permProbe;
-    if (!p) return '<p class="hint">通知状态：读取中…</p>';
+    if (!p) return '<p class="hint">通知状态：读取中…</p>' + plugLine();
     return '<p class="hint">通知状态：权限 ' + esc(p.display)
       + ' · App 开关 ' + (p.enabled === null ? '读不到' : (p.enabled ? '开' : '关'))
       + ' · 渠道 ' + (p.channelFound ? ('importance ' + p.channelImportance) : '未创建')
       + '</p>'
-      + (permAction ? '<p class="hint">上次点击权限卡：' + esc(permAction) + '</p>' : '');
+      + (permAction ? '<p class="hint">上次点击权限卡：' + esc(permAction) + '</p>' : '')
+      + plugLine();
   }
 
   /* ---------------- 存储 UI（D-1） ---------------- */

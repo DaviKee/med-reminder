@@ -95,6 +95,18 @@ fi
 
 echo "  版本  : v$VER ($BUILDDATE)  versionCode=$VCODE"
 
+# ---------- 同步 Capacitor 插件 JS 到 www/vendor ----------
+# 本项目没有打包器，插件必须靠 <script> 引入才会注册进 Capacitor.Plugins。
+# 每次都从 node_modules 复制，保证与安装的插件版本一致 ——
+# 漏了这段，所有插件调用会静默降级成 web 实现（功能没反应、还不报错）。
+mkdir -p www/vendor
+cp node_modules/@capacitor/core/dist/capacitor.js                    www/vendor/capacitor.js
+cp node_modules/@capacitor/app/dist/plugin.js                        www/vendor/plugin-app.js
+cp node_modules/@capacitor/local-notifications/dist/plugin.js         www/vendor/plugin-local-notifications.js
+cp node_modules/@capacitor/camera/dist/plugin.js                      www/vendor/plugin-camera.js
+cp node_modules/@capacitor/filesystem/dist/plugin.js                  www/vendor/plugin-filesystem.js
+echo "→ 已同步 Capacitor 插件 JS 到 www/vendor/"
+
 # ---------- 同步 + 编译 ----------
 echo "→ 同步 www/ 到原生工程…"
 ./node_modules/.bin/cap sync android

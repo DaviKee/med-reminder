@@ -207,6 +207,16 @@
   <div class="toast" id="toast"></div>
 </div>
 
+<!-- Capacitor 插件 JS —— 顺序不能乱：
+     先 core（它的 IIFE 结果挂在全局 capacitorExports 上），再各插件的 UMD 包
+     （尾部形如 `})({}, capacitorExports)`，内部调用 core.registerPlugin('Camera', ...)）。
+     这一段缺了，Capacitor.Plugins 就是空对象 —— 所有插件调用会静默降级成 web 实现，
+     表现就是「功能没反应」而没有任何报错。 -->
+<script src="vendor/capacitor.js"></script>
+<script src="vendor/plugin-app.js"></script>
+<script src="vendor/plugin-local-notifications.js"></script>
+<script src="vendor/plugin-camera.js"></script>
+<script src="vendor/plugin-filesystem.js"></script>
 <script src="js/notify.js"></script>
 <script src="js/photo.js"></script>
 <script src="js/app.js"></script>

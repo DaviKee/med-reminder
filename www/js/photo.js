@@ -16,17 +16,25 @@
 (function () {
   'use strict';
 
-  var Cap = window.Capacitor;
-  var Plugins = (Cap && Cap.Plugins) || {};
-  var Camera = Plugins.Camera;
-  var Filesystem = Plugins.Filesystem;
-  var NATIVE = !!(Cap && typeof Cap.isNativePlatform === 'function' && Cap.isNativePlatform());
+  /* 插件惰性获取，不在加载时把引用定死 —— 这样即使脚本顺序变了、
+   * 或插件注册晚于本文件，也不会被误判成「不可用」。 */
+  function plugin(name) {
+    var c = window.Capacitor;
+    return (c && c.Plugins && c.Plugins[name]) || null;
+  }
+  function camera() { return plugin('Camera'); }
+  function fs() { return plugin('Filesystem'); }
+
+  /* 只看插件是否真的注册进来了。
+   *
+   * ⚠️ 这里刻意**不用** Capacitor.isNativePlatform() —— 它在 native bridge 里是
+   * `const isNativePlatform = () => true`，只表示"跑在 Capacitor 环境里"，
+   * **不代表插件可用**。上一版把 NATIVE 建立在它之上，结果判断通过、调用失败，
+   * 表现成「点了没反应」，还完全没有报错 —— 真问题是插件的 JS 根本没被加载。 */
+  function ready() { return !!(camera() && fs()); }
 
   var DIR = 'photos';          // Directory.Data 下的子目录
   var PREFIX = 'photos/';      // 记进 dose 的相对路径前缀
-
-  /* 浏览器模式没有这两个插件，调用方据此隐藏拍照入口并降级为「直接打卡」 */
-  function ready() { return !!(NATIVE && Camera && Filesystem); }
 
   function two(n) { return String(n).padStart(2, '0'); }
 
@@ -45,11 +53,11 @@
    * 优先 copy（不过 JS 层，最省内存）；但 copy 的 from 对不同路径格式的接受度
    * 在各平台/版本上不一致，所以失败时退回「读出 base64 再写入」—— 两条路都走通，不赌。 */
   function persist(photoPath, rel) {
-    return Filesystem.copy({ from: photoPath, to: rel, toDirectory: 'DATA' })
+    return fs().copy({ from: photoPath, to: rel, toDirectory: 'DATA' })
       .catch(function () {
-        return Filesystem.readFile({ path: photoPath })
+        return fs().readFile({ path: photoPath })
           .then(function (r) {
-            return Filesystem.writeFile({ path: rel, data: r.data, directory: 'DATA' });
+            return fs().writeFile({ path: rel, data: r.data, directory: 'DATA' });
           });
       });
   }
@@ -59,7 +67,7 @@
   function take(doseId) {
     if (!ready()) return Promise.resolve({ ok: false, reason: 'unsupported' });
     var rel = relName(doseId);
-    return Camera.getPhoto({
+    return camera().getPhoto({
       resultType: 'uri',           // 官方推荐：大图不要用 Base64
       source: 'camera',
       quality: 60,                 // 药盒上的药名要能看清；再低就可能糊到没法辨认
@@ -93,9 +101,10 @@
   function src(rel) {
     if (!rel) return Promise.resolve('');
     if (!ready()) return Promise.resolve('');
-    return Filesystem.getUri({ path: rel, directory: 'DATA' })
+    return fs().getUri({ path: rel, directory: 'DATA' })
       .then(function (r) {
-        return (Cap && typeof Cap.convertFileSrc === 'function') ? Cap.convertFileSrc(r.uri) : r.uri;
+        var c = window.Capacitor;
+        return (c && typeof c.convertFileSrc === 'function') ? c.convertFileSrc(r.uri) : r.uri;
       })
       .catch(function () { return ''; });
   }
@@ -104,7 +113,7 @@
    * 而那张卡的全部意义就是让容量可见。 */
   function dirStats() {
     if (!ready()) return Promise.resolve({ files: 0, bytes: 0 });
-    return Filesystem.readdir({ path: DIR, directory: 'DATA' })
+    return fs().readdir({ path: DIR, directory: 'DATA' })
       .then(function (r) {
         var files = 0, bytes = 0;
         (r.files || []).forEach(function (f) {
@@ -122,7 +131,7 @@
     if (!ready()) return Promise.resolve(0);
     var alive = {};
     (refs || []).forEach(function (r) { if (r) alive[r] = 1; });
-    return Filesystem.readdir({ path: DIR, directory: 'DATA' })
+    return fs().readdir({ path: DIR, directory: 'DATA' })
       .then(function (rd) {
         var orphans = (rd.files || []).filter(function (f) {
           return f.type === 'file' && !alive[PREFIX + f.name];
@@ -130,7 +139,7 @@
         /* 串行删，避免并发写文件系统的未知行为 */
         return orphans.reduce(function (p, f) {
           return p.then(function (n) {
-            return Filesystem.deleteFile({ path: DIR + '/' + f.name, directory: 'DATA' })
+            return fs().deleteFile({ path: DIR + '/' + f.name, directory: 'DATA' })
               .then(function () { return n + 1; })
               .catch(function () { return n; });
           });
