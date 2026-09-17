@@ -59,10 +59,12 @@ def main():
     app = read('assets/public/js/app.js')
     notify = read('assets/public/js/notify.js')
     photo = read('assets/public/js/photo.js')
+    backup = read('assets/public/js/backup.js')
     css = read('assets/public/css/app.css')
     html = read('assets/public/index.html')
 
     APP, NOTIFY, PHOTO, CSS = strip_js(app), strip_js(notify), strip_js(photo), strip_css(css)
+    BACKUP = strip_js(backup)
 
     print('产物: %s' % os.path.basename(apk))
     print('      %.2f MB   MD5=%s'
@@ -94,7 +96,7 @@ def main():
 
     print()
     print('=== 资源与源一致（构建没吃到旧文件）===')
-    for name in ['js/app.js', 'js/notify.js', 'js/photo.js', 'css/app.css', 'index.html']:
+    for name in ['js/app.js', 'js/notify.js', 'js/photo.js', 'js/backup.js', 'css/app.css', 'index.html']:
         src = os.path.join(WEB, name)
         zp = 'assets/public/' + name
         ok = hashlib.md5(open(src, 'rb').read()).hexdigest() == hashlib.md5(z.read(zp)).hexdigest()
@@ -140,6 +142,16 @@ def main():
         ('F-4-启动与跨天都接线', APP.count('ensureFixedDoses();') >= 3),
         ('F-4-界面（模式切换+时刻编辑）', 'id="modeRow"' in html and 'id="timeList"' in html and 'id="addTime"' in html),
         ('F-4-样式 44px 触摸目标', '.time-input' in CSS and 'height:44px' in CSS),
+        # F-7 自动本地备份
+        ('F-7-写 app 专属外部目录', "var DIRS = ['EXTERNAL', 'DATA'];" in BACKUP),
+        ('F-7-先建目录再写文件', 'FS.mkdir(' in BACKUP and 'recursive: true' in BACKUP),
+        ('F-7-防抖', 'DEBOUNCE_MS' in BACKUP and 'clearTimeout(timer)' in BACKUP),
+        ('F-7-保留策略', 'KEEP' in BACKUP and 'deleteFile' in BACKUP),
+        ('F-7-保存时自动备份', 'MedAutoBackup.schedule' in APP),
+        ('F-7-用同一份备份格式', 'JSON.stringify(buildBackup())' in APP),
+        ('F-7-记录页有卡片', 'function autoBackupCardHtml(' in APP and 'AUTO · 自动备份' in APP),
+        ('F-7-明示卸载会删掉', '卸载 App 会连这个目录一起删掉' in APP),
+        ('F-7-切后台落盘', 'MedAutoBackup.flush()' in APP),
         # 前几轮成果
         ('B-1 snooze 独立字段', 'function snoozeDose(d)' in APP and 'snoozeUntil' in APP),
         ('B-1 不再篡改计划时刻', 'ds.time = Math.min(1439' not in APP),

@@ -22,7 +22,7 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.3.0';
+  var APP_VERSION = '1.4.0';
   var APP_BUILD = '2026-09-17';
 
   /* ---------------- date / time helpers ---------------- */
@@ -164,6 +164,11 @@
       if (first) queueStorageRefresh();
     }
     syncNotifications();
+    /* 每次改动都往本地存一份（防抖 3 秒，写失败也不影响任何功能）。
+     * 传出去的是与手动导出**完全一致**的格式 —— 现有恢复流程能直接读回来。 */
+    if (window.MedAutoBackup) {
+      window.MedAutoBackup.schedule(function () { return JSON.stringify(buildBackup()); });
+    }
   }
 
   /* localStorage 在 Android WebView 里通常是 5 MB（部分实现 10 MB），按保守的 5 MB 估算占比 */
@@ -1377,6 +1382,10 @@
     /* 存储状态卡放在备份卡之前：先知道「还剩多少空间」，再决定要不要导出/清理 */
     html += storageCardHtml();
 
+    /* 自动备份卡。放在**手动导出之前** —— 它每天自动发生，是「数据没丢」的主要保障；
+     * 手动导出是换机时才用的。局限（卸载会删）必须写在卡片上，不能含糊。 */
+    html += autoBackupCardHtml();
+
     html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
       + '<span class="eyebrow">DATA · 备份</span>'
       + '<p class="body">记录只存在这台手机上：清缓存、换手机都会丢，也没法直接拿给医生看。定期导出留一份。</p>'
@@ -1423,6 +1432,19 @@
         toast('字号已设为「' + fsLabel() + '」');
       };
     });
+    var ab = $('#btnAutoBak');
+    if (ab) ab.onclick = function () {
+      var A = window.MedAutoBackup;
+      if (!A || !A.status().supported) { toast('这台设备不支持自动备份'); return; }
+      toast('正在备份…');
+      A.now().then(function (s) {
+        render();
+        toast(s && s.ok
+          ? '已备份到本地（' + (s.count == null ? '1' : s.count) + ' 份）'
+          : '备份失败：' + ((s && s.err) || '未知原因'));
+      });
+    };
+
     var bb = $('#btnBackup');
     if (bb) bb.onclick = function () { openDataDlg('backup'); };
     var bc = $('#btnCsv');
@@ -2131,6 +2153,29 @@
       + '<p class="hint">系统：' + esc(sys) + '</p>';
   }
 
+  /* 自动备份的状态卡 */
+  function autoBackupCardHtml() {
+    var A = window.MedAutoBackup;
+    if (!A) return '';
+    var s = A.status();
+    var line;
+    if (!s.supported) line = '这台设备不支持（浏览器模式没有文件系统）';
+    else if (!s.at) line = '还没备份过 —— 改动一次数据就会自动存';
+    else if (!s.ok) line = '上次没成功：' + (s.err || '未知原因');
+    else line = '最近一次：' + A.stamp(s.at) + (s.count == null ? '' : ' · 保留 ' + s.count + ' 份');
+
+    return '<div class="card" style="display:flex;flex-direction:column;gap:8px">'
+      + '<span class="eyebrow">AUTO · 自动备份</span>'
+      + '<p class="body">每次改动都会自动往手机里存一份完整数据，随时能找回来。</p>'
+      + '<p class="hint">' + esc(line) + '</p>'
+      + '<p class="hint">位置：Android/data/com.medreminder.app/files/' + esc(A.DIR)
+      + '（用电脑 USB 能看到）</p>'
+      + '<p class="hint">⚠️ 卸载 App 会连这个目录一起删掉 —— <b>换手机或重装之前，'
+      + '请先用上面「导出备份」另存一份到别处</b>。</p>'
+      + '<button class="btn btn-ghost" id="btnAutoBak" style="height:44px;font-size:calc(14px * var(--fs))">立即备份一次</button>'
+      + '</div>';
+  }
+
   function diagHtml() {
     if (!(window.MedNotify && window.MedNotify.native)) {
       return '<p class="hint">通知模式：浏览器（无系统闹钟，页面关掉就不响）</p>' + plugLine();
@@ -2570,7 +2615,11 @@
      * 而且 App 在后台时 JS 定时器本就被系统暂停，所以「回到前台」这个时机比轮询更准。 */
     if (window.MedNotify && window.MedNotify.native) {
       var AppP = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-      if (AppP) AppP.addListener('appStateChange', function (st) { if (st.isActive) refreshPerm(); });
+      if (AppP) AppP.addListener('appStateChange', function (st) {
+        if (st.isActive) refreshPerm();
+        /* 切到后台时把还没写的备份立刻落盘 —— 防抖窗口内被杀掉就白改了 */
+        else if (window.MedAutoBackup) window.MedAutoBackup.flush();
+      });
     }
 
     // 跨天自动刷新
