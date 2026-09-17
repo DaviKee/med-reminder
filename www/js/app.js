@@ -22,8 +22,8 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.0.8';
-  var APP_BUILD = '2026-09-16';
+  var APP_VERSION = '1.1.0';
+  var APP_BUILD = '2026-09-17';
 
   /* ---------------- date / time helpers ---------------- */
   function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -110,11 +110,18 @@
     var keys = Object.keys(S.doses || {});
     var doses = 0;
     keys.forEach(function (k) { doses += (S.doses[k] || []).length; });
+    /* 照片不在 localStorage 里，但同样占设备空间。不并进来，这张卡显示的
+     * 「已用」就是错的 —— 而它的全部意义就是让容量可见。 */
+    var pBytes = photoStats ? photoStats.bytes : 0;
+    var pFiles = photoStats ? photoStats.files : 0;
+    bytes += pBytes;
     return {
       bytes: bytes,
       kb: Math.round(bytes / 1024),
       days: keys.length,
       doses: doses,
+      photoFiles: pFiles,
+      photoBytes: pBytes,
       pct: Math.min(100, Math.round(bytes / STORAGE_BUDGET * 100))
     };
   }
@@ -158,6 +165,12 @@
     });
     gcNotified();     // 告知标记要跟着回收，否则 doses 删了体积也降不下来
     save();
+    /* 记录删了，对应照片必须跟着回收 —— 否则照片一直占着空间，D-1 的体积治理等于没做 */
+    if (window.MedPhoto && window.MedPhoto.ready()) {
+      window.MedPhoto.gc(allPhotoRefs()).then(function (k) {
+        if (k) { refreshPhotoStats(); }
+      });
+    }
     return { days: keys.length, doses: n, freed: Math.max(0, before - storageStats().bytes) };
   }
 
@@ -251,11 +264,13 @@
   }
 
   /* ---------------- check-in / scheduling ---------------- */
+  /* 返回新建的剂量数组（失败返回 null）。之所以要返回而不是布尔值：
+   * 拍照打卡需要在记录落库后，把照片路径挂到这一次新建的剂量上。 */
   function checkIn(medId) {
     var list = todayDoses();
     var med = medById(medId);
-    if (!med) return false;
-    for (var i = 0; i < list.length; i++) if (list[i].medId === medId) return false; // 今天已排过
+    if (!med) return null;
+    for (var i = 0; i < list.length; i++) if (list[i].medId === medId) return null; // 今天已排过
     var start = nowMin();
     var step = med.interval * 60;
     var arr = [];
@@ -266,16 +281,20 @@
         takenAt: idx === 0 ? Date.now() : null
       });
     }
-    if (!arr.length) return false;
+    if (!arr.length) return null;
     arr.forEach(function (d, i) { d.idx = i; d.total = arr.length; });
     Array.prototype.push.apply(list, arr);
     save();
-    return true;
+    return arr;
   }
+  /* 打卡当天所有还没排过的药；返回新建的全部剂量（摊平） */
   function checkInAll() {
-    var n = 0;
-    S.meds.forEach(function (m) { if (checkIn(m.id)) n++; });
-    return n;
+    var created = [];
+    S.meds.forEach(function (m) {
+      var arr = checkIn(m.id);
+      if (arr) created = created.concat(arr);
+    });
+    return created;
   }
 
   /* 记录一次服药：写入真实打卡时刻，并让同一药品后续未服的剂量按「实际服药时刻 + 间隔」顺延。
@@ -331,6 +350,163 @@
     return s;
   }
 
+  /* 按 id 在全部日期里找剂量 —— 照片可能属于历史记录，不只今天 */
+  function findDoseById(id) {
+    var keys = Object.keys(S.doses || {});
+    for (var i = 0; i < keys.length; i++) {
+      var arr = S.doses[keys[i]] || [];
+      for (var j = 0; j < arr.length; j++) if (arr[j].id === id) return arr[j];
+    }
+    return null;
+  }
+
+  /* 本月拍照打卡统计。跳过率是这个功能最关键的观察指标：
+   * 跳过率很高说明要么场景确实拍不了，要么用户不接受这个设计 ——
+   * 用它来决定该收紧还是放宽，而不是一开始就锁死。 */
+  function photoTally() {
+    var d = new Date();
+    var prefix = d.getFullYear() + '-' + pad(d.getMonth() + 1);
+    var shot = 0, skipped = 0;
+    Object.keys(S.doses || {}).forEach(function (k) {
+      if (k.indexOf(prefix) !== 0) return;
+      (S.doses[k] || []).forEach(function (x) {
+        if (x.status !== 'taken') return;
+        if (x.photo) shot++;
+        else if (x.photoSkipped) skipped++;
+      });
+    });
+    return { shot: shot, skipped: skipped };
+  }
+
+  /* 打开一张服药照片 */
+  function openPhoto(id) {
+    var ds = findDoseById(id);
+    if (!ds || !ds.photo) return;
+    var med = medById(ds.medId);
+    $('#viewMeta').textContent = minToStr(ds.time) + (med ? ' · ' + med.name : '');
+    var hint = $('#viewHint');
+    hint.textContent = '';
+    if (ds.takenAt) {
+      var t = new Date(ds.takenAt);
+      hint.textContent = '打卡于 ' + t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate())
+        + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes());
+    }
+    var img = $('#viewImg');
+    img.removeAttribute('src');
+    openDlg($('#dlgView'));
+    window.MedPhoto.src(ds.photo).then(function (u) {
+      if (u) { img.src = u; }
+      else { hint.textContent = '照片文件找不到了（可能已被系统清理）。'; }
+    });
+  }
+
+  /* ---------------- 拍照打卡（G-1） ----------------
+   * 目标不是"防遗忘"，而是**防「随手划掉提醒、假装吃过」**。
+   * 现在通知上的「已服用」一秒就能点掉 —— 没吃药也能清掉提醒，App 还记一笔已服用。
+   * 这叫「假依从」，比漏服更难发现：漏服至少记录是空的，假依从连数据都是假的。
+   * 拍照把"清掉提醒"从零成本变成有成本。
+   *
+   * 逃生通道按已拍板方案 B：**拍不了可以跳过，打卡照常完成，但记录留痕并计入跳过率**。
+   * 为什么不能硬性阻断：现实中拍不了的场景很多（在外面 / 开会中 / 药盒没带 / 光线太暗 /
+   * 存储满 / 相机权限被误关 / 老人不会用相机）。硬拦会让这些用户只能强停 App，
+   * 数据直接断掉 —— 比不强制更糟。
+   *
+   * 浏览器预览模式没有相机插件：不假装能拍，直接放行，也**不计跳过**
+   * （那是环境不支持，不是用户偷懒，混进跳过率会让指标失真）。
+   */
+  var PENDING_KEY = 'medreminder.pendingPhoto.v1';   // 独立 key，不碰主状态，备份格式不用动
+  var pendingShot = null;                            // { kind:'all'|'one', doseId, onDone }
+  var photoStats = { files: 0, bytes: 0 };           // 异步刷新，供存储卡统计照片占用
+
+  function savePendingShot(kind, doseId) {
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify({ kind: kind, doseId: doseId || null, at: Date.now() })); } catch (e) { /* ignore */ }
+  }
+  function loadPendingShot() {
+    try { var r = localStorage.getItem(PENDING_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; }
+  }
+  function clearPendingShot() {
+    try { localStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ }
+  }
+
+  /* 打卡前先过一道拍照。opts = { desc, kind:'all'|'one', doseId }
+   * onDone(photoRel, skipped)：photoRel 为 null 表示这次没有照片。 */
+  function photoGate(opts, onDone) {
+    if (!(window.MedPhoto && window.MedPhoto.ready())) { onDone(null, false); return; }
+    pendingShot = { kind: opts.kind, doseId: opts.doseId || null, onDone: onDone };
+    savePendingShot(opts.kind, opts.doseId);   // 相机 Activity 可能把 App 挤掉，先留痕
+    var body = $('#photoBody');
+    if (body) body.textContent = (opts.desc ? opts.desc + ' ' : '')
+      + '拍下这次的药，之后能回看确认。实在拍不了可以跳过，但记录里会标出来。';
+    var take = $('#photoTake');
+    if (take) { take.disabled = false; take.textContent = '拍照打卡'; }
+    openDlg($('#dlgPhoto'));
+  }
+
+  function finishShot(rel, skipped) {
+    var p = pendingShot;
+    pendingShot = null;
+    clearPendingShot();
+    closeDlg($('#dlgPhoto'));
+    if (p) p.onDone(rel, skipped);
+  }
+
+  /* 把照片路径 / 跳过标记写到一批剂量上 */
+  function stampPhoto(doses, rel, skipped) {
+    (doses || []).forEach(function (d) {
+      if (!d) return;
+      if (rel) d.photo = rel;
+      if (skipped) d.photoSkipped = 1;
+    });
+  }
+
+  /* App 在拍照期间被系统杀掉 → 恢复时把这次打卡接上。
+   * Capacitor 官方明确要求监听 appRestoredResult，不处理会**同时丢照片和打卡**。 */
+  function resumeShot(photoPath) {
+    var p = loadPendingShot();
+    clearPendingShot();
+    if (!p) return;                       // 不是在打卡流程里被杀掉的，不插手
+    if (!(window.MedPhoto && window.MedPhoto.ready())) return;
+
+    window.MedPhoto.fromRestored(photoPath, p.doseId || 'restored').then(function (r) {
+      if (!r.ok) { render(); toast('照片没保存下来，这次打卡请重新点一下'); return; }
+      if (p.kind === 'all') {
+        var created = checkInAll();
+        stampPhoto(created, r.rel, false);
+        save(); render();
+        toast('拍照已完成，今天的打卡已记上');
+        return;
+      }
+      var l = todayDoses(), ds = null;
+      for (var i = 0; i < l.length; i++) if (l[i].id === p.doseId) { ds = l[i]; break; }
+      if (!ds || ds.status !== 'pending') { render(); return; }
+      stampPhoto([ds], r.rel, false);
+      var at = Date.now();
+      var med = medById(ds.medId);
+      var rr = markTaken(ds, at);
+      if (window.MedNotify) window.MedNotify.cancelOne(ds.id);
+      save(); render(); toast(takenToast(med, at, rr));
+    });
+  }
+
+  /* 照片目录占用 —— 不清点它，D-1 的存储卡就会漏报照片空间，数字变成错的 */
+  function refreshPhotoStats() {
+    if (!(window.MedPhoto && window.MedPhoto.ready())) return;
+    window.MedPhoto.dirStats().then(function (s) {
+      if (s.files === photoStats.files && s.bytes === photoStats.bytes) return;
+      photoStats = s;
+      queueStorageRefresh();
+    });
+  }
+
+  /* 当前所有被记录引用的照片路径 —— 供孤儿回收判断"谁还活着" */
+  function allPhotoRefs() {
+    var refs = [];
+    Object.keys(S.doses || {}).forEach(function (k) {
+      (S.doses[k] || []).forEach(function (d) { if (d.photo) refs.push(d.photo); });
+    });
+    return refs;
+  }
+
   function sortedDoses() {
     return todayDoses().slice().sort(function (a, b) { return a.time - b.time; });
   }
@@ -359,7 +535,8 @@
   var ICON = {
     check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 9.5 17.5 19.5 7" stroke="#7D8187" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     pill: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)" stroke="currentColor" stroke-width="1.8"/><path d="M9 9l6 6" stroke="currentColor" stroke-width="1.8"/></svg>',
-    chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9.5 5.5 16 12l-6.5 6.5" stroke="#7D8187" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9.5 5.5 16 12l-6.5 6.5" stroke="#7D8187" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    cam: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5c0-1.1.9-2 2-2h1.6c.6 0 1.1-.3 1.4-.8l.5-.9c.3-.5.8-.8 1.4-.8h4.2c.6 0 1.1.3 1.4.8l.5.9c.3.5.8.8 1.4.8h1.6c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H5.5c-1.1 0-2-.9-2-2v-8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="currentColor" stroke-width="1.7"/></svg>'
   };
 
   /* ---------------- render: TODAY ---------------- */
@@ -456,7 +633,12 @@
         var nCls = ds.status === 'taken' ? 'dose-n' : (isNext ? 'dose-n on' : 'dose-n dim');
         var right;
         if (ds.status === 'taken') {
-          right = '<span class="dose-s">' + ICON.check + '<span class="txt">已服用</span></span>';
+          /* 拍过照 → 一个可点的相机图标（点开看图）；主动跳过的 → 明确标「未拍照」。
+           * 留痕是方案 B 的核心：跳过可以，但别想不留痕迹。 */
+          var mark = ds.photo
+            ? '<button class="cam-btn" data-photo="' + esc(ds.id) + '" aria-label="查看这次服药的照片">' + ICON.cam + '</button>'
+            : (ds.photoSkipped ? '<span class="txt no-shot">未拍照</span>' : '');
+          right = '<span class="dose-s">' + ICON.check + '<span class="txt">已服用</span>' + mark + '</span>';
         } else if (ds.status === 'skipped') {
           right = '<span class="dose-s"><span class="txt">已跳过</span></span>';
         } else if (isMissed(ds)) {
@@ -584,23 +766,37 @@
     };
     $$('[data-checkin]').forEach(function (el) {
       el.onclick = function () {
-        askNotify();
         var id = el.getAttribute('data-checkin');
         var med = medById(id);
-        if (checkIn(id)) {
-          render();
-          toast((med ? med.name : '') + ' 已打卡 · 排了 ' + todayDoses().filter(function (d) { return d.medId === id; }).length + ' 次提醒');
-        } else {
-          toast('今天已经打过卡了');
-        }
+        if (todayDoses().some(function (d) { return d.medId === id; })) { toast('今天已经打过卡了'); return; }
+        photoGate({ desc: '这次是：' + (med ? med.name : '服药') + '。', kind: 'one', doseId: id }, function (rel, skipped) {
+          askNotify();
+          var arr = checkIn(id);
+          if (!arr) { render(); toast('今天已经打过卡了'); return; }
+          stampPhoto(arr, rel, skipped);
+          save(); render();
+          toast((med ? med.name : '') + ' 已打卡 · 排了 ' + arr.length + ' 次提醒');
+        });
       };
     });
+    $$('[data-photo]').forEach(function (el) {
+      el.onclick = function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        openPhoto(el.getAttribute('data-photo'));
+      };
+    });
+
     var b = $('#btnCheckin');
     if (b) b.onclick = function () {
-      askNotify();
-      var n = checkInAll();
-      render();
-      toast(n ? '已打卡 · 今天共排了 ' + todayDoses().length + ' 次提醒' : '今天已经打过卡了');
+      if (todayDoses().length) { toast('今天已经打过卡了'); return; }
+      var names = S.meds.map(function (m) { return m.name; }).join('、');
+      photoGate({ desc: '今天要打卡：' + names + '。', kind: 'all' }, function (rel, skipped) {
+        askNotify();
+        var created = checkInAll();
+        stampPhoto(created, rel, skipped);
+        save(); render();
+        toast(created.length ? '已打卡 · 今天共排了 ' + todayDoses().length + ' 次提醒' : '今天已经打过卡了');
+      });
     };
     var fm = $('#btnFirstMed');
     if (fm) fm.onclick = function () { setTab('meds'); openSheet(null); };
@@ -608,10 +804,13 @@
     if (e) e.onclick = function () {
       var nxt = nextPending(); if (!nxt) return;
       var med = medById(nxt.medId);
-      var at = Date.now();
-      var r = markTaken(nxt, at);
-      save(); render();
-      toast(takenToast(med, at, r));
+      photoGate({ desc: '这次是：' + (med ? med.name : '服药') + '。', kind: 'one', doseId: nxt.id }, function (rel, skipped) {
+        stampPhoto([nxt], rel, skipped);
+        var at = Date.now();
+        var r = markTaken(nxt, at);
+        save(); render();
+        toast(takenToast(med, at, r));
+      });
     };
     var s = $('#btnSkip');
     if (s) s.onclick = function () {
@@ -718,6 +917,15 @@
       + '</div>';
 
     html += '<p class="hint" style="margin-top:-8px">每次服药后打卡，记录会自动更新。</p>';
+
+    /* 拍照打卡统计。跳过率单独列出来 —— 它是这个功能该收紧还是放宽的依据。 */
+    var ph = photoTally();
+    if (ph.shot + ph.skipped > 0) {
+      var tot = ph.shot + ph.skipped;
+      html += '<p class="hint" style="margin-top:-8px">本月拍照打卡 ' + ph.shot + '/' + tot + ' 次'
+        + (ph.skipped ? (' · 未拍照 ' + ph.skipped + ' 次（' + Math.round(ph.skipped / tot * 100) + '%）') : '')
+        + '</p>';
+    }
 
     /* 字号：只放大文字，不动布局。老年人看不清小字是真实痛点，而整页缩放会带来左右拖动。
      * 放在这里而不是做成双指手势 —— 手势缩放文字是非标准交互，且会与列表滚动抢事件；
@@ -907,11 +1115,17 @@
     if (!ds) return;
     if (action === 'taken') {
       if (ds.status !== 'pending') return;
-      var at = Date.now();
       var med = medById(ds.medId);
-      var r = markTaken(ds, at);
-      if (window.MedNotify) window.MedNotify.cancelOne(ds.id);
-      save(); render(); toast(takenToast(med, at, r));
+      /* 通知上的「已服用」也走拍照 —— 否则它就是一条绕过拍照的捷径，
+       * 「强制拍照」直接形同虚设。点通知会唤起 App，所以能交给同一套流程；
+       * 拍照期间 App 若被系统杀掉，resumeShot() 会从 appRestoredResult 把这次接上。 */
+      photoGate({ desc: '这次是：' + (med ? med.name : '服药') + '。', kind: 'one', doseId: ds.id }, function (rel, skipped) {
+        stampPhoto([ds], rel, skipped);
+        var at = Date.now();
+        var r = markTaken(ds, at);
+        if (window.MedNotify) window.MedNotify.cancelOne(ds.id);
+        save(); render(); toast(takenToast(med, at, r));
+      });
     } else if (action === 'snooze') {
       ds.time = Math.min(1439, ds.time + 10);
       S.notified[ds.id] = 0;
@@ -1246,7 +1460,11 @@
       + '<span class="eyebrow">STORAGE · 本地存储</span>'
       + '<span class="meta">' + st.days + ' 天 · ' + st.doses + ' 条</span></div>'
       + '<div class="bar" role="img" aria-label="已用 ' + st.pct + '%"><i style="width:' + barW + '%;background:' + color + '"></i></div>'
-      + '<p class="body" style="margin:0">已用约 ' + st.kb + ' KB / 5 MB（' + st.pct + '%）。' + esc(note) + '</p>'
+      + '<p class="body" style="margin:0">已用约 ' + st.kb + ' KB'
+      + (st.photoFiles
+          ? ('（记录 ' + Math.round((st.bytes - st.photoBytes) / 1024) + ' KB + 照片 ' + st.photoFiles + ' 张 ' + Math.round(st.photoBytes / 1024) + ' KB）')
+          : '')
+      + '，上限 5 MB（' + st.pct + '%）。' + esc(note) + '</p>'
       + '<button class="btn btn-ghost" id="btnClean" style="height:44px;font-size:calc(14px * var(--fs));align-self:flex-start">清理旧记录</button>'
       + '</div>';
   }
@@ -1387,6 +1605,45 @@
       openDataDlg('backup');
     });
 
+    /* ---- 拍照打卡（G-1） ---- */
+    $('#photoTake').onclick = function () {
+      var btn = this;
+      if (!pendingShot) { closeDlg($('#dlgPhoto')); return; }
+      btn.disabled = true;
+      btn.textContent = '正在调用相机…';
+      window.MedPhoto.take(pendingShot.doseId).then(function (r) {
+        btn.disabled = false;
+        btn.textContent = '拍照打卡';
+        if (r.ok) { finishShot(r.rel, false); return; }
+        if (r.reason === 'cancelled') return;      // 用户自己退出相机，留在对话框让他重选
+        /* 真出错（相机被占用 / 无存储 / 插件异常）→ 明确说出来，并让逃生通道可用。
+         * 不能变成「点了没反应」——那会让人以为打卡坏了。 */
+        var body = $('#photoBody');
+        if (body) body.textContent = '没能拍照（' + (r.msg || r.reason) + '）。可以再试一次，或点下面跳过。';
+      });
+    };
+    $('#photoSkip').onclick = function () { finishShot(null, true); };
+    $('#viewClose').onclick = function () { closeDlg($('#dlgView')); };
+
+    /* 拍照会启动一个独立的相机 Activity，系统可能在过程中杀掉本 App。
+     * Capacitor 官方明确要求监听这个事件 —— 不处理会**同时丢照片和打卡**。 */
+    if (window.MedPhoto && window.MedPhoto.ready()) {
+      var AppCam = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+      if (AppCam && AppCam.addListener) {
+        AppCam.addListener('appRestoredResult', function (d) {
+          if (!d || d.pluginId !== 'Camera' || !d.success) return;
+          var photo = d.data || {};
+          if (photo.path) resumeShot(photo.path);
+        });
+      }
+      refreshPhotoStats();
+      /* 安全回收：只删「没有任何记录引用」的照片文件（纯垃圾回收，不碰被引用的）。
+       * 与 D-1 的 gcNotified 同一思路。 */
+      window.MedPhoto.gc(allPhotoRefs()).then(function (k) {
+        if (k) refreshPhotoStats();
+      });
+    }
+
     $('#cleanCancel').onclick = function () { closeDlg($('#dlgClean')); };
     $('#cleanConfirm').onclick = function () {
       if (!cleanKeep) return;                       // 按钮本应是禁用态，这里是兜底
@@ -1400,15 +1657,19 @@
     };
 
     $('#remindDone').onclick = function () {
-      var msg = '已记录服药';
-      if (remindDose) {
+      var dose = remindDose;
+      /* 先关提醒弹窗再开拍照弹窗 —— 否则两个浮层会叠在一起 */
+      closeDlg($('#dlgRemind'));
+      remindDose = null;
+      if (!dose) { render(); return; }
+      var med = medById(dose.medId);
+      photoGate({ desc: '这次是：' + (med ? med.name : '服药') + '。', kind: 'one', doseId: dose.id }, function (rel, skipped) {
+        stampPhoto([dose], rel, skipped);
         var at = Date.now();
-        var med = medById(remindDose.medId);
-        var r = markTaken(remindDose, at);
-        msg = takenToast(med, at, r);
-        save();
-      }
-      closeDlg($('#dlgRemind')); remindDose = null; render(); toast(msg);
+        var r = markTaken(dose, at);
+        save(); render();
+        toast(takenToast(med, at, r));
+      });
     };
     $('#remindSnooze').onclick = function () {
       if (remindDose) {
@@ -1455,11 +1716,16 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape' && e.key !== 'Esc') return;
       var closable = $$('.dlg-wrap.show').filter(function (el) {
-        return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean';
+        return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean'
+          || el.id === 'dlgView' || el.id === 'dlgPhoto';
       });
       if (closable.length) {
+        var top = closable[closable.length - 1];
+        /* Esc 关掉拍照对话框 = 放弃这次打卡。必须清掉「待恢复」标记，
+         * 否则下次启动会被误当成「拍照途中被杀」而自动补一次打卡。 */
+        if (top.id === 'dlgPhoto') { pendingShot = null; clearPendingShot(); }
         restoreArmed = false;
-        closeDlg(closable[closable.length - 1]);
+        closeDlg(top);
         return;
       }
       if ($('#sheetMed').classList.contains('show')) closeSheet();

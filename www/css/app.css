@@ -251,3 +251,16 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
 .bar > i{display:block;height:100%;border-radius:9999px;transition:width .2s}
 /* 禁用态：清理对话框未选范围时，确认键必须是灰的，而不是「点了没反应」 */
 .btn:disabled{opacity:.4;pointer-events:none}
+
+/* ---------- 拍照打卡（G-1） ---------- */
+/* 相机图标：列表行里的小按钮。用负 margin 扩大点击区，
+   避免为了 44px 触摸目标把整行撑高。 */
+.cam-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;margin:-7px -6px -7px 2px;
+  border:0;background:transparent;color:var(--accent);cursor:pointer;
+  border-radius:9999px;-webkit-tap-highlight-color:transparent;
+}
+.cam-btn:active{opacity:.65}
+/* 「未拍照」用橙色标出来 —— 留痕是方案 B 的核心，不能让它看起来和正常打卡一样 */
+.no-shot{color:#FF7A17}

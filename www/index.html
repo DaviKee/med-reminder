@@ -171,10 +171,44 @@
     </div>
   </div>
 
+  <!-- Photo check-in dialog -->
+  <div class="dlg-wrap" id="dlgPhoto">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="photoTitle">
+      <div class="badge badge-56">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5c0-1.1.9-2 2-2h1.6c.6 0 1.1-.3 1.4-.8l.5-.9c.3-.5.8-.8 1.4-.8h4.2c.6 0 1.1.3 1.4.8l.5.9c.3.5.8.8 1.4.8h1.6c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H5.5c-1.1 0-2-.9-2-2v-8Z" stroke="#FF7A17" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.5" stroke="#FF7A17" stroke-width="1.6"/></svg>
+      </div>
+      <div class="dlg-text">
+        <span class="eyebrow accent">PHOTO CHECK-IN</span>
+        <div class="dlg-title" id="photoTitle">拍张照片再打卡</div>
+        <div class="dlg-body" id="photoBody">拍下这次的药，之后能回看确认。实在拍不了可以跳过，但记录里会标出来。</div>
+      </div>
+      <div class="dlg-actions-vert">
+        <button class="btn btn-primary" id="photoTake">拍照打卡</button>
+        <button class="btn btn-ghost" id="photoSkip">拍不了 · 直接打卡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo viewer -->
+  <div class="dlg-wrap" id="dlgView">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="viewTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent" id="viewMeta">PHOTO</span>
+        <div class="dlg-title" id="viewTitle">服药照片</div>
+      </div>
+      <img id="viewImg" alt="服药照片" style="width:100%;border-radius:8px;display:block;background:var(--inner);min-height:120px">
+      <p class="hint" id="viewHint"></p>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="viewClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 </div>
 
 <script src="js/notify.js"></script>
+<script src="js/photo.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
