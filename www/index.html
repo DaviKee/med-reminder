@@ -63,6 +63,16 @@
     </div>
 
     <div class="field">
+      <label class="field-label">服药方式</label>
+      <div class="chip-row" id="modeRow">
+        <button class="chip fs-chip on" data-mode="interval" aria-pressed="true">按间隔</button>
+        <button class="chip fs-chip" data-mode="fixed" aria-pressed="false">按固定时刻</button>
+      </div>
+      <p class="hint">按间隔：打卡后从这次开始计时，会跟着你的实际时间顺延。
+        按固定时刻：每天到点就提醒（如早 8 点、晚 8 点），不顺延。</p>
+    </div>
+
+    <div class="field" id="fieldInterval">
       <label class="field-label">服药间隔</label>
       <div class="stepper">
         <button class="step-btn" id="stepMinus" aria-label="减少">
@@ -80,7 +90,15 @@
       <p class="hint" id="stepHint"></p>
     </div>
 
-    <div class="field">
+    <div class="field hidden" id="fieldFixed">
+      <label class="field-label">每天服药时刻</label>
+      <div id="timeList" style="display:flex;flex-direction:column;gap:10px"></div>
+      <button class="btn btn-ghost" id="addTime" style="height:44px;font-size:calc(14px * var(--fs));margin-top:10px">+ 添加一个时刻</button>
+      <p class="hint">到点提醒，**不随打卡时间顺延** —— 适合「早 8 点、晚 8 点」这类医嘱。</p>
+      <p class="hint" id="fixedHint"></p>
+    </div>
+
+    <div class="field" id="fieldPreview">
       <span class="eyebrow">AUTO SCHEDULE · 以 06:00 为例</span>
       <div class="chip-row" id="previewChips"></div>
     </div>

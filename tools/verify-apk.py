@@ -131,6 +131,15 @@ def main():
         ('药品-删除撤掉系统通知', 'window.MedNotify.cancelOne(d.id)' in APP),
         ('药品-删除保留历史记录', 'deleteMed' in APP and 'd.medId !== id' in APP),
         ('药品-有通用确认框', 'id="dlgConfirm"' in html and 'id="confirmOk"' in html),
+        # F-4 固定时刻排程
+        ('F-4-数据模型 mode/times', 'function medMode(m)' in APP and 'function normTimes(arr)' in APP),
+        ('F-4-null 不当 0 点', "if (v == null || v === '') return;" in APP),
+        ('F-4-预生成（不等打卡）', 'function ensureFixedDoses()' in APP),
+        ('F-4-固定模式不顺延', "medMode(m) === 'fixed') return { shifted: 0, dropped: 0 }" in APP),
+        ('F-4-改设置后重排今天', 'function rebuildTodayDoses(m)' in APP),
+        ('F-4-启动与跨天都接线', APP.count('ensureFixedDoses();') >= 3),
+        ('F-4-界面（模式切换+时刻编辑）', 'id="modeRow"' in html and 'id="timeList"' in html and 'id="addTime"' in html),
+        ('F-4-样式 44px 触摸目标', '.time-input' in CSS and 'height:44px' in CSS),
         # 前几轮成果
         ('B-1 snooze 独立字段', 'function snoozeDose(d)' in APP and 'snoozeUntil' in APP),
         ('B-1 不再篡改计划时刻', 'ds.time = Math.min(1439' not in APP),

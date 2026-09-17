@@ -22,7 +22,7 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.2.2';
+  var APP_VERSION = '1.3.0';
   var APP_BUILD = '2026-09-17';
 
   /* ---------------- date / time helpers ---------------- */
@@ -36,6 +36,62 @@
     if (!isFinite(h) || h <= 0) return '-';
     if (h < 1) return Math.round(h * 60) + ' 分钟';
     return (h % 1 === 0 ? String(h) : h.toFixed(1)) + ' 小时';
+  }
+
+  /* ---------------- 服药方式（F-4） ----------------
+   * 'interval'（默认，字段缺省即此）：打卡后按间隔滚动排程，会随实际打卡时间顺延。
+   * 'fixed'：每天固定几个时刻，**到点就提醒，不随打卡顺延**。
+   * 旧数据没有 mode 字段 —— 一律视为 interval，完全兼容，备份格式也不用变。 */
+  function medMode(m) { return (m && m.mode === 'fixed') ? 'fixed' : 'interval'; }
+
+  var MAX_TIMES = 12;
+
+  /* 时刻数组归一化：取整 → 钳到 0..1439 → 去重 → 升序 → 限个数。
+   * 所有接受用户输入的地方都必须过这一遍，否则脏数据会直接进排程。 */
+  function normTimes(arr) {
+    var out = [], seen = {};
+    (arr || []).forEach(function (v) {
+      /* 先挡掉 null / undefined / 空串：Number(null) === 0，
+       * 会被静默当成「0 点」—— 那不是「没填」，而是「半夜提醒」，错得很安静。 */
+      if (v == null || v === '') return;
+      var n = Math.round(Number(v));
+      if (!isFinite(n)) return;
+      if (n < 0) n = 0;
+      if (n > 1439) n = 1439;
+      if (seen[n]) return;
+      seen[n] = 1;
+      out.push(n);
+    });
+    out.sort(function (a, b) { return a - b; });
+    return out.slice(0, MAX_TIMES);
+  }
+
+  /* <input type="time"> 的值 → 分钟数。非法一律返回 null（不要静默当 0 点）。 */
+  function timeInputToMin(v) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(v == null ? '' : v).trim());
+    if (!m) return null;
+    var h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+    if (!(h >= 0 && h <= 23 && mi >= 0 && mi <= 59)) return null;
+    return h * 60 + mi;
+  }
+
+  /* 服药方式的统一文案（药品卡 / 药品列表 / 提醒弹窗共用） */
+  function medScheduleLabel(m) {
+    if (medMode(m) === 'fixed') {
+      var ts = normTimes(m && m.times);
+      return ts.length ? ('每天 ' + ts.map(minToStr).join(' / ')) : '未设时刻';
+    }
+    return '每 ' + intervalLabel(m && m.interval);
+  }
+
+  /* 药品卡下面那行说明 */
+  function medMetaText(m) {
+    var n = todayDoseCount(m.id);
+    if (n) return '今日 ' + n + ' 次 · 已排程';
+    if (medMode(m) === 'fixed') {
+      return normTimes(m.times).length ? '今天还没排程 · 回「今天」页刷新' : '还没设时刻，去编辑里加一个';
+    }
+    return '每 ' + intervalLabel(m.interval) + ' · 打卡后开始计时';
   }
 
   function minToStr(m) { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }
@@ -351,6 +407,11 @@
   function markTaken(dose, takenMs) {
     dose.status = 'taken';
     dose.takenAt = takenMs;
+    /* 固定时刻模式**不顺延**：它的语义就是「到点吃」。
+     * 晚吃两小时不该把 20:00 也推成 22:00 —— 那会越推越晚，
+     * 而且把医嘱规定的时刻改掉了（这正是固定时刻模式存在的理由）。 */
+    var m = medById(dose.medId);
+    if (m && medMode(m) === 'fixed') return { shifted: 0, dropped: 0 };
     return rollForward(dose, takenMs);
   }
 
@@ -451,6 +512,71 @@
   }
 
   /* 打卡后的提示语：说清真实时刻，以及后续是否顺延 */
+  /* 固定时刻模式：**不等打卡**就把今天的时刻排出来。
+   * 这是两种模式的根本差别 —— 固定时刻的语义是「到点就吃」；
+   * 若等打卡才生成，第一个时刻的提醒永远不会响（那时还没打卡）。
+   * 幂等：已经有该药的剂量就只把序号理顺，绝不重复生成。
+   * 启动时、跨天时、以及新增/编辑成固定模式后都要调一次。 */
+  function ensureFixedDoses() {
+    var list = todayDoses(), changed = false;
+    S.meds.forEach(function (m) {
+      if (medMode(m) !== 'fixed') return;
+      var times = normTimes(m.times);
+      if (!times.length) return;                    // 没设时刻 → 不排（药品卡会提示去设置）
+      if (list.some(function (d) { return d.medId === m.id; })) { reindexMed(m.id); return; }
+      var arr = times.map(function (t) {
+        return { id: uid(), medId: m.id, time: t, status: 'pending', takenAt: null };
+      });
+      arr.forEach(function (d, i) { d.idx = i; d.total = arr.length; });
+      Array.prototype.push.apply(list, arr);
+      changed = true;
+    });
+    if (changed) save();
+    return changed;
+  }
+
+  /* 服药方式变了（间隔改了 / 模式换了）→ 重排今天还没吃的那些。
+   * 三条约束：
+   *   ① **已打卡的记录一律保留** —— 那是发生过的事实，不能被重排抹掉；
+   *      哪怕新时刻表里没有它，也追加留着。
+   *   ② **先撤掉旧时刻的系统通知** —— 时刻要变了，旧闹钟必须收回，
+   *      否则它会在错误的时间响（点了还找不到对应剂量）。
+   *   ③ 间隔模式下如果今天压根没打过卡，就没有排程可言（保持原样）。 */
+  function rebuildTodayDoses(m) {
+    var old = todayDoses().filter(function (d) { return d.medId === m.id; });
+    var pending = old.filter(function (d) { return d.status === 'pending'; });
+    var done = old.filter(function (d) { return d.status === 'taken'; })
+      .sort(function (a, b) { return a.time - b.time; });
+    var keep = todayDoses().filter(function (d) { return d.medId !== m.id; });
+
+    pending.forEach(function (d) { if (window.MedNotify) window.MedNotify.cancelOne(d.id); });
+
+    var arr = [];
+    if (medMode(m) === 'fixed') {
+      var used = {};
+      done.forEach(function (d) { used[d.time] = d; });
+      normTimes(m.times).forEach(function (t) {
+        if (used[t]) { arr.push(used[t]); delete used[t]; return; }
+        arr.push({ id: uid(), medId: m.id, time: t, status: 'pending', takenAt: null });
+      });
+      Object.keys(used).forEach(function (k) { arr.push(used[k]); });   // 打过卡但不在新时刻表里
+    } else if (done.length) {
+      var step = m.interval * 60;
+      for (var t = done[0].time, i = 0; t < 1440; t += step, i++) {
+        if (i === 0) { arr.push(done[0]); continue; }
+        arr.push({ id: uid(), medId: m.id, time: t, status: 'pending', takenAt: null });
+      }
+      done.slice(1).forEach(function (d) { arr.push(d); });
+    } else {
+      arr = done;                                   // 间隔模式 + 今天没打卡 → 无排程
+    }
+
+    arr.sort(function (a, b) { return a.time - b.time; });
+    arr.forEach(function (d, i) { d.idx = i; d.total = arr.length; });
+    S.doses[todayKey()] = keep.concat(arr);
+    return arr.length;
+  }
+
   function takenToast(med, takenMs, r) {
     var s = '已记录 ' + minToStr(minOfDay(takenMs)) + ' · ' + (med ? med.name : '');
     if (r && r.shifted) s += '，后续 ' + r.shifted + ' 次已顺延';
@@ -719,9 +845,9 @@
       + ' style="display:flex;flex-direction:column;gap:14px;text-align:left;color:inherit;font:inherit">'
       + '<div class="card-row">'
       + '<span style="font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs))">' + esc(m.name) + '</span>'
-      + '<span class="pill">每 ' + intervalLabel(m.interval) + '</span>'
+      + '<span class="pill">' + esc(medScheduleLabel(m)) + '</span>'
       + '</div>'
-      + '<p class="meta">' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次 · 已排程') : ('每 ' + intervalLabel(m.interval) + ' · 打卡后开始计时')) + '</p>'
+      + '<p class="meta">' + esc(medMetaText(m)) + '</p>'
       + '</' + (clickable ? 'button' : 'div') + '>';
   }
 
@@ -1095,7 +1221,7 @@
         html += '<button class="meditem" data-med="' + m.id + '">'
           + '<span class="badge badge-36" style="color:#DADBDF">' + ICON.pill + '</span>'
           + '<span class="medinfo"><span class="n">' + esc(m.name) + '</span>'
-          + '<span class="m">每 ' + intervalLabel(m.interval) + ' · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '打卡后开始计时') + '</span></span>'
+          + '<span class="m">' + esc(medScheduleLabel(m)) + ' · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '未排程') + '</span></span>'
           + ICON.chev + '</button>';
       });
       html += '</div>';
@@ -1413,6 +1539,9 @@
     $('#sheetTitle').textContent = med ? '编辑药品' : '添加药品';
     $('#medName').value = med ? med.name : '';
     stepVal = med ? med.interval : 8;
+    /* 编辑态的临时值：改完点「保存」才写进数据，中途关掉不影响原有设置 */
+    medModeDraft = med ? medMode(med) : 'interval';
+    fixedTimes = med ? normTimes(med.times) : [];
     $('#deleteMed').classList.toggle('hidden', !med);
     renderPreview();
     /* 浮层打开时把焦点带进去（键盘用户不用满屏找输入框） */
@@ -1499,8 +1628,24 @@
 
   /* ---------------- sheet: stepper + save ---------------- */
   var stepVal = 8, editingId = null, pendingSkipId = null;
+  /* 药品编辑浮层里的临时状态：模式与时刻表。点「保存」才写进数据。 */
+  var medModeDraft = 'interval';
+  var fixedTimes = [];
 
   function renderPreview() {
+    /* 先按当前模式切换字段可见性（模式是编辑期的临时状态，不碰数据） */
+    var isFixed = medModeDraft === 'fixed';
+    var fi = $('#fieldInterval'), ff = $('#fieldFixed'), fp = $('#fieldPreview');
+    if (fi) fi.classList.toggle('hidden', isFixed);
+    if (ff) ff.classList.toggle('hidden', !isFixed);
+    if (fp) fp.classList.toggle('hidden', isFixed);   // 预览只对间隔模式有意义
+    $$('#modeRow [data-mode]').forEach(function (el) {
+      var on = el.getAttribute('data-mode') === medModeDraft;
+      el.classList.toggle('on', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if (isFixed) { renderTimes(); renderFixedHint(); return; }
+
     var box = $('#previewChips');
     var step = stepVal * 60;                 // 分钟
     var arr = [];
@@ -1524,6 +1669,34 @@
   }
   /* F-1：步进细化为 30 分钟（0.5 小时），并吸附到 0.5 的整数倍 ——
    * 否则连续的 0.5 累加会漂成 0.30000000000000004 这类值写进数据。 */
+  /* 固定时刻的编辑列表。行是动态生成的，事件靠**委托**绑在 #timeList 上
+   * （它本身不被替换，所以只绑一次就够）。 */
+  function renderTimes() {
+    var box = $('#timeList');
+    if (!box) return;
+    if (!fixedTimes.length) {
+      box.innerHTML = '<p class="hint" style="margin:0">还没有时刻。点下面添加一个 —— 至少要有一个才会提醒。</p>';
+      return;
+    }
+    box.innerHTML = fixedTimes.map(function (t, i) {
+      return '<div class="time-row">'
+        + '<input type="time" class="time-input" data-ti="' + i + '" value="' + minToStr(t) + '"'
+        + ' aria-label="第 ' + (i + 1) + ' 个服药时刻">'
+        + '<button class="icon-btn" data-tdel="' + i + '" aria-label="删掉第 ' + (i + 1) + ' 个时刻">'
+        + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>'
+        + '</button></div>';
+    }).join('');
+  }
+
+  function renderFixedHint() {
+    var hint = $('#fixedHint');
+    if (!hint) return;
+    var ts = normTimes(fixedTimes);
+    if (!ts.length) { hint.textContent = '至少要设一个时刻，否则它不会提醒。'; return; }
+    hint.textContent = '每天 ' + ts.length + ' 次：' + ts.map(minToStr).join('、') + '。'
+      + (ts.length > 8 ? '次数较多，确认一下是否与医嘱一致。' : '');
+  }
+
   function clampStep() {
     if (!isFinite(stepVal)) stepVal = 8;
     stepVal = Math.round(stepVal * 2) / 2;
@@ -1563,7 +1736,7 @@
     $('#remindName').textContent = med ? med.name : '服药时间';
     $('#remindMeta').textContent = minToStr(ds.time)
       + (ds.snoozeUntil != null ? ('（已延后至 ' + minToStr(ds.snoozeUntil) + '）') : '')
-      + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · 每 ' + (med ? intervalLabel(med.interval) : '-');
+      + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · ' + (med ? esc(medScheduleLabel(med)) : '-');
     openDlg($('#dlgRemind'));
     fireNotification(med, ds);
   }
@@ -1681,7 +1854,19 @@
       return { err: '备份内容不完整' };
     }
     var badMed = !o.data.meds.every(function (m) {
-      return m && typeof m.id === 'string' && typeof m.name === 'string' && typeof m.interval === 'number' && isFinite(m.interval) && m.interval > 0;
+      if (!m || typeof m.id !== 'string' || typeof m.name !== 'string') return false;
+      /* interval 必须仍合法：它是固定时刻模式下的「默认间隔」，也用于旧数据 */
+      if (typeof m.interval !== 'number' || !isFinite(m.interval) || m.interval <= 0) return false;
+      /* mode / times 是可选的（旧备份没有这两项）。有就必须合法 ——
+       * 脏数据直接进排程是会死循环或排 0 次的。 */
+      if (m.mode != null && m.mode !== 'interval' && m.mode !== 'fixed') return false;
+      if (m.mode === 'fixed') {
+        if (!Array.isArray(m.times) || !m.times.length) return false;
+        if (!m.times.every(function (x) {
+          return typeof x === 'number' && isFinite(x) && x >= 0 && x <= 1439;
+        })) return false;
+      }
+      return true;
     });
     if (badMed) return { err: '备份里的药品数据有问题' };
     return { ok: o };
@@ -2096,31 +2281,39 @@
       var isFirstMed = false;
       var name = $('#medName').value.trim();
       if (!name) { toast('请填写药品名称'); $('#medName').focus(); return; }
+
+      /* 校验必须放在改数据**之前** —— 否则会「改一半」再报错，
+       * 留下一个模式变了、时刻却没存上的坏状态。 */
+      var isFixed = medModeDraft === 'fixed';
+      var ts = isFixed ? normTimes(fixedTimes) : null;
+      if (isFixed && !ts.length) { toast('请至少添加一个服药时刻'); return; }
+
       if (editingId) {
         var m = medById(editingId);
         if (m) {
-          var changed = m.interval !== stepVal;
-          m.name = name; m.interval = stepVal;
-          if (changed) { // 间隔变了，重排今天还没吃的
-            var l = todayDoses().filter(function (d) { return d.medId === m.id && d.status === 'taken'; });
-            var keep = todayDoses().filter(function (d) { return d.medId !== m.id; });
-            if (l.length) {
-              var start = l[0].time, step = stepVal * 60, arr = [];
-              for (var t = start, i = 0; t < 1440; t += step, i++) {
-                arr.push({ id: uid(), medId: m.id, time: t, status: i === 0 ? 'taken' : 'pending', takenAt: i === 0 ? l[0].takenAt : null });
-              }
-              arr.forEach(function (d, i) { d.idx = i; d.total = arr.length; });
-              S.doses[todayKey()] = keep.concat(arr);
-            }
-          }
+          var prevMode = medMode(m);
+          var modeChanged = prevMode !== medModeDraft;
+          var intervalChanged = !isFixed && m.interval !== stepVal;
+          m.name = name;
+          m.mode = medModeDraft;
+          if (isFixed) m.times = ts;
+          else m.interval = stepVal;
+          /* 间隔改了或模式换了 → 今天的排程要重排（已打卡的记录会保留） */
+          if (modeChanged || intervalChanged) rebuildTodayDoses(m);
         }
         toast('已保存');
       } else {
-        S.meds.push({ id: uid(), name: name, interval: stepVal });
+        var nm = { id: uid(), name: name, interval: stepVal };
+        if (isFixed) { nm.mode = 'fixed'; nm.times = ts; }
+        S.meds.push(nm);
         toast('已添加 ' + name);
         isFirstMed = true;
       }
-      save(); closeSheet(); render();
+
+      save();
+      /* 固定时刻模式不等打卡，保存后立刻把今天的时刻排出来 */
+      if (isFixed) ensureFixedDoses();
+      closeSheet(); render();
       /* 首次添加药品后主动引导一次通知授权（F-3）——放在 closeSheet 之后，
        * 否则系统权限弹窗会盖在药品编辑浮层上，关掉它才能继续操作。 */
       if (!editingId && isFirstMed) guideNotifyOnce();
@@ -2142,6 +2335,51 @@
           toast('已删除 ' + (r ? r.name : ''));
         });
     };
+
+    /* ---- 服药方式切换（F-4） ---- */
+    $$('#modeRow [data-mode]').forEach(function (el) {
+      el.onclick = function () {
+        var v = el.getAttribute('data-mode');
+        if (v === medModeDraft) return;
+        medModeDraft = v;
+        /* 切到固定时刻但一个时刻都没有 → 先给两个常见起点（早 8 点、晚 8 点）。
+         * 面对空白输入框比面对两个可改的默认值难用得多。 */
+        if (v === 'fixed' && !fixedTimes.length) fixedTimes = [480, 1200];
+        renderPreview();
+      };
+    });
+
+    var at = $('#addTime');
+    if (at) at.onclick = function () {
+      if (fixedTimes.length >= MAX_TIMES) { toast('最多 ' + MAX_TIMES + ' 个时刻'); return; }
+      var ts = normTimes(fixedTimes);
+      /* 默认接在最后一个时刻后面 4 小时；还没有就用 08:00 */
+      var next = ts.length ? Math.min(1439, ts[ts.length - 1] + 240) : 480;
+      if (ts.length && next === ts[ts.length - 1]) { toast('已经是 23:59 了，加不了更晚的'); return; }
+      fixedTimes = normTimes(ts.concat([next]));
+      renderTimes(); renderFixedHint();
+    };
+
+    var tl = $('#timeList');
+    if (tl) {
+      tl.addEventListener('change', function (ev) {
+        var el = ev.target;
+        if (!el || !el.getAttribute) return;
+        var i = el.getAttribute('data-ti');
+        if (i == null) return;
+        var v = timeInputToMin(el.value);
+        if (v == null) { toast('这个时刻看不懂，请重新选一次'); renderTimes(); return; }
+        /* 只改这一项、**不重排** —— 用户可能还要接着改别的，列表跳来跳去很难用 */
+        fixedTimes[parseInt(i, 10)] = v;
+        renderFixedHint();
+      });
+      tl.addEventListener('click', function (ev) {
+        var el = ev.target && ev.target.closest ? ev.target.closest('[data-tdel]') : null;
+        if (!el) return;
+        fixedTimes.splice(parseInt(el.getAttribute('data-tdel'), 10), 1);
+        renderTimes(); renderFixedHint();
+      });
+    }
 
     $('#confirmCancel').onclick = function () { confirmCb = null; closeDlg($('#dlgConfirm')); };
     $('#confirmOk').onclick = function () {
@@ -2319,6 +2557,9 @@
       // 浏览器模式过去从不检查权限，导致被拒后没有任何提示
       notifyPerm = browserPerm();
     }
+    /* 固定时刻模式的药**不等打卡**，启动就要把今天的时刻排出来 ——
+     * 否则第一个时刻的提醒永远不会响（那时用户还没打过卡）。 */
+    ensureFixedDoses();
     render();
     syncNotifications();
     setTab('today');
@@ -2335,7 +2576,14 @@
     // 跨天自动刷新
     var lastDay = todayKey();
     setInterval(function () {
-      if (todayKey() !== lastDay) { lastDay = todayKey(); S.notified = {}; save(); render(); syncNotifications(); }
+      if (todayKey() !== lastDay) {
+        lastDay = todayKey();
+        S.notified = {};
+        save();
+        ensureFixedDoses();      // 新的一天，固定时刻要重新排一遍
+        render();
+        syncNotifications();
+      }
     }, 30000);
 
     // PWA
