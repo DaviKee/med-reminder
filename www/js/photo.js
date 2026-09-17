@@ -49,15 +49,49 @@
     return DIR + '/' + stamp() + '_' + String(doseId || 'x').replace(/[^A-Za-z0-9_-]/g, '') + '.jpg';
   }
 
+  function msgOf(e) { return String((e && (e.message || e.name || e)) || ''); }
+
+  /* 确保 photos 子目录存在 —— **这一步不能省**（最初就是漏了它）。
+   *
+   * 源码级证据（@capacitor/filesystem）：
+   *   · writeFile：父目录不存在且未传 recursive 时 reject「Parent folder doesn't exist」
+   *     （FilesystemPlugin.java:110-113，recursive 默认 false）
+   *   · copy：**根本不读 recursive**，父目录不存在直接抛
+   *     「The parent object of the destination does not exist」（Filesystem.java:135-137）
+   * 于是「相机拍成功、落盘失败」，真机上看到的正是这条报错。 */
+  var dirReady = false;
+  function ensureDir() {
+    if (dirReady) return Promise.resolve(true);
+    if (!ready()) return Promise.resolve(false);
+    return fs().mkdir({ path: DIR, directory: 'DATA', recursive: true })
+      .then(function () { dirReady = true; return true; })
+      .catch(function (e) {
+        /* 已存在是正常情况 —— 插件会抛「Directory exists」（Filesystem.java:83-85），
+         * 这时目录本来就是就绪的，不能当成失败。 */
+        if (/exist/i.test(msgOf(e))) { dirReady = true; return true; }
+        return false;   // 其它原因的失败不阻断：下面的 writeFile 带 recursive 还能兜一次
+      });
+  }
+
   /* 把相机产出的临时文件落到私有目录。
-   * 优先 copy（不过 JS 层，最省内存）；但 copy 的 from 对不同路径格式的接受度
-   * 在各平台/版本上不一致，所以失败时退回「读出 base64 再写入」—— 两条路都走通，不赌。 */
+   * 优先 copy（不过 JS 层，最省内存）；copy 的 from 走 file:// URI（副本路径由
+   * getFileObject 直接解析，因此不能同时传 directory），失败时退回「读出 base64 再写入」。
+   * 两条都失败时**把两步的原因都带出来** —— 否则真机上只能看到一个笼统的失败。 */
   function persist(photoPath, rel) {
-    return fs().copy({ from: photoPath, to: rel, toDirectory: 'DATA' })
-      .catch(function () {
-        return fs().readFile({ path: photoPath })
+    var firstErr = '';
+    return ensureDir()
+      .then(function () { return fs().copy({ from: photoPath, to: rel, toDirectory: 'DATA' }); })
+      .then(function () { dirReady = true; })
+      .catch(function (e) {
+        firstErr = msgOf(e);
+        return ensureDir()
+          .then(function () { return fs().readFile({ path: photoPath }); })
           .then(function (r) {
-            return fs().writeFile({ path: rel, data: r.data, directory: 'DATA' });
+            return fs().writeFile({ path: rel, data: r.data, directory: 'DATA', recursive: true });
+          })
+          .then(function () { dirReady = true; })
+          .catch(function (e2) {
+            throw new Error('copy: ' + (firstErr || '?') + ' / write: ' + msgOf(e2));
           });
       });
   }
@@ -80,7 +114,7 @@
         return { ok: true, rel: rel };
       });
     }).catch(function (e) {
-      var m = String((e && (e.message || e.name || e)) || '');
+      var m = msgOf(e);
       if (/cancel/i.test(m)) return { ok: false, reason: 'cancelled' };
       return { ok: false, reason: 'error', msg: m };
     });
@@ -93,7 +127,7 @@
     return persist(photoPath, rel).then(function () {
       return { ok: true, rel: rel };
     }).catch(function (e) {
-      return { ok: false, reason: 'error', msg: String((e && e.message) || e) };
+      return { ok: false, reason: 'error', msg: msgOf(e) };
     });
   }
 
