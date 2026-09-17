@@ -35,9 +35,11 @@ def apk_version(name):
     return "v" + m.group(1) if m else "最新版"
 
 
-# 找不到 APK 时给一个不存在的名字，后续统一走 404，不用到处判空
-APK = find_apk() or "MedReminder.apk"
-APK_PATH = os.path.join(ROOT, APK)
+# 每次请求都重新查一次，不在启动时定死。
+# 原来是启动时解析一次 —— 只要服务不重启，出的新包就扫不到，**极容易误装旧版本**
+# （秦老师就踩了这个：手机装了旧版，新加的自检行自然不出现）。
+def current_apk():
+    return find_apk() or "MedReminder.apk"
 
 
 def host_ip():
@@ -153,25 +155,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
 
         if path in ("/", "/index.html"):
-            if not os.path.exists(APK_PATH):
+            apk = current_apk()
+            apk_path = os.path.join(ROOT, apk)
+            if not os.path.exists(apk_path):
                 self._send(404, b"APK not found", "text/plain; charset=utf-8")
                 return
-            page = (PAGE.replace("__SIZE__", human(os.path.getsize(APK_PATH)))
-                        .replace("__VER__", apk_version(APK)))
+            page = (PAGE.replace("__SIZE__", human(os.path.getsize(apk_path)))
+                        .replace("__VER__", apk_version(apk)))
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             return
 
         if path == "/apk" or path.endswith(".apk"):
-            if not os.path.exists(APK_PATH):
+            apk = current_apk()
+            apk_path = os.path.join(ROOT, apk)
+            if not os.path.exists(apk_path):
                 self._send(404, b"APK not found", "text/plain; charset=utf-8")
                 return
-            with open(APK_PATH, "rb") as f:
+            # 打出来，方便一眼看出这次发的是哪一版（排查"装了旧版"最直接）
+            sys.stderr.write("  正在发送 %s（%s）\n" % (apk_version(apk), apk))
+            with open(apk_path, "rb") as f:
                 data = f.read()
             self._send(
                 200,
                 data,
                 "application/vnd.android.package-archive",
-                {"Content-Disposition": 'attachment; filename="%s"' % APK},
+                {"Content-Disposition": 'attachment; filename="%s"' % apk},
             )
             return
 
@@ -189,8 +197,10 @@ class Server(socketserver.ThreadingTCPServer):
 if __name__ == "__main__":
     import socket
 
-    if not os.path.exists(APK_PATH):
-        sys.exit("找不到 %s" % APK_PATH)
+    _apk = current_apk()
+    _apk_path = os.path.join(ROOT, _apk)
+    if not os.path.exists(_apk_path):
+        sys.exit("找不到 %s" % _apk_path)
 
     ip = host_ip()
     with Server((ip, PORT), Handler) as httpd:
@@ -200,9 +210,11 @@ if __name__ == "__main__":
         print("  电脑上看说明：  http://%s:%d/" % (ip, PORT))
         print("  手机扫码后打开：http://%s:%d/" % (ip, PORT))
         print("  APK 直链：     http://%s:%d/apk" % (ip, PORT))
-        print("  版本：         %s" % apk_version(APK))
-        print("  文件：         %s" % APK)
-        print("  文件大小：     %s" % human(os.path.getsize(APK_PATH)))
+        print("  版本：         %s" % apk_version(_apk))
+        print("  文件：         %s" % _apk)
+        print("  文件大小：     %s" % human(os.path.getsize(_apk_path)))
+        print("-" * 52)
+        print("  服务运行期间出了新包也不用重启，刷新页面即可拿到最新版")
         print("-" * 52)
         print("  手机需与本机同一 WiFi。装好后 Ctrl+C 关掉即可。")
         print("=" * 52)
