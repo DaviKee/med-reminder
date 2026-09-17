@@ -465,6 +465,7 @@
     var body = $('#photoBody');
     if (body) body.textContent = (opts.desc ? opts.desc + ' ' : '')
       + '拍下这次的药，之后能回看确认。实在拍不了可以跳过，但记录里会标出来。';
+    if (pendingShot) pendingShot.body = body ? body.textContent : '';   // 重拍时用来复位提示
     var take = $('#photoTake');
     if (take) { take.disabled = false; take.textContent = '拍照打卡'; }
     openDlg($('#dlgPhoto'));
@@ -1766,9 +1767,11 @@
       var major = parseInt(m[1], 10) || 0;
       sys = 'Android ' + m[1] + (major >= 13 ? '（可弹授权框）' : '（不弹授权框，只能跳设置）');
     }
+    var ph = (window.MedPhoto && window.MedPhoto.hashCount) ? window.MedPhoto.hashCount() : 0;
     return '<p class="hint">已注册插件：'
       + (names.length ? esc(names.join(' / ')) : '无 —— 插件 JS 未加载')
       + '</p>'
+      + '<p class="hint">照片校验：已登记 ' + ph + ' 个指纹（用于识别重复照片）</p>'
       + '<p class="hint">原生桥接：' + (heads ? ('已注入 ' + heads + ' 个插件头') : '未注入 —— 原生调用会失败')
       + ' · 跳设置插件：' + stTxt + '</p>'
       + '<p class="hint">系统：' + esc(sys) + '</p>';
@@ -1975,15 +1978,23 @@
       if (!pendingShot) { closeDlg($('#dlgPhoto')); return; }
       btn.disabled = true;
       btn.textContent = '正在调用相机…';
+      var reqBody = $('#photoBody');
+      if (reqBody && pendingShot.body) reqBody.textContent = pendingShot.body;   // 复位上一次的报错文案
       window.MedPhoto.take(pendingShot.doseId).then(function (r) {
         btn.disabled = false;
         btn.textContent = '拍照打卡';
         if (r.ok) { finishShot(r.rel, false); return; }
         if (r.reason === 'cancelled') return;      // 用户自己退出相机，留在对话框让他重选
-        /* 真出错（相机被占用 / 无存储 / 插件异常）→ 明确说出来，并让逃生通道可用。
-         * 不能变成「点了没反应」——那会让人以为打卡坏了。 */
+        /* 三类推失败，文案必须分开 —— 否则用户不知道是自己没拍好，还是出了故障。
+         * 每一类都保留「点下面跳过」的逃生通道（方案 B：可跳过但留痕）。 */
         var body = $('#photoBody');
-        if (body) body.textContent = '没能拍照（' + (r.msg || r.reason) + '）。可以再试一次，或点下面跳过。';
+        if (!body) return;
+        if (r.reason === 'low-quality' || r.reason === 'duplicate') {
+          body.textContent = '这张没能通过检查：' + (r.msg || '画面不合格')
+            + '。请重拍一张，或者点下面跳过（记录里会标「未拍照」）。';
+        } else {
+          body.textContent = '没能拍照（' + (r.msg || r.reason) + '）。可以再试一次，或点下面跳过。';
+        }
       });
     };
     $('#photoSkip').onclick = function () { finishShot(null, true); };
