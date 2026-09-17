@@ -28,6 +28,16 @@
   /* ---------------- date / time helpers ---------------- */
   function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function nowMin() { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+  /* 间隔的显示（F-1）。
+   * interval 以「小时」为单位存储，允许 0.5 的整数倍（0.5 = 30 分钟）。
+   * 小于 1 小时说分钟更好懂；1.5 小时比 90 分钟直观，所以只对 <1 的做换算。 */
+  function intervalLabel(v) {
+    var h = Number(v);
+    if (!isFinite(h) || h <= 0) return '-';
+    if (h < 1) return Math.round(h * 60) + ' 分钟';
+    return (h % 1 === 0 ? String(h) : h.toFixed(1)) + ' 小时';
+  }
+
   function minToStr(m) { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }
   function minOfDay(ms) { var d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); }
   /* 展示用：已服用的剂量显示**真实打卡时刻**（takenAt），未服用/跳过显示计划时刻。
@@ -693,9 +703,9 @@
       + ' style="display:flex;flex-direction:column;gap:14px;text-align:left;color:inherit;font:inherit">'
       + '<div class="card-row">'
       + '<span style="font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs))">' + esc(m.name) + '</span>'
-      + '<span class="pill">每 ' + m.interval + ' 小时</span>'
+      + '<span class="pill">每 ' + intervalLabel(m.interval) + '</span>'
       + '</div>'
-      + '<p class="meta">' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次 · 已排程') : ('每 ' + m.interval + ' 小时 · 打卡后开始计时')) + '</p>'
+      + '<p class="meta">' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次 · 已排程') : ('每 ' + intervalLabel(m.interval) + ' · 打卡后开始计时')) + '</p>'
       + '</' + (clickable ? 'button' : 'div') + '>';
   }
 
@@ -1069,7 +1079,7 @@
         html += '<button class="meditem" data-med="' + m.id + '">'
           + '<span class="badge badge-36" style="color:#DADBDF">' + ICON.pill + '</span>'
           + '<span class="medinfo"><span class="n">' + esc(m.name) + '</span>'
-          + '<span class="m">每 ' + m.interval + ' 小时 · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '打卡后开始计时') + '</span></span>'
+          + '<span class="m">每 ' + intervalLabel(m.interval) + ' · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '打卡后开始计时') + '</span></span>'
           + ICON.chev + '</button>';
       });
       html += '</div>';
@@ -1451,12 +1461,34 @@
 
   function renderPreview() {
     var box = $('#previewChips');
+    var step = stepVal * 60;                 // 分钟
     var arr = [];
-    for (var t = 360, i = 0; t < 1440 && i < 8; t += stepVal * 60, i++) arr.push(minToStr(t));
+    for (var t = 360, i = 0; t < 1440 && i < 8; t += step, i++) arr.push(minToStr(t));
     box.innerHTML = arr.map(function (t) { return '<span class="chip">' + t + '</span>'; }).join('');
-    $('#stepNum').textContent = String(stepVal);
+
+    /* 值 < 1 小时时数值与单位一起换（显示「30 分钟 / 次」，而不是「0.5 小时 / 次」） */
+    var under = stepVal < 1;
+    $('#stepNum').textContent = under ? String(Math.round(stepVal * 60)) : String(stepVal);
+    var unit = $('#sheetMed .step-unit');
+    if (unit) unit.textContent = under ? '分钟 / 次' : '小时 / 次';
+
+    /* 「每天约 N 次」——间隔细化到 30 分钟后，光看数字不容易判断一天吃几次。
+     * 以 06:00 起算，与上面预览的口径一致。 */
+    var hint = $('#stepHint');
+    if (hint) {
+      var per = Math.floor((1440 - 360) / step) + 1;
+      hint.textContent = '按 06:00 起算，一天约 ' + per + ' 次。'
+        + (per > 8 ? '次数较多，记得确认是否与医嘱一致。' : '');
+    }
   }
-  function clampStep() { if (stepVal < 1) stepVal = 1; if (stepVal > 24) stepVal = 24; }
+  /* F-1：步进细化为 30 分钟（0.5 小时），并吸附到 0.5 的整数倍 ——
+   * 否则连续的 0.5 累加会漂成 0.30000000000000004 这类值写进数据。 */
+  function clampStep() {
+    if (!isFinite(stepVal)) stepVal = 8;
+    stepVal = Math.round(stepVal * 2) / 2;
+    if (stepVal < 0.5) stepVal = 0.5;
+    if (stepVal > 24) stepVal = 24;
+  }
 
   /* ---------------- reminder ---------------- */
   function tick() {
@@ -1490,7 +1522,7 @@
     $('#remindName').textContent = med ? med.name : '服药时间';
     $('#remindMeta').textContent = minToStr(ds.time)
       + (ds.snoozeUntil != null ? ('（已延后至 ' + minToStr(ds.snoozeUntil) + '）') : '')
-      + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · 每 ' + (med ? med.interval : '-') + ' 小时';
+      + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · 每 ' + (med ? intervalLabel(med.interval) : '-');
     openDlg($('#dlgRemind'));
     fireNotification(med, ds);
   }
@@ -1591,7 +1623,7 @@
       return { err: '备份内容不完整' };
     }
     var badMed = !o.data.meds.every(function (m) {
-      return m && typeof m.id === 'string' && typeof m.name === 'string' && typeof m.interval === 'number';
+      return m && typeof m.id === 'string' && typeof m.name === 'string' && typeof m.interval === 'number' && isFinite(m.interval) && m.interval > 0;
     });
     if (badMed) return { err: '备份里的药品数据有问题' };
     return { ok: o };
@@ -1982,8 +2014,8 @@
 
     $('#scrim').onclick = function () { closeSheet(); };
     $('#sheetClose').onclick = closeSheet;
-    $('#stepMinus').onclick = function () { stepVal--; clampStep(); renderPreview(); };
-    $('#stepPlus').onclick = function () { stepVal++; clampStep(); renderPreview(); };
+    $('#stepMinus').onclick = function () { stepVal -= 0.5; clampStep(); renderPreview(); };
+    $('#stepPlus').onclick = function () { stepVal += 0.5; clampStep(); renderPreview(); };
 
     $('#saveMed').onclick = function () {
       var isFirstMed = false;
