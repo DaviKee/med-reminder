@@ -22,7 +22,7 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.1.1';
+  var APP_VERSION = '1.1.2';
   var APP_BUILD = '2026-09-17';
 
   /* ---------------- date / time helpers ---------------- */
@@ -706,26 +706,81 @@
    * 现在的行为：能弹窗的设备一次点击就授权成功；系统性不再弹窗（或用户再次拒绝）时，
    * 自动落到系统设置页 —— 那是唯一 100% 有效的路径。两条路都走通。
    * 抽成具名函数而非内联，是为了这段分支能被测试直接覆盖。 */
+  /* 收不到提醒的具体原因 —— 显示出来，用户才知道该去关哪一层开关 */
+  function permBlockReason(p) {
+    if (!p) return '读取不到状态';
+    if (p.display === 'denied') return '权限被拒';
+    if (p.enabled === false) return 'App 通知开关已关';
+    if (p.channelImportance === 0) return '「服药提醒」渠道被关闭';
+    return '收不到提醒';
+  }
+
+  /* 点击权限卡。
+   *
+   * ⚠️ **不能用 requestPermissions() 的返回值判断成败** —— 这是本轮反馈的根因。
+   * 插件源码（LocalNotificationsPlugin.requestPermissions）：
+   *     if (SDK_INT < TIRAMISU || getPermissionState(...) == GRANTED) {
+   *         resolve(当前状态);          // ← 不弹任何框
+   *     } else { requestPermissionForAlias(...); }
+   * 即 **Android 13 以下永远不弹授权框**；13 以上如果权限已是 granted（只是被关掉了
+   * 总开关或本渠道）也不弹。上一版按返回值走：拿到 granted 就宣布「通知已开启」并
+   * 撤下卡片 —— 于是用户看到的就是「点了没反应，也不跳设置」，而问题其实还在。
+   *
+   * 现在每一步都回到**真实状态**复检（probe + isBlocked）：
+   *   本就能收到 → 直接说明，不做多余动作
+   *   确实收不到 → 先申请一次（能弹框的设备在这一步就解决了）
+   *   仍然收不到 → 跳系统设置（唯一 100% 有效的路径）
+   *   跳不过去   → 明确写出失败原因与手动路径，绝不「点了没反应」
+   */
   function onPermCardTap() {
-    if (window.MedNotify && window.MedNotify.native) {
-      permAction = '申请中…';
-      window.MedNotify.requestPermission().then(function (p) {
-        if (p === 'granted') {
-          permAction = '申请成功 · 已授权';
-          notifyPerm = 'granted'; render();
-          toast('通知已开启');
-          return;
-        }
-        permAction = '申请未通过（' + p + '）→ 跳系统设置';
-        window.MedNotify.openSettings().then(function (ok) {
-          toast(ok
-            ? '请在系统设置里打开「通知」'
-            : '请到「设置 → 应用 → 定时服药提醒 → 通知」手动打开');
-        });
-      });
+    if (!(window.MedNotify && window.MedNotify.native)) {
+      permAction = '浏览器模式：请在浏览器的网站权限里改通知';
+      render();
+      toast('浏览器模式无法跳系统设置，请在网站权限里把通知改为「允许」');
+      askNotify();
       return;
     }
-    askNotify();
+    permAction = '检测中…';
+    render();
+
+    window.MedNotify.probe().then(function (before) {
+      if (!window.MedNotify.isBlocked(before)) {
+        permProbe = before;
+        notifyPerm = before.display === 'granted' ? 'granted' : 'unknown';
+        permAction = '复检：本就能收到提醒，无需处理';
+        render();
+        toast('通知本来就是开着的');
+        return null;
+      }
+      permAction = '确认收不到（' + permBlockReason(before) + '）→ 先申请授权';
+      render();
+
+      return window.MedNotify.requestPermission().then(function (p) {
+        return window.MedNotify.probe().then(function (after) {
+          if (!window.MedNotify.isBlocked(after)) {
+            permProbe = after;
+            lastProbeSig = JSON.stringify(after);
+            notifyPerm = 'granted';
+            permAction = '申请成功 · 已授权（' + p + '）';
+            render();
+            toast('通知已开启');
+            return null;
+          }
+          permAction = '系统未弹授权框（Android 13 以下不会弹）→ 跳系统设置';
+          render();
+          return window.MedNotify.openSettings().then(function (r) {
+            permAction = r.ok ? '已打开系统设置，请把「通知」打开' : ('跳设置失败：' + r.reason);
+            render();
+            toast(r.ok
+              ? '请在系统设置里打开「通知」'
+              : '请到「设置 → 应用 → 定时服药提醒 → 通知」手动打开');
+          });
+        });
+      });
+    }).catch(function (e) {
+      permAction = '出错：' + ((e && e.message) ? e.message : e);
+      render();
+    });
   }
 
   function bindToday() {
@@ -1418,9 +1473,22 @@
   function plugLine() {
     var c = window.Capacitor;
     var names = (c && c.Plugins) ? Object.keys(c.Plugins).sort() : [];
+    var heads = (window.MedNotify && window.MedNotify.bridgeHeaders) ? window.MedNotify.bridgeHeaders() : 0;
+    var st = (window.MedNotify && window.MedNotify.settingsState) ? window.MedNotify.settingsState() : 'missing';
+    var stTxt = st === 'injected' ? '已注入' : (st === 'proxy' ? '代理兜底可用' : '不可用');
+    var ua = (window.navigator && window.navigator.userAgent) || '';
+    var m = /Android\s+([0-9.]+)/.exec(ua);
+    var sys = '未知';
+    if (m) {
+      var major = parseInt(m[1], 10) || 0;
+      sys = 'Android ' + m[1] + (major >= 13 ? '（可弹授权框）' : '（不弹授权框，只能跳设置）');
+    }
     return '<p class="hint">已注册插件：'
       + (names.length ? esc(names.join(' / ')) : '无 —— 插件 JS 未加载')
-      + '</p>';
+      + '</p>'
+      + '<p class="hint">原生桥接：' + (heads ? ('已注入 ' + heads + ' 个插件头') : '未注入 —— 原生调用会失败')
+      + ' · 跳设置插件：' + stTxt + '</p>'
+      + '<p class="hint">系统：' + esc(sys) + '</p>';
   }
 
   function diagHtml() {

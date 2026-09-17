@@ -211,10 +211,56 @@
    * Capacitor 官方没有这个 API（@capacitor/app 只有 exitApp/getInfo/minimizeApp 等）。
    * 权限被拒后系统不再弹窗，只能用户手动去设置里开，所以这个跳转是必要的。
    * 浏览器/PWA 没有等价能力，返回 false 让调用方降级成文字指引。 */
+  /* 原生桥接是否真的注入过 —— 用 PluginHeaders 判断（它在 globalJS/bridgeJS 之后由原生注入）。
+   * 这个信号能区分两种「插件看起来在、实际调不通」的情况：
+   * 只有 vendor 里的 JS 生效时，Plugins 有名字但 nativePromise 并不存在。 */
+  function bridgeHeaders() {
+    var c = window.Capacitor;
+    var hs = c && c.PluginHeaders;
+    return (hs && hs.length) ? hs.length : 0;
+  }
+  function hasHeader(name) {
+    var c = window.Capacitor;
+    var hs = (c && c.PluginHeaders) || [];
+    for (var i = 0; i < hs.length; i++) if (hs[i] && hs[i].name === name) return true;
+    return false;
+  }
+
+  /* 取本项目的跳设置插件。
+   * 它**没有 JS 包装**，正常情况下由原生侧生成的 JS（JSExport.getPluginJS）
+   * 注入成 Capacitor.Plugins.AppSettings；万一那份注入没生效，再用 core 的
+   * registerPlugin 建一个代理兜底（只要有 PluginHeaders 就能调通原生）。 */
+  function settingsPlugin() {
+    var c = window.Capacitor;
+    var P = c && c.Plugins && c.Plugins.AppSettings;
+    if (P && typeof P.openNotificationSettings === 'function') return P;
+    if (c && typeof c.registerPlugin === 'function') {
+      try {
+        if (!hasHeader('AppSettings')) return null;
+        var g = c.registerPlugin('AppSettings');
+        if (g && typeof g.openNotificationSettings === 'function') return g;
+      } catch (e) { /* 插件不存在时会抛，忽略 */ }
+    }
+    return null;
+  }
+  /* 'injected'（原生已注入） / 'proxy'（靠 registerPlugin 兜底） / 'missing' */
+  function settingsState() {
+    var c = window.Capacitor;
+    var P = c && c.Plugins && c.Plugins.AppSettings;
+    if (P && typeof P.openNotificationSettings === 'function') return 'injected';
+    if (hasHeader('AppSettings') && c && typeof c.registerPlugin === 'function') return 'proxy';
+    return 'missing';
+  }
+
+  /* 跳系统通知设置。
+   * 返回 {ok, reason} —— **必须带原因**：跳不过去时用户看到的那行字，
+   * 决定他是能自己找到设置，还是只能干等（这正是本轮反馈的问题）。 */
   function openSettings() {
-    var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppSettings;
-    if (!P) return Promise.resolve(false);
-    return P.openNotificationSettings().then(function () { return true; }).catch(function () { return false; });
+    var P = settingsPlugin();
+    if (!P) return Promise.resolve({ ok: false, reason: 'AppSettings 插件未注册' });
+    return P.openNotificationSettings()
+      .then(function () { return { ok: true, reason: '' }; })
+      .catch(function (e) { return { ok: false, reason: (e && e.message) || '系统拒绝打开设置页' }; });
   }
 
   window.MedNotify = {
@@ -227,6 +273,12 @@
     requestPermission: requestPermission,
     probe: probe,
     isBlocked: isBlocked,
-    openSettings: openSettings
+    openSettings: openSettings,
+    settingsState: settingsState,
+    bridgeHeaders: bridgeHeaders,
+    plugins: function () {
+      var c = window.Capacitor;
+      return (c && c.Plugins) ? Object.keys(c.Plugins) : [];
+    }
   };
 })();
