@@ -28,3 +28,12 @@ desktop.ini
 .workbuddy/
 .vscode/*
 !.vscode/extensions.json
+
+# ===== 开发期临时脚本 / 中间产物 =====
+# 调试时会在根目录写 _ta.js / _tn.js / _ab.json 这类脚本，跑完就该删。
+# 2026-09-21 有一次清理没跑成，结果被 `git add -A` 误提交（aeee498）——
+# 加这条规则兜底，避免再犯。
+_*.js
+_*.py
+_*.json
+_*.md
