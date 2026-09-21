@@ -76,13 +76,35 @@ if [ -z "$VER" ]; then
   echo "  版本号是产物命名、Android versionName 以及「手机上装的是哪一版」的唯一依据，不能缺。"
   exit 1
 fi
+# ---------- 保留行尾的原地替换 ----------
+# ⚠️ 千万不要用 `sed -i` 改这些文件：Git Bash（MSYS）的 sed 在文本模式下
+# 会把**整个文件**的 CRLF 转成 LF。2026-09-21 实测确认，后果是每次构建都
+# 静默重写 app.js / build.gradle 的行尾 —— 而本项目已经多次被「行尾漂移」
+# 坑到（补丁锚点莫名失配，排查很久）。所以这里用纯 bash 实现，逐行重建，
+# 先探测原文件行尾再原样写回。
+#   用法：set_line <文件> <行首前缀> <替换后的整行>
+set_line() {
+  _f="$1"; _pat="$2"; _new="$3"
+  IFS= read -r _first < "$_f" || true
+  case "$_first" in
+    *$'\r') _nl=$'\r\n' ;;
+    *)       _nl=$'\n'   ;;
+  esac
+  : > "$_f.tmp"
+  while IFS= read -r _line || [ -n "$_line" ]; do
+    _line="${_line%$'\r'}"
+    if [ "$_line" != "${_line#"$_pat"}" ]; then _line="$_new"; fi
+    printf '%s%s' "$_line" "$_nl" >> "$_f.tmp"
+  done < "$_f"
+  mv "$_f.tmp" "$_f"
+}
+
 # 构建日期**一律取系统当天**，并回写进 app.js。
 # 以前是读 app.js 里一个手写常量 —— 改版本号时太容易忘记改日期，
 # 结果 APK 文件名和 App 内 DEBUG 卡显示的都是上一次的日期（2026-09-21 真的发生过）。
 # 回写之后：文件名、App 内显示、原生 versionName 三处必然一致。
 BUILDDATE="$(date +%Y-%m-%d)"
-sed -i.bak "s/^\(  var APP_BUILD = \).*/\1'$BUILDDATE';/" www/js/app.js
-rm -f www/js/app.js.bak
+set_line www/js/app.js "  var APP_BUILD = " "  var APP_BUILD = '$BUILDDATE';"
 
 # versionCode 由语义版本确定性推导，不用单独维护：
 #   v1.0.8 -> 1*10000 + 0*100 + 8 = 10008
@@ -93,9 +115,8 @@ VCODE=$(( MAJ * 10000 + MIN * 100 + PAT ))
 # 这样「设置 → 应用 → 定时服药提醒」里也能看到版本号，便于和 APK 文件对上。
 GRADLE="android/app/build.gradle"
 if [ -f "$GRADLE" ]; then
-  sed -i.bak "s/^\( *versionCode \).*/\1$VCODE/" "$GRADLE"
-  sed -i.bak "s/^\( *versionName \).*/\1\"$VER\"/" "$GRADLE"
-  rm -f "$GRADLE.bak"
+  set_line "$GRADLE" "        versionCode " "        versionCode $VCODE"
+  set_line "$GRADLE" "        versionName " "        versionName \"$VER\""
 fi
 
 echo "  版本  : v$VER ($BUILDDATE)  versionCode=$VCODE"
