@@ -70,14 +70,19 @@ fi
 # ---------- 版本号（单一来源：www/js/app.js 顶部） ----------
 # 必须放在编译之前：versionName 要写进 APK，编译后再改就没用了。
 VER="$(sed -n "s/^  var APP_VERSION = '\([^']*\)';.*/\1/p" www/js/app.js | head -1)"
-BUILDDATE="$(sed -n "s/^  var APP_BUILD = '\([^']*\)';.*/\1/p" www/js/app.js | head -1)"
 
 if [ -z "$VER" ]; then
   echo "✗ 没能从 www/js/app.js 读到 APP_VERSION —— 出包中止。"
   echo "  版本号是产物命名、Android versionName 以及「手机上装的是哪一版」的唯一依据，不能缺。"
   exit 1
 fi
-[ -z "$BUILDDATE" ] && BUILDDATE="$(date +%Y-%m-%d)"
+# 构建日期**一律取系统当天**，并回写进 app.js。
+# 以前是读 app.js 里一个手写常量 —— 改版本号时太容易忘记改日期，
+# 结果 APK 文件名和 App 内 DEBUG 卡显示的都是上一次的日期（2026-09-21 真的发生过）。
+# 回写之后：文件名、App 内显示、原生 versionName 三处必然一致。
+BUILDDATE="$(date +%Y-%m-%d)"
+sed -i.bak "s/^\(  var APP_BUILD = \).*/\1'$BUILDDATE';/" www/js/app.js
+rm -f www/js/app.js.bak
 
 # versionCode 由语义版本确定性推导，不用单独维护：
 #   v1.0.8 -> 1*10000 + 0*100 + 8 = 10008

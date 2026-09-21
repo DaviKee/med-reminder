@@ -115,6 +115,8 @@ def main():
         ('通知-clearDelivered 已导出', 'clearDelivered: clearDelivered' in NOTIFY),
         ('通知-stat 已导出', 'stat: stat' in NOTIFY),
         ('通知-台账落盘', 'medreminder.notifPending.v1' in NOTIFY),
+        ('通知-渠道不传 sound', "sound: 'default'" not in NOTIFY),
+        ('通知-渠道重要性 HIGH', 'importance: 5' in NOTIFY),
         ('通知-doSync 串行化', 'if (syncBusy)' in NOTIFY),
         ('通知-doSync 等清场', 'bootPurge || Promise.resolve()' in NOTIFY),
         ('通知-启动清场已接线', 'window.MedNotify.purge()' in APP),

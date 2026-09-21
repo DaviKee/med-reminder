@@ -11,6 +11,23 @@
   var App = (C && C.Plugins && C.Plugins.App) || null;
   var NATIVE = !!LN;
 
+  /* ⚠️ 关于这个渠道的声音（2026-09-21 修）：
+   *
+   * 创建渠道时**绝对不能传 sound**。插件的实现是：
+   *     Uri.parse("android.resource://" + 包名 + "/raw/" + sound)
+   * 也就是把 sound 当成「res/raw 下的资源名」。而我们这个 APK 里**根本没有 res/raw 目录**，
+   * 于是 'default' 被拼成一个**永远解析不了**的 URI → 渠道看起来"有声音"（设置里显示「默认」），
+   * 实际播放时找不到那个文件 → **全程静音**。震动是独立的 enableVibration，所以表现为
+   * 「只有震动、没有声音」。
+   *
+   * 不传 sound → 插件不调 setSound() → 渠道使用**真正的系统默认通知音**。
+   *
+   * ⚠️ 注意 Android 8+ 的**渠道属性不可变**：已经创建过的渠道，改代码是改不动它的。
+   * 所以对「已经装了旧版、渠道已经建坏」的设备，只有两条路：
+   *   ① 用户手动到「设置 → 通知 → 服药提醒 → 声音」里指定一个铃声（**秦老师就是这么修好的**）；
+   *   ② 卸载重装（渠道会重建）。
+   * 我们**故意不换渠道 id** —— 换了会重建渠道，把用户手动设好的声音丢掉；
+   * 而现在这个改法能保证**今后所有新建的渠道**（新装机、重装、清数据）从一开始就是对的。 */
   var CHANNEL = 'doses';
   var ACTIONS = 'DOSE_ACTIONS';
   var scheduled = [];
@@ -81,7 +98,19 @@
     inited = true;
 
     return Promise.resolve()
-      .then(function () { return LN.createChannel({ id: CHANNEL, name: '服药提醒', description: '按你设定的间隔提醒服药', importance: 5, visibility: 1, vibration: true, sound: 'default' }); })
+      .then(function () {
+        /* ⚠️ **故意不传 sound**（原因见文件上方 CHANNEL 处的长注释）。
+         * importance 用 5 = IMPORTANCE_HIGH：有声音 + 横幅；
+         * 3 = LOW 会被系统判为静音。 */
+        return LN.createChannel({
+          id: CHANNEL,
+          name: '服药提醒',
+          description: '按你设定的间隔提醒服药',
+          importance: 5,
+          visibility: 1,
+          vibration: true
+        });
+      })
       .catch(function () { /* 渠道已存在会抛错，忽略 */ })
       .then(function () {
         return LN.registerActionTypes({

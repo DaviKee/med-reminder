@@ -348,6 +348,19 @@ const doseList = (specs) => specs.map(s => ({
     t('★ doSync 等启动清场', CODE.indexOf('bootPurge') >= 0, '缺 bootPurge');
     t('★ 已排通知台账落盘', CODE.indexOf('medreminder.notifPending.v1') >= 0, '缺台账');
 
+    /* 创建通知渠道时**绝不能传 sound** —— 2026-09-21 修「只有震动、没有声音」的根因：
+     * 插件把 sound 当成 res/raw 下的资源名拼成 URI，而我们没有 res/raw 目录，
+     * 于是拼出一个永远解析不了的地址 → 渠道看着"有声音"、实际播出无声。 */
+    t('★ 创建渠道时没有传 sound（传了就会静音）',
+      CODE.indexOf("sound: 'default'") < 0 && !/createChannel\(\{[\s\S]{0,400}?sound:/.test(CODE),
+      '仍在传 sound');
+    t('渠道 id 保持 doses（故意不换，避免把用户手动设好的声音丢掉）',
+      CODE.indexOf("var CHANNEL = 'doses';") >= 0, '渠道 id 变了');
+    t('渠道 importance 是 5（HIGH；3 = LOW 会被系统判为静音）',
+      /importance: 5/.test(CODE), 'importance 不对');
+    t('没有引入 deleteChannel（不换 id 就不需要删渠道）',
+      CODE.indexOf('deleteChannel') < 0, '多了删除渠道');
+
     const APP = fs.readFileSync(require("path").join(__dirname, "..", "www/js/app.js"), "utf8");
     const APPCODE = APP.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     t('★ 启动时清场', APPCODE.indexOf('window.MedNotify.purge()') >= 0, '启动未清场');

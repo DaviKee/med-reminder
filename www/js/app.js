@@ -22,8 +22,8 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.0';
-  var APP_BUILD = '2026-09-17';
+  var APP_VERSION = '1.4.1';
+  var APP_BUILD = '2026-09-21';
 
   /* ---------------- date / time helpers ---------------- */
   function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
