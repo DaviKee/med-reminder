@@ -1,0 +1,43 @@
+# ============================================================
+# 行尾与文本/二进制归属 —— 显式声明
+# ============================================================
+# 背景：本机 git 的 core.autocrlf = true，来源是 PortableGit 自带的
+#       <工具链>\git\etc\gitconfig（2026-09-23 工具链已从 D:\DevEnv 搬到 C:\DevEnv），
+#       **不是本仓库的配置**。
+#       本仓库此前没有任何 .gitattributes，后果是：
+#       任何一次 `git checkout` / `git reset --hard` 都会把工作区的 LF 文件
+#       静默转成 CRLF —— 这正是项目反复被坑的那类问题
+#       （见 .workbuddy/memory/MEMORY.md §3「文件行尾：实测为准」）。
+#
+# 现状（2026-09-23 用 `git ls-files --eol` 实测）：
+#   索引侧 59 个文本文件**全部是 i/lf**；
+#   工作区有 9 个是 w/crlf（LICENSE、README.md、gradlew.bat、install.html、
+#   serve-apk.py、tests/backup.spec.js、tests/fixed.spec.js、
+#   www/css/app.css、www/js/notify.js）—— 它们是 autocrlf 检出时转出来的，
+#   不是有意约定。
+#
+# 本文件的作用：把规则显式化，让行尾不再随环境漂移。
+# ============================================================
+
+# 文本文件：仓库内以 LF 规范存储，检出时也保持 LF
+* text=auto eol=lf
+
+# Windows 批处理按惯例保持 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ---- 二进制：显式标记，避免被当文本做行尾转换 ----
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.ttf  binary
+*.woff binary
+*.woff2 binary
+*.zip  binary
+*.apk  binary
+*.jar  binary
+*.keystore binary
+*.jks  binary
