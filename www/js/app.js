@@ -8,6 +8,9 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
  * import 必须在模块顶层 —— 所以它在 IIFE 外面，IIFE 内部靠闭包可见。
  * 其余代码一字未改。 */
 
+
+import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNotified, cleanTargets, cleanPreview, readJSON, writeJSON, photoStats, setPhotoStats } from './core/store.js';
+
 (function () {
   'use strict';
 
@@ -122,21 +125,7 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
     return minToStr(ds.time);
   }
 
-  /* ---------------- state ---------------- */
-  var KEY = 'medreminder.v1';
-  var DEFAULT = { meds: [], doses: {}, notified: {} };
 
-  function load() {
-    try {
-      var raw = localStorage.getItem(KEY);
-      if (raw) {
-        var o = JSON.parse(raw);
-        return { meds: o.meds || [], doses: o.doses || {}, notified: o.notified || {} };
-      }
-    } catch (e) { /* ignore */ }
-    return JSON.parse(JSON.stringify(DEFAULT));
-  }
-  var S = load();
   var notifyPerm = 'unknown';   // granted / denied / unsupported / unknown
 
   /* ---------------- 存储安全（D-1） ----------------
@@ -151,13 +140,6 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
   var storageError = null;        // null | { kind:'quota'|'other', msg, at }
   var storageRefreshQueued = false;
 
-  /* 各实现（Chromium / Firefox / 旧 WebView）对配额异常的命名不一致，三种都认 */
-  function isQuotaError(e) {
-    if (!e) return false;
-    return e.name === 'QuotaExceededError'
-        || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
-        || e.code === 22 || e.code === 1014;
-  }
 
   /* save() 会在 render 过程中被调用，不能同步再 render（会递归）—— 排队到下一轮事件循环。
    * first 判断保证失败状态持续存在时不会反复排队，避免异步死循环。 */
@@ -188,61 +170,9 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
     }
   }
 
-  /* localStorage 在 Android WebView 里通常是 5 MB（部分实现 10 MB），按保守的 5 MB 估算占比 */
-  var STORAGE_BUDGET = 5 * 1024 * 1024;
 
-  function storageStats() {
-    var raw = null;
-    try { raw = localStorage.getItem(KEY); } catch (e) { /* ignore */ }
-    var bytes = raw ? raw.length * 2 : 0;      // localStorage 按 UTF-16 计，每字符 2 字节
-    var keys = Object.keys(S.doses || {});
-    var doses = 0;
-    keys.forEach(function (k) { doses += (S.doses[k] || []).length; });
-    /* 照片不在 localStorage 里，但同样占设备空间。不并进来，这张卡显示的
-     * 「已用」就是错的 —— 而它的全部意义就是让容量可见。 */
-    var pBytes = photoStats ? photoStats.bytes : 0;
-    var pFiles = photoStats ? photoStats.files : 0;
-    bytes += pBytes;
-    return {
-      bytes: bytes,
-      kb: Math.round(bytes / 1024),
-      days: keys.length,
-      doses: doses,
-      photoFiles: pFiles,
-      photoBytes: pBytes,
-      pct: Math.min(100, Math.round(bytes / STORAGE_BUDGET * 100))
-    };
-  }
 
-  /* 回收孤儿 notified：id 对应的剂量早已不存在 → 这条标记永远不会再被读到。
-   * 纯垃圾回收，不碰任何用户可见数据，所以可以在 boot 时自动执行。 */
-  function gcNotified() {
-    var alive = {}, removed = 0;
-    Object.keys(S.doses || {}).forEach(function (k) {
-      (S.doses[k] || []).forEach(function (d) { alive[d.id] = 1; });
-    });
-    Object.keys(S.notified || {}).forEach(function (id) {
-      if (!alive[id]) { delete S.notified[id]; removed++; }
-    });
-    return removed;
-  }
 
-  /* 「预览」与「执行」共用同一套判定 —— 保证用户看到的数字就是实际会被删的数量。
-   * keepDays = 0 表示不清理。**今天的记录永不删**：它是当前排程的依据，删了 App 立刻错乱。 */
-  function cleanTargets(keepDays) {
-    if (!keepDays) return [];
-    var cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - keepDays);
-    var limit = fmtDate(cutoff), today = todayKey();
-    return Object.keys(S.doses || {}).filter(function (k) {
-      return k < today && k < limit;      // YYYY-MM-DD 的字典序即时间序
-    });
-  }
-  function cleanPreview(keepDays) {
-    var keys = cleanTargets(keepDays), n = 0;
-    keys.forEach(function (k) { n += (S.doses[k] || []).length; });
-    return { days: keys.length, doses: n };
-  }
   function cleanOldRecords(keepDays) {
     var keys = cleanTargets(keepDays);
     if (!keys.length) return { days: 0, doses: 0, freed: 0 };
@@ -459,12 +389,6 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
   var DROP_KEY = 'medreminder.dropped.v1';
   var DROP_ACK_KEY = 'medreminder.droppedAck.v1';
 
-  function readJSON(k) {
-    try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : null; } catch (e) { return null; }
-  }
-  function writeJSON(k, v) {
-    try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ }
-  }
   function noteDropped(n) {
     if (!n) return;
     var cur = readJSON(DROP_KEY), today = todayKey();
@@ -686,7 +610,6 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
    */
   var PENDING_KEY = 'medreminder.pendingPhoto.v1';   // 独立 key，不碰主状态，备份格式不用动
   var pendingShot = null;                            // { kind:'all'|'one', doseId, onDone }
-  var photoStats = { files: 0, bytes: 0 };           // 异步刷新，供存储卡统计照片占用
 
   function savePendingShot(kind, doseId) {
     try { localStorage.setItem(PENDING_KEY, JSON.stringify({ kind: kind, doseId: doseId || null, at: Date.now() })); } catch (e) { /* ignore */ }
@@ -763,8 +686,8 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
   function refreshPhotoStats() {
     if (!(window.MedPhoto && window.MedPhoto.ready())) return;
     window.MedPhoto.dirStats().then(function (s) {
-      if (s.files === photoStats.files && s.bytes === photoStats.bytes) return;
-      photoStats = s;
+    if (s.files === photoStats.files && s.bytes === photoStats.bytes) return;
+    setPhotoStats(s);       // 走 setter：photoStats 现在住在 core/store.js（import 绑定只读）
       queueStorageRefresh();
     });
   }

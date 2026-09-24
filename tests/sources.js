@@ -25,6 +25,7 @@ const JS = path.join(ROOT, 'www', 'js');
  * 不属于这个图 —— 它们各自被对应的 spec 单独读取。 */
 const MODULES = [
   'core/util.js',
+  'core/store.js',
   'app.js'
 ];
 
