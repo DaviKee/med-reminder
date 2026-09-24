@@ -15,7 +15,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const APP_SRC = fs.readFileSync(path.join(ROOT, 'www/js/app.js'), 'utf8');
+const APP_SRC = require('./sources').all();
 
 const stripJs = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const APP = stripJs(APP_SRC);

@@ -361,7 +361,7 @@ const doseList = (specs) => specs.map(s => ({
     t('没有引入 deleteChannel（不换 id 就不需要删渠道）',
       CODE.indexOf('deleteChannel') < 0, '多了删除渠道');
 
-    const APP = fs.readFileSync(require("path").join(__dirname, "..", "www/js/app.js"), "utf8");
+const APP = require('./sources').all();
     const APPCODE = APP.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     t('★ 启动时清场', APPCODE.indexOf('window.MedNotify.purge()') >= 0, '启动未清场');
     t('★ 回到前台清通知栏', APPCODE.indexOf('clearDelivered()') >= 0, 'resume 未清理');

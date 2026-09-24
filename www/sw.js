@@ -9,7 +9,10 @@
  *
  * 缓存名带版本号：改了清单/策略就 +1，activate 会把旧缓存整体删掉。
  */
-var CACHE = 'medreminder-v3';
+/* ⚠️ 加 ES module 时：ASSETS 也要加 —— module 是 import 进来的，
+ *    不在 index.html 里，而 ASSETS 是「与 index.html 一一对应」的清单。
+ *    （index.html 里同时还留了 <link rel="modulepreload"> 让这条对应关系可被自动核对。） */
+var CACHE = 'medreminder-v4';
 
 /* 顺序与 index.html 的 <script>/<link> 保持一致。
  * ⚠️ 加新插件时：这里、build-apk.sh、index.html 三处都要加（见项目 MEMORY §2）。 */
@@ -26,6 +29,7 @@ var ASSETS = [
   './js/notify.js',
   './js/photo.js',
   './js/backup.js',
+  './js/core/util.js',
   './js/app.js',
   './icon.svg',
   './icon-maskable.svg',

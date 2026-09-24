@@ -14,7 +14,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const SRC = fsmod.readFileSync(path.join(ROOT, 'www/js/backup.js'), 'utf8');
-const APP = fsmod.readFileSync(path.join(ROOT, 'www/js/app.js'), 'utf8')
+const APP = require('./sources').all()
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const HTML = fsmod.readFileSync(path.join(ROOT, 'www/index.html'), 'utf8');
 

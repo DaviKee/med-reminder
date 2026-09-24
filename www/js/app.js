@@ -1,13 +1,16 @@
 /* 定时服药提醒 — app logic
  * 打卡制：每天第一次服药打卡后，按药品间隔自动排程当天剩余提醒。
  */
+
+import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
+         dateAt, todayKey, copyText, legacyCopy } from './core/util.js';
+/* ⬆ 2026-09-24 架构重构：这些工具函数已抽到 core/util.js。
+ * import 必须在模块顶层 —— 所以它在 IIFE 外面，IIFE 内部靠闭包可见。
+ * 其余代码一字未改。 */
+
 (function () {
   'use strict';
 
-  var $ = function (s, r) { return (r || document).querySelector(s); };
-  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
-  var pad = function (n) { return String(n).padStart(2, '0'); };
-  var uid = function () { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); };
 
   /* ---------------- 版本号（单一来源） ----------------
    * 只在这里改一处：build-apk.sh 会自动读出这两个值，用于
@@ -25,9 +28,6 @@
   var APP_VERSION = '1.4.3';
   var APP_BUILD = '2026-09-24';
 
-  /* ---------------- date / time helpers ---------------- */
-  function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-  function nowMin() { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
   /* 间隔的显示（F-1）。
    * interval 以「小时」为单位存储，允许 0.5 的整数倍（0.5 = 30 分钟）。
    * 小于 1 小时说分钟更好懂；1.5 小时比 90 分钟直观，所以只对 <1 的做换算。 */
@@ -114,8 +114,6 @@
     return '每 ' + intervalLabel(m.interval) + ' · 打卡后开始计时';
   }
 
-  function minToStr(m) { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }
-  function minOfDay(ms) { var d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); }
   /* 展示用：已服用的剂量显示**真实打卡时刻**（takenAt），未服用/跳过显示计划时刻。
    * 旧记录没有 takenAt（此字段 2026-09-14 前只写不读），用 ≈ 标出这是按计划推定、非真实打卡。 */
   function doseClockHtml(ds) {
@@ -123,7 +121,6 @@
     if (ds.status === 'taken') return '<span title="旧记录：按计划时刻推定，非真实打卡时刻">≈' + minToStr(ds.time) + '</span>';
     return minToStr(ds.time);
   }
-  function todayKey() { return fmtDate(new Date()); }
 
   /* ---------------- state ---------------- */
   var KEY = 'medreminder.v1';
@@ -327,8 +324,6 @@
     return '标准';
   }
 
-  /* ---------------- 后台通知登记 ---------------- */
-  function dateAt(min) { var d = new Date(); d.setHours(Math.floor(min / 60), min % 60, 0, 0); return d; }
   function syncNotifications() {
     if (!window.MedNotify) return;
     var list = todayDoses()
@@ -2029,29 +2024,6 @@
     } catch (e) { return false; }
   }
 
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text).then(
-        function () { return true; },
-        function () { return legacyCopy(); }
-      );
-    }
-    return Promise.resolve(legacyCopy());
-  }
-  /* 剪贴板权限在各 WebView 上差异很大，兜底用「全选 + execCommand」 */
-  function legacyCopy() {
-    var ta = $('#dataArea');
-    if (!ta) return false;
-    var ro = ta.readOnly;
-    ta.readOnly = false;
-    ta.focus();
-    ta.select();
-    var ok = false;
-    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-    ta.readOnly = ro;
-    try { ta.setSelectionRange(0, 0); } catch (e) { /* ignore */ }
-    return ok;
-  }
 
   function openDataDlg(mode) {
     dataMode = mode;
@@ -2118,12 +2090,6 @@
     toast('已恢复 ' + nMed + ' 个药品 · ' + nDay + ' 天记录');
   }
 
-  /* ---------------- esc ---------------- */
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
 
   /* ---------------- render dispatcher ---------------- */
   /* ---------------- 通知权限状态 ----------------
