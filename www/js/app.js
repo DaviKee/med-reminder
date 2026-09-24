@@ -1575,7 +1575,17 @@
   /* ---------------- overlays ---------------- */
   var openCount = 0;
   function setScrim(on) { $('#scrim').classList.toggle('show', on); }
+  /* ---------------- 浮层「保存」防重入 ----------------
+   * 慢设备（或开了双击缩放）上连点「保存」会派发多次 click，而**每一次点击都是一次完整的
+   * 「新增药品」**（`S.meds.push`）。症状：一长串同名同刻的药品 —— 2026-09-24 真机遇到 7 条。
+   * 判据用「本次浮层会话是否已经保存过」，而不是「函数当前是否在执行」：
+   * 后者挡不住"排队之后才派发"的重复点击（连点的关键就在这里）。 */
+  var sheetSaveDone = false;
+  function sheetSaveBegin() { if (sheetSaveDone) return false; sheetSaveDone = true; return true; }
+  function sheetSaveReset() { sheetSaveDone = false; }
+
   function openSheet(medId) {
+    sheetSaveReset();                 // 每次打开浮层都是一个新会话
     editingId = medId;
     var med = medId ? medById(medId) : null;
     $('#sheetTitle').textContent = med ? '编辑药品' : '添加药品';
@@ -2343,6 +2353,8 @@
     $('#stepPlus').onclick = function () { stepVal += 0.5; clampStep(); renderPreview(); };
 
     $('#saveMed').onclick = function () {
+      /* 防重入：一次浮层会话只允许保存一次。连点会各新增一条药 —— 见 sheetSaveBegin 的注释。 */
+      if (!sheetSaveBegin()) return;
       var isFirstMed = false;
       var name = $('#medName').value.trim();
       if (!name) { toast('请填写药品名称'); $('#medName').focus(); return; }

@@ -188,6 +188,9 @@ def main():
          all(x in SW for x in ["'./js/photo.js'", "'./js/backup.js'", "'./vendor/plugin-camera.js'"])),
         ('H-2-注册失败不静默',
          "serviceWorker.register('sw.js').then" in APP and "console.warn('[sw]" in APP),
+        ('保存有防重入守卫',
+         'function sheetSaveBegin()' in APP and 'if (!sheetSaveBegin()) return;' in APP),
+        ('打开浮层会重置防重入标记', 'sheetSaveReset();' in APP and APP.count('sheetSaveReset()') >= 2),
         ('假状态栏已删', 'statusbar' not in html),
     ]
     for name, cond in regress:
