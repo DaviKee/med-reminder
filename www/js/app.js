@@ -22,8 +22,8 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.1';
-  var APP_BUILD = '2026-09-21';
+  var APP_VERSION = '1.4.2';
+  var APP_BUILD = '2026-09-24';
 
   /* ---------------- date / time helpers ---------------- */
   function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -64,6 +64,26 @@
     });
     out.sort(function (a, b) { return a - b; });
     return out.slice(0, MAX_TIMES);
+  }
+
+  /* 两个**已归一化**的时刻数组是否完全相同。
+   * normTimes 已做过排序与去重，所以这个比较与输入顺序无关。 */
+  function sameTimes(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  /* 「这次保存要不要重排今天的排程」—— 抽成纯函数有两个理由：
+   *   ① 可被 tests/fixed.spec.js 单独验证；
+   *   ② 防止将来又漏掉某一种变化（**H-1 就是这么漏掉的**：
+   *      原判断写成 `modeChanged || intervalChanged`，而固定模式下这两者恒为 false，
+   *      「只改时刻」于是被静默忽略 —— 今天页与通知仍是旧时刻，用户以为"改了没用"）。
+   * prev / next 均形如 { mode, times, interval }，其中 times 必须是 normTimes 归一化过的。 */
+  function needRebuildDoses(prev, next) {
+    if (prev.mode !== next.mode) return true;                              // 模式换了
+    if (next.mode === 'fixed') return !sameTimes(prev.times, next.times);  // 固定模式：时刻变了吗
+    return prev.interval !== next.interval;                                // 间隔模式：间隔变了吗
   }
 
   /* <input type="time"> 的值 → 分钟数。非法一律返回 null（不要静默当 0 点）。 */
@@ -2336,15 +2356,22 @@
       if (editingId) {
         var m = medById(editingId);
         if (m) {
-          var prevMode = medMode(m);
-          var modeChanged = prevMode !== medModeDraft;
-          var intervalChanged = !isFixed && m.interval !== stepVal;
+          /* 先把"改动前"的样子拍下来再落值 —— 判断必须在赋值之前，
+           * 否则拿新旧一比永远是"没变"。 */
+          var prev = { mode: medMode(m), times: normTimes(m.times), interval: m.interval };
+          var next = { mode: medModeDraft, times: ts, interval: stepVal };
           m.name = name;
           m.mode = medModeDraft;
           if (isFixed) m.times = ts;
           else m.interval = stepVal;
-          /* 间隔改了或模式换了 → 今天的排程要重排（已打卡的记录会保留） */
-          if (modeChanged || intervalChanged) rebuildTodayDoses(m);
+          /* 模式换了 / 间隔改了 / **固定模式时刻改了** → 今天的排程要重排（已打卡的记录一律保留）。
+           * ⚠️ H-1：这里原先是 `modeChanged || intervalChanged`，而固定模式下两者恒为 false
+           * （intervalChanged 带 `!isFixed` 前置，modeChanged 要求模式真的变了）——
+           * 「只改时刻」于是被静默忽略：今天页与系统通知仍是旧时刻，要等次日生效，
+           * 用户会以为"改了没用"。判定已抽成 needRebuildDoses（可单测，
+           * 见 tests/fixed.spec.js 的 H 段）。
+           * 重排只负责改数据 + 撤旧通知；新通知由随后的 save() → syncNotifications() 统一登记。 */
+          if (needRebuildDoses(prev, next)) rebuildTodayDoses(m);
         }
         toast('已保存');
       } else {
@@ -2635,10 +2662,16 @@
       }
     }, 30000);
 
-    // PWA
+    /* PWA。注册失败**不能静默** —— 静默的后果是"以为有离线缓存、其实没有"，
+     * 而 H-2 那个"装了新版仍是旧代码"的问题，正是从"没人知道 SW 在干什么"开始的。
+     * 每次 load 都 reg.update() 一次，配合 sw.js 的 network-first，装了新版就能真拿到新版。 */
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function () { /* ignore */ });
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          if (reg && reg.update) reg.update();
+        }).catch(function (e) {
+          console.warn('[sw] Service Worker 注册失败：' + ((e && (e.message || e.name)) || e));
+        });
       });
     }
   }

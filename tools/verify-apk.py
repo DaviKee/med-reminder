@@ -62,9 +62,11 @@ def main():
     backup = read('assets/public/js/backup.js')
     css = read('assets/public/css/app.css')
     html = read('assets/public/index.html')
+    sw = read('assets/public/sw.js')
 
     APP, NOTIFY, PHOTO, CSS = strip_js(app), strip_js(notify), strip_js(photo), strip_css(css)
     BACKUP = strip_js(backup)
+    SW = strip_js(sw)
 
     print('产物: %s' % os.path.basename(apk))
     print('      %.2f MB   MD5=%s'
@@ -74,8 +76,10 @@ def main():
     print()
 
     fails = []
+    total = [0]
 
     def check(group, name, cond, extra=''):
+        total[0] += 1          # 自动计数：手工维护的项数迟早会和实际对不上
         ok = bool(cond)
         print('  %-26s %s%s' % (name, 'OK ' if ok else '!! ', extra if not ok else ''))
         if not ok:
@@ -96,7 +100,8 @@ def main():
 
     print()
     print('=== 资源与源一致（构建没吃到旧文件）===')
-    for name in ['js/app.js', 'js/notify.js', 'js/photo.js', 'js/backup.js', 'css/app.css', 'index.html']:
+    for name in ['js/app.js', 'js/notify.js', 'js/photo.js', 'js/backup.js',
+                 'css/app.css', 'index.html', 'sw.js']:
         src = os.path.join(WEB, name)
         zp = 'assets/public/' + name
         ok = hashlib.md5(open(src, 'rb').read()).hexdigest() == hashlib.md5(z.read(zp)).hexdigest()
@@ -168,6 +173,21 @@ def main():
         ('D-1 存储可见', 'storageError = {' in APP),
         ('权限卡状态驱动', 'isBlocked(after)' in APP),
         ('插件 JS 随包', len([x for x in z.namelist() if 'assets/public/vendor/' in x]) >= 5),
+        # H-1 / H-2（v1.4.2）
+        ('H-1-判定走 needRebuildDoses',
+         'function needRebuildDoses(prev, next)' in APP
+         and 'if (needRebuildDoses(prev, next)) rebuildTodayDoses(m);' in APP),
+        ('H-1-含"固定模式时刻变了"这一支',
+         "next.mode === 'fixed') return !sameTimes(prev.times, next.times);" in APP),
+        ('H-1-旧判定已消失', 'if (modeChanged || intervalChanged) rebuildTodayDoses' not in APP),
+        ('H-2-sw 走 network-first',
+         'function isShellRequest(req, url)' in SW
+         and '.addAll(' not in SW
+         and re.search(r'isShellRequest\(req, url\)[\s\S]{0,600}?fetch\(req\)\.then', SW) is not None),
+        ('H-2-预缓存含照片/备份/插件',
+         all(x in SW for x in ["'./js/photo.js'", "'./js/backup.js'", "'./vendor/plugin-camera.js'"])),
+        ('H-2-注册失败不静默',
+         "serviceWorker.register('sw.js').then" in APP and "console.warn('[sw]" in APP),
         ('假状态栏已删', 'statusbar' not in html),
     ]
     for name, cond in regress:
@@ -179,7 +199,7 @@ def main():
         for f in fails:
             print('  - ' + f)
         sys.exit(1)
-    print('全部通过（%d 项）' % (len(regress) + 6))
+    print('全部通过（%d 项）' % total[0])
 
 
 if __name__ == '__main__':

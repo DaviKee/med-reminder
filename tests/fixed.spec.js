@@ -47,6 +47,7 @@ const HEADERS = [
   'function fmtDate(d)', 'function todayKey()', 'function todayDoses()', 'function medById(id)',
   'function minOfDay(ms)', 'function intervalLabel(v)', 'function minToStr(m)',
   'function medMode(m)', 'function normTimes(arr)', 'function timeInputToMin(v)',
+  'function sameTimes(a, b)', 'function needRebuildDoses(prev, next)',
   'function medScheduleLabel(m)', 'function reindexMed(medId)',
   'function ensureFixedDoses()', 'function rebuildTodayDoses(m)',
   'function rollForward(dose, takenMs)', 'function markTaken(dose, takenMs)'
@@ -316,7 +317,16 @@ console.log('=== G. 源码级接线（防改回去）===');
   t('★ 启动时预生成固定时刻', APP.indexOf('ensureFixedDoses();') >= 0, '启动没接');
   t('★ 跨天时重新预生成', /todayKey\(\) !== lastDay[\s\S]{0,220}ensureFixedDoses\(\)/.test(APP), '跨天没接');
   t('★ 保存成固定模式后立刻生成', /if \(isFixed\) ensureFixedDoses\(\);/.test(APP), '保存后没接');
-  t('改设置后重排今天', /modeChanged \|\| intervalChanged\) rebuildTodayDoses\(m\)/.test(APP), '没重排');
+  /* ⚠️ 这一条原来写的是
+   *      /modeChanged \|\| intervalChanged\) rebuildTodayDoses\(m\)/
+   *  —— 它把 **H-1 这个 bug 本身**钉成了"正确接线"：固定模式下这两个条件恒为 false，
+   *  于是"只改时刻"永远不重排。测试锁住错代码，比没有测试更危险。
+   *  改为断言真正的判定入口 + 判定里确实含有"时刻变了"这一支。 */
+  t('★ H-1 重排判定走 needRebuildDoses', /if \(needRebuildDoses\(prev, next\)\) rebuildTodayDoses\(m\)/.test(APP), '没接或已回退');
+  t('★ H-1 判定含「固定模式时刻变了」这一支',
+    /next\.mode === 'fixed'\) return !sameTimes\(prev\.times, next\.times\)/.test(APP), '缺时刻比较');
+  t('★ 旧写法 modeChanged || intervalChanged 已消失（防回退）',
+    !/if \(modeChanged \|\| intervalChanged\) rebuildTodayDoses/.test(APP), '旧写法又回来了');
   t('★ 保存前的校验在改数据之前（不会改一半）',
     /normTimes\(fixedTimes\)[\s\S]{0,120}请至少添加一个服药时刻[\s\S]{0,600}m\.mode = medModeDraft/.test(APP),
     '校验顺序不对');
@@ -340,6 +350,58 @@ console.log('=== G. 源码级接线（防改回去）===');
   t('时刻输入框有 aria-label', /data-ti="'\s*\+\s*i\s*\+\s*'"[\s\S]{0,140}aria-label="第/.test(APP) ||
     APP.indexOf('个服药时刻') >= 0, '缺');
   t('删除时刻按钮有 aria-label', APP.indexOf('个时刻') >= 0, '缺');
+}
+
+console.log('');
+console.log('=== H. H-1 回归：固定模式「只改时刻」也必须重排 ===');
+{
+  /* 判定逻辑已抽成纯函数 needRebuildDoses，可以直接把它当判定矩阵跑 ——
+   * 比走点击流程间接测可靠得多（点击流程需要整套 DOM 桩，且难定位失败原因）。
+   * 注意入参约定：times 必须是 normTimes 归一化过的（排序+去重）。 */
+  const SB = makeEnv({ meds: [] }).sandbox;
+  const NT = SB.normTimes, D = SB.needRebuildDoses;
+
+  const iv = n => ({ mode: 'interval', times: [], interval: n });
+  const fx = (...ts) => ({ mode: 'fixed', times: NT(ts), interval: 8 });
+
+  t('★ fixed 只改时刻 → 要重排（H-1 本体）', D(fx(420, 1260), fx(480, 1260)) === true, '判成不用重排 —— H-1 复发');
+  t('fixed 时刻未变（书写顺序不同）→ 不重排', D(fx(1260, 420), fx(420, 1260)) === false, '多排了一次');
+  t('fixed 时刻未变（含重复项）→ 不重排', D(fx(420, 420, 1260), fx(420, 1260)) === false, '多排了一次');
+  t('fixed 增加一个时刻 → 要重排', D(fx(420), fx(420, 1260)) === true, '漏了');
+  t('fixed 删掉一个时刻 → 要重排', D(fx(420, 1260), fx(420)) === true, '漏了');
+  t('fixed 时刻整体换掉 → 要重排', D(fx(420), fx(1260)) === true, '漏了');
+  t('interval 间隔变了 → 要重排', D(iv(8), iv(6)) === true, '漏了');
+  t('interval 间隔没变 → 不重排', D(iv(8), iv(8)) === false, '多排了一次');
+  t('★ interval → fixed → 要重排', D(iv(8), fx(420)) === true, '漏了');
+  t('★ fixed → interval → 要重排', D(fx(420), iv(8)) === true, '漏了');
+
+  /* 端到端：真实 rebuildTodayDoses 跑一遍「只改时刻」的用户场景：
+   * 早上 08:00 那次已打卡，随后把时刻表从 [08:00, 21:00] 改成 [09:00, 21:00]。 */
+  const e = makeEnv({
+    meds: [{ id: 'm1', name: 'A', interval: 8, mode: 'fixed', times: [480, 1260] }],
+    doses: { [TODAY]: [
+      { id: 'a', medId: 'm1', time: 480, status: 'taken', takenAt: 1, idx: 0, total: 2 },
+      { id: 'b', medId: 'm1', time: 1260, status: 'pending', idx: 1, total: 2 }
+    ] }
+  });
+  const med = e.S.meds[0];
+  const prev = { mode: 'fixed', times: e.sandbox.normTimes(med.times), interval: med.interval };
+  const nextTimes = e.sandbox.normTimes([540, 1260]);
+  t('真实数据上判定为要重排',
+    e.sandbox.needRebuildDoses(prev, { mode: 'fixed', times: nextTimes, interval: med.interval }) === true, '');
+
+  med.times = nextTimes;
+  e.sandbox.rebuildTodayDoses(med);
+  const l = e.S.doses[TODAY].slice().sort((x, y) => x.time - y.time);
+  eq('★ 已打卡的 480 保留 + 新表排 540 / 1260', l.map(d => d.time), [480, 540, 1260]);
+  t('★ 已打卡那条仍是 taken 且时刻未被动（480）',
+    l.some(d => d.id === 'a' && d.status === 'taken' && d.time === 480),
+    JSON.stringify(l.map(d => d.id + ':' + d.time + '/' + d.status)));
+  t('新排两条是 pending', l.filter(d => d.status === 'pending').length === 2,
+    JSON.stringify(l.map(d => d.status)));
+  t('★ 旧 pending（1260 那条 b）的系统通知被撤 —— 新通知由随后的 save() 统一登记',
+    e.cancelled.indexOf('b') >= 0, JSON.stringify(e.cancelled));
+  t('没有多撤（已打卡那条不受影响）', e.cancelled.length === 1, JSON.stringify(e.cancelled));
 }
 
 console.log('');

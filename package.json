@@ -4,6 +4,7 @@
   "private": true,
   "description": "定时服药提醒 — 打卡制排程 + 后台本地通知",
   "scripts": {
+    "test": "node tests/run-all.js",
     "sync": "cap sync",
     "android": "cap open android"
   },
