@@ -85,6 +85,34 @@ function putInCache(req, res) {
   return res;
 }
 
+/* network-first：拿得到就用新的（并回填缓存）；拿不到才退回缓存。
+ * 这是修「装了新版仍是旧代码」的关键一步。
+ *
+ * ⚠️ **必须带超时**：纯 network-first 在网络"半死"（连得上但不回包、或门户劫持）时
+ * 会让启动一直等下去 —— 表现是白屏/卡住。超时后先用缓存把界面撑起来，
+ * 网络那一份回来后再悄悄回填，下次就快了。 */
+var NET_TIMEOUT_MS = 1500;
+function networkFirst(req) {
+  return new Promise(function (resolve) {
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      /* 超时 → 先用缓存顶上（拿不到就兜底 index.html） */
+      caches.match(req).then(function (hit) { resolve(hit || caches.match('./index.html')); });
+    }, NET_TIMEOUT_MS);
+    fetch(req).then(function (res) {
+      if (settled) { putInCache(req, res); return; }   // 已用缓存回过了：后台补写，下次更快
+      settled = true; clearTimeout(timer);
+      resolve(putInCache(req, res));
+    }).catch(function () {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      caches.match(req).then(function (hit) { resolve(hit || caches.match('./index.html')); });
+    });
+  });
+}
+
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
@@ -94,16 +122,7 @@ self.addEventListener('fetch', function (e) {
   if (url.origin !== self.location.origin) return;   // 跨域（远程图标等）不插手
 
   if (isShellRequest(req, url)) {
-    /* network-first：拿得到就用新的（并回填缓存）；拿不到才退回缓存。
-     * 这是修「装了新版仍是旧代码」的关键一步。 */
-    e.respondWith(
-      fetch(req).then(function (res) { return putInCache(req, res); })
-        .catch(function () {
-          return caches.match(req).then(function (hit) {
-            return hit || caches.match('./index.html');
-          });
-        })
-    );
+    e.respondWith(networkFirst(req));
     return;
   }
 

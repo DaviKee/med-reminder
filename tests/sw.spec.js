@@ -98,6 +98,8 @@ function makeEnv(opts) {
   function fetchStub(r) {
     const u = r && (r.__url || r);
     fetchCalls.push(u);
+    /* 「半死网络」：连得上但永远不回包 —— 没有超时的话界面会一直等下去 */
+    if (opts.fetchHang) return new Promise(function () {});
     if (opts.fetchAllFail) return Promise.reject(new Error('offline'));
     if (opts.fetchFail && opts.fetchFail.indexOf(u) >= 0) return Promise.reject(new Error('offline'));
     const body = (opts.networkBody && opts.networkBody[u]) || ('net:' + u);
@@ -113,7 +115,11 @@ function makeEnv(opts) {
 
   const sandbox = { self: selfStub, caches, fetch: fetchStub,
                     console: { warn: m => warns.push(String(m)), log() {}, error() {} },
-                    URL, Promise, Set, Map };
+                    URL, Promise, Set, Map,
+                    /* Service Worker 全局里有 setTimeout/clearTimeout（超时回退要用）。
+                     * 第一版桩漏了它们 → 报 "setTimeout is not defined" ——
+                     * 又是桩不全，不是源码错。 */
+                    setTimeout, clearTimeout };
   vm.createContext(sandbox);
   vm.runInContext(SW_SRC, sandbox);
 
@@ -297,12 +303,45 @@ function makeEnv(opts) {
       'fetch 次数 ' + e.fetchCalls.length + '，body=' + (r2.res && r2.res.body));
   }
 
+  /* ---------------- D2. 超时回退（网络半死时不能卡住） ---------------- */
+  console.log('');
+  console.log('=== D2. network-first 必须带超时（网络挂起 → 回退缓存，不能白屏干等） ===');
+  {
+    const e = makeEnv({ fetchHang: true });
+    e.seed(e.CACHE, '/js/app.js', 'CACHED');
+    const t0 = Date.now();
+    const r = await e.fireFetch(mkReq('/js/app.js'));
+    const dt = Date.now() - t0;
+    t('★ 网络挂起时回退到缓存（不是一直等）',
+      r.res && r.res.body === 'CACHED', '拿到 ' + (r.res && r.res.body));
+    t('★ 超时在合理范围内（< 3s）', dt < 3000, dt + 'ms');
+  }
+  {
+    const e = makeEnv({ fetchHang: true, });
+    e.seed(e.CACHE, './index.html', 'SHELL');
+    const r = await e.fireFetch(mkReq('/js/nothing.js'));
+    t('★ 超时且无缓存 → 兜底 index.html',
+      r.res && r.res.body === 'SHELL', '拿到 ' + (r.res && r.res.body));
+  }
+  {
+    /* 网络正常时不应该白等超时 —— 否则每次加载都慢 1.5 秒 */
+    const e = makeEnv();
+    const t0 = Date.now();
+    const r = await e.fireFetch(mkReq('/js/app.js'));
+    const dt = Date.now() - t0;
+    t('★ 网络正常时立刻返回，不白等超时',
+      r.res && r.res.body === 'net:/js/app.js' && dt < 300, dt + 'ms');
+  }
+
   /* ---------------- E. 源码级接线（防改回去）---------------- */
   console.log('');
   console.log('=== E. 源码级接线（防改回去）===');
   {
-    t('★ fetch 里对 shell 用 network-first（fetch 在 caches.match 之前）',
-      /isShellRequest\(req, url\)[\s\S]{0,600}?fetch\(req\)\.then[\s\S]{0,300}?caches\.match\(req\)/.test(SW),
+    t('★ shell 分支走 networkFirst（而不是直接 cache-first）',
+      /isShellRequest\(req, url\)\) \{\s*e\.respondWith\(networkFirst\(req\)\);/.test(SW),
+      'shell 分支没走 networkFirst');
+    t('★ networkFirst 内部是「先 fetch，失败或超时才 caches.match」',
+      /fetch\(req\)\.then[\s\S]{0,400}?catch\(function \(\) \{[\s\S]{0,300}?caches\.match\(req\)/.test(SW),
       '顺序不对');
     t('★ 旧写法「cache-first 无条件先 caches.match」已消失',
       !/e\.respondWith\(\s*caches\.match\(e\.request\)/.test(SW), '旧写法又回来了');
@@ -311,6 +350,11 @@ function makeEnv(opts) {
     t('app.js：注册失败不再静默',
       /serviceWorker\.register\('sw\.js'\)[\s\S]{0,300}console\.warn/.test(APP), '还是静默的');
     t('app.js：注册成功后调 update()', /register\('sw\.js'\)\.then[\s\S]{0,80}reg\.update\(\)/.test(APP), '缺');
+    t('★ shell 的 network-first 带超时（NET_TIMEOUT_MS 存在且被用上）',
+      /var NET_TIMEOUT_MS = \d+;/.test(SW) && /function networkFirst\(req\)/.test(SW)
+      && /e\.respondWith\(networkFirst\(req\)\)/.test(SW), '缺超时');
+    t('超时分支会回退缓存并兜底 index.html',
+      /setTimeout\(function \(\) \{[\s\S]{0,400}?caches\.match\(req\)/.test(SW), '缺回退');
     t('app.js 不再有空的 catch 吞掉注册失败',
       !/register\('sw\.js'\)\.catch\(function \(\) \{ \/\* ignore \*\/ \}\)/.test(APP), '还在吞');
   }

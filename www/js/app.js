@@ -22,7 +22,7 @@
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.2';
+  var APP_VERSION = '1.4.3';
   var APP_BUILD = '2026-09-24';
 
   /* ---------------- date / time helpers ---------------- */
@@ -386,6 +386,15 @@
     return S.meds.filter(function (m) {
       return LEGACY_SAMPLE_NAMES.indexOf(m.name) >= 0 && !used[m.id];
     });
+  }
+
+  /* 删除识别出来的示例药品（用户在这张卡上点过才调用，不是自动清） */
+  function dropLegacySamples() {
+    var ids = legacySampleMeds().map(function (m) { return m.id; });
+    if (!ids.length) return;
+    S.meds = S.meds.filter(function (m) { return ids.indexOf(m.id) < 0; });
+    save(); render();
+    toast('已删除 ' + ids.length + ' 个示例药品');
   }
 
   function todayDoseCount(medId) {
@@ -1266,19 +1275,9 @@
 
     host.innerHTML = html;
 
-    var add = $('#btnAdd');
-    if (add) add.onclick = function () { openSheet(null); };
-    var dl = $('#btnDropLegacy');
-    if (dl) dl.onclick = function () {
-      var ids = legacySampleMeds().map(function (m) { return m.id; });
-      if (!ids.length) return;
-      S.meds = S.meds.filter(function (m) { return ids.indexOf(m.id) < 0; });
-      save(); render();
-      toast('已删除 ' + ids.length + ' 个示例药品');
-    };
-    $$('.meditem').forEach(function (el) {
-      el.onclick = function () { openSheet(el.getAttribute('data-med')); };
-    });
+    /* ⚠️ 这里**故意不**逐个绑 onclick —— 改由 boot() 里的一次性事件委托处理。
+     * 原因见 boot 里那段注释：render() 会把视图 innerHTML 整个重建，
+     * 手指落下到 click 之间只要重绘一次，正在点的元素就被换掉 → 点击被吞。 */
   }
 
   /* ---------------- render: RECORDS ---------------- */
@@ -1585,6 +1584,10 @@
   function sheetSaveReset() { sheetSaveDone = false; }
 
   function openSheet(medId) {
+    /* 已经开着就直接忽略。连点「+」时后续的点击没有意义，只会白跑一轮
+     * renderPreview + 抢焦点，把 App 拖卡（2026-09-24 反馈：点不动就狂点）。
+     * 浮层是模态的，盖着遮罩也点不到别处，所以不存在"想换成另一个药"的场景。 */
+    if ($('#sheetMed').classList.contains('show')) return;
     sheetSaveReset();                 // 每次打开浮层都是一个新会话
     editingId = medId;
     var med = medId ? medById(medId) : null;
@@ -1660,6 +1663,64 @@
       try { lastFocus.focus(); } catch (e) { /* ignore */ }
     }
     lastFocus = null;
+  }
+
+  /* ---------------- Android 返回键 / 侧滑返回 ----------------
+   * 此前**完全没有处理返回键**（全项目搜不到一处 `App.addListener('backButton')`）。
+   * 表现：侧滑返回没反应；浮层开着时更出不来，只能杀掉 App 重开（2026-09-24 反馈）。
+   *
+   * 优先级（按用户直觉）：关浮层 → 切回「今天」→ 退出 App。
+   * ⚠️ 提醒弹窗（dlgRemind）与确认框（dlgConfirm）**不许**被返回键抹掉 ——
+   *    前者要求明确选「已服用 / 稍后」，后者要用户明确回答；
+   *    此时**吃掉这次返回**（既不关也不退出），否则误按一次就直接退出 App。
+   *
+   * 判定抽成纯函数 `backAction(s)`，便于单测（DOM 状态由调用方拍好再传进来）。 */
+  function backAction(s) {
+    if (s.closableDlg) return 'close-dlg';
+    if (s.sheetOpen) return 'close-sheet';
+    if (s.anyDlg) return 'consume';
+    if (s.tab !== 'today') return 'go-today';
+    return 'exit';
+  }
+
+  function exitApp() {
+    var A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if (A && A.exitApp) { A.exitApp(); return; }
+    if (navigator.app && navigator.app.exitApp) { navigator.app.exitApp(); return; }   // 老 Cordova
+    /* 浏览器 / PWA 没有「退出」这个概念，什么都不做 */
+  }
+
+  /* 可被「一键关掉」的浮层。提醒弹窗与确认框不在其中 —— 见 backAction 的注释。 */
+  function closableDialogs() {
+    return $$('.dlg-wrap.show').filter(function (el) {
+      return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean'
+        || el.id === 'dlgView' || el.id === 'dlgPhoto';
+    });
+  }
+  function closeTopDialog() {
+    var closable = closableDialogs();
+    if (!closable.length) return false;
+    var top = closable[closable.length - 1];
+    /* 关掉拍照对话框 = 放弃这次打卡。必须清掉「待恢复」标记，
+     * 否则下次启动会被误当成「拍照途中被杀」而自动补一次打卡。 */
+    if (top.id === 'dlgPhoto') { pendingShot = null; clearPendingShot(); }
+    restoreArmed = false;
+    closeDlg(top);
+    return true;
+  }
+
+  function handleBackButton() {
+    var a = backAction({
+      closableDlg: closableDialogs().length > 0,
+      sheetOpen: $('#sheetMed').classList.contains('show'),
+      anyDlg: $$('.dlg-wrap.show').length > 0,
+      tab: currentTab
+    });
+    if (a === 'close-dlg') { closeTopDialog(); return; }
+    if (a === 'close-sheet') { closeSheet(); return; }
+    if (a === 'consume') return;                       // 提醒弹窗在，不退出
+    if (a === 'go-today') { setTab('today'); return; }
+    exitApp();
   }
 
   /* Tab 焦点陷阱。返回 true 表示已处理（调用方不用再管）。
@@ -2146,6 +2207,11 @@
         else next = 'unknown';
 
         if (next !== notifyPerm) notifyPerm = next;
+        /* ⚠️ 有浮层开着时**不要**重绘：上面那句 render() 会把三个视图的 innerHTML
+         * 整个重建，正在输入/正在点的元素会被换掉（"点了没反应"的主要来源之一）。
+         * 代价：权限卡可能晚一点才更新 —— 而浮层盖着时本来就看不见它，
+         * 之后任何一次操作都会重绘。 */
+        if (openCount > 0) return;
         render();
       });
       return;
@@ -2609,24 +2675,38 @@
     };
     $('#dataApply').onclick = applyRestore;
 
+    /* ---- 药品页：事件委托（只绑一次、永久有效） ----
+     * 为什么不用「每次 render 后逐个 onclick」：`render()` 是
+     * `renderToday(); renderMeds(); renderRecords();` —— 一次把三个视图的 innerHTML
+     * 整个重建。手指落下（pointerdown/touchstart）到 click 之间只要重绘一次，
+     * **正在点的那个元素就被换掉了**，click 落在已脱离文档的节点上，什么都不会发生。
+     * 用户看到的就是「点了没反应」，于是连点（2026-09-24 反馈）。
+     * 而 refreshPerm 每 5 秒轮询一次、签名一变就 render() —— 这个重绘**不受用户控制**。
+     * 委托绑在 document 上，天然免疫重绘；项目里存储卡早就用了同一招。 */
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var item = t.closest('[data-med]');
+      if (item) { openSheet(item.getAttribute('data-med')); return; }
+      if (t.closest('#btnAdd')) { openSheet(null); return; }
+      if (t.closest('#btnDropLegacy')) { dropLegacySamples(); return; }
+    });
+
+    /* ---- Android 返回键 / 侧滑返回 ----
+     * 不注册这个监听，侧滑返回就没反应；浮层开着时更是出不来。
+     * 注册后由 Capacitor 把返回动作交给我们，语义见 backAction()。 */
+    var CapApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if (CapApp && CapApp.addListener) {
+      CapApp.addListener('backButton', function () { handleBackButton(); });
+    }
+
     /* Esc 关闭浮层。只对「非打断式」浮层生效：
      * 提醒弹窗仍要求用户明确选择「已服用 / 稍后」，不能被一键抹掉。 */
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Tab') { trapTab(e); return; }
       if (e.key !== 'Escape' && e.key !== 'Esc') return;
-      var closable = $$('.dlg-wrap.show').filter(function (el) {
-        return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean'
-          || el.id === 'dlgView' || el.id === 'dlgPhoto';
-      });
-      if (closable.length) {
-        var top = closable[closable.length - 1];
-        /* Esc 关掉拍照对话框 = 放弃这次打卡。必须清掉「待恢复」标记，
-         * 否则下次启动会被误当成「拍照途中被杀」而自动补一次打卡。 */
-        if (top.id === 'dlgPhoto') { pendingShot = null; clearPendingShot(); }
-        restoreArmed = false;
-        closeDlg(top);
-        return;
-      }
+      /* 与返回键共用同一套「关最上层」逻辑 */
+      if (closeTopDialog()) return;
       if ($('#sheetMed').classList.contains('show')) closeSheet();
     });
 
