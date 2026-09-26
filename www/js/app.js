@@ -28,8 +28,8 @@ import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNo
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.3';
-  var APP_BUILD = '2026-09-24';
+  var APP_VERSION = '1.4.4';
+  var APP_BUILD = '2026-09-26';
 
   /* 间隔的显示（F-1）。
    * interval 以「小时」为单位存储，允许 0.5 的整数倍（0.5 = 30 分钟）。
