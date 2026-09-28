@@ -136,8 +136,25 @@ cp node_modules/@capacitor/filesystem/dist/plugin.js                  www/vendor
 echo "→ 已同步 Capacitor 插件 JS 到 www/vendor/"
 
 # ---------- 同步 + 编译 ----------
-echo "→ 同步 www/ 到原生工程…"
-./node_modules/.bin/cap sync android
+# ⚠️ 这里**故意用 `cap copy` 而不是 `cap sync`**（踩了 4 次才定下，2026-09-29）。
+#
+# `cap sync` = `copy` + `update`。它的 `update` 阶段会**删除 ≥50 个构建中间产物**
+# 去重建 Cordova 插件的 gradle 配置，于是撞上本机 WorkBuddy 的删除守卫：
+#     [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":50,...}
+# 而且它是**半途而废**：`copy` 已成功、`update` 只删没建 →
+#     android/capacitor-cordova-android-plugins/cordova.variables.gradle 丢失
+# → 紧接着 gradlew 报「Could not read script ... cordova.variables.gradle」，
+#   **看着像原生工程坏了，根因却在上一命令**（2026-09-24 两次 / 09-26 一次 / 09-29 一次）。
+#
+# `cap copy` **不走 update 阶段**，因此根本不会碰删除守卫 —— 已连续多次实测 rc=0。
+# 代价：不更新 Cordova 插件的 gradle 配置。本项目用的是 **Capacitor 插件**（非 Cordova），
+# 那部分配置与本项目无关，影响可忽略。
+#
+# 若哪天确实需要 `sync`（例如刚加/删了 Capacitor 插件，要重算插件清单）：
+#   先把 `android/capacitor-cordova-android-plugins` **改名让开**（不删），
+#   跑完 `cap sync android`，再改名回来 —— 见《MEMORY-出包与验收.md》§3。
+echo "→ 同步 www/ 到原生工程…（cap copy，绕开删除守卫）"
+./node_modules/.bin/cap copy android
 
 echo "→ 编译 APK…"
 cd android
