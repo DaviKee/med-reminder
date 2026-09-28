@@ -20,7 +20,8 @@ find_java() {
            "C:/Program Files/Java"/jdk-17* \
            "C:/Program Files/Eclipse Adoptium"/jdk-17* \
            "C:/Program Files/Android/Android Studio/jbr" \
-           "C:/Users/davik/.workbuddy/binaries/android/jdk17"; do
+           "$HOME/.workbuddy/binaries/android/jdk17" \
+           "C:/DevEnv/jdk-17"; do
     [ -x "$p/bin/java" ] && { echo "$p"; return; }
   done
 }
@@ -28,8 +29,9 @@ find_java() {
 find_sdk() {
   if [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME/platforms" ]; then echo "$ANDROID_HOME"; return; fi
   if [ -n "$ANDROID_SDK_ROOT" ] && [ -d "$ANDROID_SDK_ROOT/platforms" ]; then echo "$ANDROID_SDK_ROOT"; return; fi
-  for p in "$LOCALAPPDATA/Android/Sdk" "C:/Users/davik/AppData/Local/Android/Sdk" \
-           "C:/Android" "C:/Users/davik/.workbuddy/binaries/android/sdk"; do
+  # 用 $LOCALAPPDATA / $HOME 而不是写死用户名 —— 两台机器都各自解析正确
+  for p in "$LOCALAPPDATA/Android/Sdk" "$HOME/AppData/Local/Android/Sdk" \
+           "C:/Android" "$HOME/.workbuddy/binaries/android/sdk"; do
     [ -d "$p/platforms" ] && { echo "$p"; return; }
   done
 }
