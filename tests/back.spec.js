@@ -103,7 +103,9 @@ console.log('=== D. 点击被吞的三个修复（同一批）===');
   t('示例药删除改成具名函数（供委托调用）',
     APP.indexOf('function dropLegacySamples()') >= 0, '缺');
   t('★ refreshPerm 有浮层时不重绘',
-    /if \(openCount > 0\) return;\s*\n\s*render\(\);/.test(APP), '缺守卫');
+    /if \(isOverlayOpen\(\)\) return;\s*\n\s*render\(\);/.test(APP), '缺守卫');
+  /* 自检：上面那条断言的名字必须真的存在，否则正则只是在验一个不存在的写法 */
+  t('自检：isOverlayOpen 确实定义在模块里', APP.indexOf('function isOverlayOpen()') >= 0, '名字对不上');
 }
 
 console.log('');

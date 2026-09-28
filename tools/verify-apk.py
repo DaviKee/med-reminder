@@ -66,7 +66,8 @@ def main():
     # 2026-09-28 架构重构：app 层已是多个 ES module。
     # **所有源码级检查都在模块图的拼接文本上做**（与 tests/sources.js 同一套思路）——
     # 否则函数一搬家，检查就会因为「不在 app.js 里」而误报，而那些检查本来是对的。
-    APP_MODULES = ['js/core/util.js', 'js/core/store.js', 'js/core/schedule.js', 'js/app.js']
+    APP_MODULES = ['js/core/util.js', 'js/core/store.js', 'js/core/schedule.js',
+                   'js/ui/overlay.js', 'js/app.js']
     app = read_opt('assets/public/js/app.js')
     app_modules = [read_opt('assets/public/' + n) for n in APP_MODULES]
     notify = read('assets/public/js/notify.js')
@@ -114,6 +115,7 @@ def main():
     print()
     print('=== 资源与源一致（构建没吃到旧文件）===')
     for name in ['js/app.js', 'js/core/util.js', 'js/core/store.js', 'js/core/schedule.js',
+                 'js/ui/overlay.js',
                  'js/notify.js', 'js/photo.js', 'js/backup.js',
                  'css/app.css', 'index.html', 'sw.js']:
         src = os.path.join(WEB, name)
@@ -197,10 +199,10 @@ def main():
         ('插件 JS 随包', len([x for x in z.namelist() if 'assets/public/vendor/' in x]) >= 5),
         # 架构重构（2026-09-28 起）：core 模块必须随包，且 index.html 要显式声明
         # —— SW 的预缓存清单靠解析 index.html 得到，而 import 是隐式的、解析不到。
-        ('架构-core 模块随包',
+        ('架构-app 模块随包（core + ui）',
          all(('assets/public/' + m) in z.namelist()
              for m in APP_MODULES)),
-        ('架构-index.html 声明了全部 core 模块',
+        ('架构-index.html 声明了全部 app 模块',
          all(('href="' + m + '"') in html for m in APP_MODULES if m.endswith('.js')
              and '/js/' in m)),
         # H-1 / H-2（v1.4.2）
@@ -226,7 +228,7 @@ def main():
         ('药品页旧绑定已移除', "$$('.meditem').forEach" not in APP),
         ('openSheet 防重复打开',
          "if ($('#sheetMed').classList.contains('show')) return;" in APP),
-        ('轮询不打断浮层', 'if (openCount > 0) return;' in APP),
+        ('轮询不打断浮层', 'if (isOverlayOpen()) return;' in APP),
         ('sw 超时回退', 'NET_TIMEOUT_MS' in SW and 'networkFirst(req)' in SW),
         ('保存有防重入守卫',
          'function sheetSaveBegin()' in APP and 'if (!sheetSaveBegin()) return;' in APP),

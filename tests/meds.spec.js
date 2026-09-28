@@ -176,7 +176,7 @@ console.log('=== E. 删除必须二次确认（源码级接线）===');
   t('确认框的确定 / 取消都接了线',
     APP.indexOf("$('#confirmOk').onclick") >= 0 && APP.indexOf("$('#confirmCancel').onclick") >= 0,
     '按钮未绑定');
-  t('取消时清掉回调，避免残留', /confirmCancel'\)\.onclick[\s\S]{0,80}confirmCb = null/.test(APP),
+  t('取消时清掉回调，避免残留', /confirmCancel'\)\.onclick[\s\S]{0,80}clearConfirmCb\(\)/.test(APP),
     '取消未清回调');
   t('index.html 有确认框骨架',
     HTML_SRC.indexOf('id="dlgConfirm"') >= 0 && HTML_SRC.indexOf('id="confirmOk"') >= 0
