@@ -9,10 +9,25 @@ import { $, $$, pad, uid, esc, fmtDate, nowMin, minToStr, minOfDay,
  * 其余代码一字未改。 */
 
 
-import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNotified, cleanTargets, cleanPreview, readJSON, writeJSON, photoStats, setPhotoStats } from './core/store.js';
+import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNotified, cleanTargets, cleanPreview, readJSON, writeJSON, photoStats, setPhotoStats, storageError, save, setSaveHooks } from './core/store.js';
 
 (function () {
   'use strict';
+
+  /* ---------------- 上层钩子注入（core 层不许反向 import） ----------------
+   * save() 住在 core/store.js，但它写完盘要做三件属于「上层」的事：
+   *   ① 刷新存储告警卡片   ② 同步系统通知   ③ 触发自动备份
+   * 把这三件事注册进去 —— **必须在任何一次 save() 之前**，所以放在最前面。
+   * 三个被引用的函数都是本 IIFE 内的函数声明（hoisted），此处只是取引用、不调用。 */
+  setSaveHooks({
+    refresh: queueStorageRefresh,
+    notify: syncNotifications,
+    backup: function () {
+      if (window.MedAutoBackup) {
+        window.MedAutoBackup.schedule(function () { return JSON.stringify(buildBackup()); });
+      }
+    }
+  });
 
 
   /* ---------------- 版本号（单一来源） ----------------
@@ -133,42 +148,22 @@ import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNo
    * 对服药记录来说这比崩溃更糟：用户以为记录还在，其实最近的改动早已没了。
    *
    * 现在把失败做成**持续可见的状态**：只要写不进去，界面上就一直挂着，直到恢复。
-   *
-   * 一个关键事实（决定了告警文案）：setItem 是原子的，要么全写成功要么抛异常，
-   * 不会写一半。所以失败**不会损坏已存数据** —— 磁盘上仍是上一次成功写入的完整版本。
-   * 失败的含义是「最近的改动没存上」，不是「数据坏了」。 */
-  var storageError = null;        // null | { kind:'quota'|'other', msg, at }
+   * save() 与其失败语义见 core/store.js（2026-09-28 搬过去）——
+   * 本文件只保留**界面刷新**这一环；storageError 走 import 的活绑定读取，自动最新。 */
   var storageRefreshQueued = false;
 
 
   /* save() 会在 render 过程中被调用，不能同步再 render（会递归）—— 排队到下一轮事件循环。
-   * first 判断保证失败状态持续存在时不会反复排队，避免异步死循环。 */
+   * first 判断（在 store 内）保证失败状态持续存在时不会反复排队，避免异步死循环。 */
   function queueStorageRefresh() {
     if (storageRefreshQueued) return;
     storageRefreshQueued = true;
     setTimeout(function () { storageRefreshQueued = false; render(); }, 0);
   }
 
-  function save() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(S));
-      if (storageError) { storageError = null; queueStorageRefresh(); }  // 恢复后自动撤下告警
-    } catch (e) {
-      var first = !storageError;
-      storageError = {
-        kind: isQuotaError(e) ? 'quota' : 'other',
-        msg: (e && (e.name || e.message)) || '未知错误',
-        at: Date.now()
-      };
-      if (first) queueStorageRefresh();
-    }
-    syncNotifications();
-    /* 每次改动都往本地存一份（防抖 3 秒，写失败也不影响任何功能）。
-     * 传出去的是与手动导出**完全一致**的格式 —— 现有恢复流程能直接读回来。 */
-    if (window.MedAutoBackup) {
-      window.MedAutoBackup.schedule(function () { return JSON.stringify(buildBackup()); });
-    }
-  }
+  /* save() 已搬到 core/store.js（见顶部 import）。
+   * 它写完盘后通过 setSaveHooks() 注入的三个钩子回到本文件：
+   * 刷新存储告警 / 同步系统通知 / 触发自动备份 —— 注册见 IIFE 顶部。 */
 
 
 

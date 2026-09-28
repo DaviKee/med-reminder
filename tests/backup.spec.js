@@ -228,8 +228,15 @@ const namesIn = (fs, dir) => Array.from(fs.files.keys())
     t('★ index.html 引入了 backup.js', HTML.indexOf('js/backup.js') >= 0, '没引入');
     t('★ backup.js 在 app.js 之前加载',
       HTML.indexOf('js/backup.js') < HTML.indexOf('js/app.js'), '顺序反了');
-    t('★ save() 里挂上了自动备份（所以「每次保存」都覆盖到）',
-      /syncNotifications\(\);[\s\S]{0,320}MedAutoBackup\.schedule/.test(APP), '没挂');
+    /* 2026-09-28：save() 搬到了 core/store.js，自动备份改走 saveHooks.backup 钩子。
+     * 断言必须跟着改，而且要看**整条链**：
+     *   ① store 的 save() 每次都会调 saveHooks.backup()
+     *   ② app.js 把这个钩子接到了 MedAutoBackup.schedule 上
+     * 只看②会漏掉「save 压根没调钩子」；只看①会漏掉「钩子是个空函数」。 */
+    t('★ save() 每次都会触发备份钩子',
+      /saveHooks\.notify\(\);[\s\S]{0,200}saveHooks\.backup\(\);/.test(APP), '没挂钩子');
+    t('★ app.js 把备份钩子接到了 MedAutoBackup.schedule',
+      /backup: function \(\) \{[\s\S]{0,160}MedAutoBackup\.schedule/.test(APP), '钩子没接上');
     t('★ 传给备份的是与手动导出**同一个**格式（buildBackup）',
       /MedAutoBackup\.schedule\(function \(\) \{ return JSON\.stringify\(buildBackup\(\)\); \}\)/.test(APP), '格式不一致');
     t('记录页有自动备份卡', APP.indexOf('function autoBackupCardHtml(') >= 0 && APP.indexOf('AUTO · 自动备份') >= 0, '缺');

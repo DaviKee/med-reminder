@@ -5,6 +5,8 @@
  *
  * 依赖方向：本模块**只依赖 core/util**（最底层），不依赖 UI、不依赖通知层 ——
  * 只有这个方向立住了，store 才能被任何模块安全引用而不成环。
+ * 需要「写完盘再通知上层」的三件事，一律走 saveHooks 注入（见文件末尾），
+ * **不要**为了省事去 import app.js —— 那就成环了。
  */
 
 import { fmtDate, todayKey } from './util.js';   // cleanTargets 用到
@@ -105,3 +107,53 @@ export var photoStats = { files: 0, bytes: 0 };           // 异步刷新，供�
 /* ⚠️ photoStats 是**整体替换**（照片层写 `photoStats = s`），而 import 的绑定是只读的 ——
  * 外部必须走这个 setter，直接赋值会 TypeError。 */
 export function setPhotoStats(s) { photoStats = s; }
+
+
+/* ---------------- 持久化：写入 + 失败可见（D-1） ----------------
+ * 2026-09-28 从 app.js 搬来。save() 是「状态→磁盘」的**唯一出口**，
+ * 归 store 才符合依赖方向 —— 也因此 schedule 层才能直接调它而不反向依赖 app.js。
+ *
+ * 一个关键事实（决定了告警文案）：setItem 是原子的，要么全写成功要么抛异常，
+ * 不会写一半。所以失败**不会损坏已存数据** —— 磁盘上仍是上一次成功写入的完整版本。
+ * 失败的含义是「最近的改动没存上」，不是「数据坏了」。
+ *
+ * ⚠️ storageError 只由本文件**写**，外部一律**读**（UI 常驻告警卡）。
+ *    所以 export var 的**活绑定**就够用了 —— 外部直接 import 这个名字即可拿到最新值，
+ *    不需要 getter；但也**绝不能在外部重新赋值**（import 绑定只读，会 TypeError）。 */
+export var storageError = null;        // null | { kind:'quota'|'other', msg, at }
+
+/* save() 写完盘之后的**编排**属于上层（刷新告警 / 同步通知 / 触发自动备份）。
+ * core 层不允许反向 import 上层 → 由 app.js 启动时用 setSaveHooks() 注入。
+ * 默认空实现：单测里不需要任何桩就能直接调 save()。 */
+export var saveHooks = {
+  refresh: function () {},
+  notify: function () {},
+  backup: function () {}
+};
+export function setSaveHooks(h) {
+  if (!h) return;
+  if (h.refresh) saveHooks.refresh = h.refresh;
+  if (h.notify) saveHooks.notify = h.notify;
+  if (h.backup) saveHooks.backup = h.backup;
+}
+
+/* 每次改动都落盘。写入失败**不抛给调用方**（那会让用户的操作半途中断），
+ * 而是做成持续可见的状态（storageError），由 UI 常驻展示直到恢复。 */
+export function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(S));
+    if (storageError) { storageError = null; saveHooks.refresh(); }  // 恢复后自动撤下告警
+  } catch (e) {
+    var first = !storageError;
+    storageError = {
+      kind: isQuotaError(e) ? 'quota' : 'other',
+      msg: (e && (e.name || e.message)) || '未知错误',
+      at: Date.now()
+    };
+    if (first) saveHooks.refresh();
+  }
+  saveHooks.notify();
+  /* 每次改动都往本地存一份（防抖 3 秒，写失败也不影响任何功能）。
+   * 传出去的是与手动导出**完全一致**的格式 —— 现有恢复流程能直接读回来。 */
+  saveHooks.backup();
+}
