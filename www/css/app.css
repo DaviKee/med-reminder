@@ -41,7 +41,13 @@ button{font-family:inherit}
 }
 
 /* ---------- views ---------- */
-main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+/* 长 token（备份目录路径 / 插件版本号 / 插件报错里的路径）没有可断点：按 UAX #14，
+   `/` 与 `.` 都不是断行点，浏览器只在空白与 CJK 处断行 → 一整串不可断，会顶出卡片右边
+   （2026-09-28 真机：AUTO 卡的备份目录路径）。
+   `anywhere` 只在放不下时才在词内断（不像 `break-all` 见缝就断），对普通文本无害；
+   它还会影响 min-content 宽度 —— flex 子项里正需要这一点。
+   放在 main 上靠**继承**覆盖全部正文；`.dose-n` 那种刻意 nowrap+ellipsis 截断的不受影响。 */
+main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;overflow-wrap:anywhere}
 .view{display:none}
 .view.active{display:block}
 .stack{display:flex;flex-direction:column;gap:28px;padding:8px 20px 24px}

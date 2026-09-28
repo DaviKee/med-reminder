@@ -194,6 +194,9 @@ def main():
         ('A-2 44x44 命中区', '.icon-btn::after' in CSS and 'width:44px' in CSS),
         ('A-4 周点形状区分', '.dot.today::after' in CSS),
         ('A-5 reduced-motion', 'prefers-reduced-motion' in CSS),
+        # 布局：长 token 不许顶出卡片（2026-09-28 真机反馈：AUTO 卡的备份目录路径）
+        ('布局-正文允许长 token 断行', 'overflow-wrap:anywhere' in CSS),
+        ('布局-备份目录路径插了断行机会', "'/<wbr>'" in APP),
         ('D-1 存储可见', 'storageError = {' in APP),
         ('权限卡状态驱动', 'isBlocked(after)' in APP),
         ('插件 JS 随包', len([x for x in z.namelist() if 'assets/public/vendor/' in x]) >= 5),

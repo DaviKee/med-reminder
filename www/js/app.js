@@ -59,7 +59,7 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.6';
+  var APP_VERSION = '1.4.7';
   var APP_BUILD = '2026-09-28';
 
 
@@ -1743,7 +1743,12 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
       + '<span class="eyebrow">AUTO · 自动备份</span>'
       + '<p class="body">每次改动都会自动往手机里存一份完整数据，随时能找回来。</p>'
       + '<p class="hint">' + esc(line) + '</p>'
-      + '<p class="hint">位置：Android/data/com.medreminder.app/files/' + esc(A.DIR)
+      /* 目录是长 token —— `/` 与 `.` 都不是断行点，默认整串不拆，会顶出卡片右边
+       * （2026-09-28 真机反馈）。手工在每个 `/` 后插一个 <wbr>（零宽断行机会），
+       * 断行就落在目录分隔处，比让浏览器在任意字符处硬断好看得多。
+       * 先 esc 再插 <wbr>：`/` 不在 esc 的转义表里，先后无所谓，但先 esc 更稳妥。 */
+      + '<p class="hint">位置：'
+      + esc('Android/data/com.medreminder.app/files/' + A.DIR).replace(/\//g, '/<wbr>')
       + '（用电脑 USB 能看到）</p>'
       + '<p class="hint">⚠️ 卸载 App 会连这个目录一起删掉 —— <b>换手机或重装之前，'
       + '请先用上面「导出备份」另存一份到别处</b>。</p>'
