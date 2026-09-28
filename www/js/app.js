@@ -59,8 +59,8 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.8';
-  var APP_BUILD = '2026-09-28';
+  var APP_VERSION = '1.4.9';
+  var APP_BUILD = '2026-09-29';
 
 
 
@@ -1525,6 +1525,28 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
   var BACKUP_FORMAT = 'medreminder.backup';
   var BACKUP_VERSION = 1;
 
+  /* 导入体积上限。localStorage 在 Android WebView 里通常 5 MB（UTF-16 计 2 字节/字符），
+   * 一份备份的字符数超过这个门槛就几乎必然塞爆配额 —— 与其导入到一半失败、
+   * 把用户现有数据搞成"改了一半"，不如**在改数据之前**就明确拒绝。
+   * 取 2 MB 字符：即便按 2 字节/字符也才 4 MB，低于 5 MB 预算并留出余量。
+   * 正常用户一个月的记录约 30 KB（见测试用例 F），离上限还有两个数量级。 */
+  var BACKUP_MAX_CHARS = 2 * 1024 * 1024;
+  /* 剂量单日上限：一天最多 2880 个 30 分钟槽位，再往上必然是脏数据或恶意构造 */
+  var BACKUP_MAX_DOSES_PER_DAY = 2880;
+
+  /* status 只认这三个值 —— 其它值既不算已服也不算待服，会静默污染统计 */
+  var DOSE_STATUSES = ['pending', 'taken', 'skipped'];
+
+  /* 合法日期键：YYYY-MM-DD，且**必须是真实存在的日期**（含闰年规则）。
+   * 用日期回写比对而不是正则，才能拦下 2026-02-30 / 2025-02-29 这种。 */
+  function isDateKey(k) {
+    if (typeof k !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(k)) return false;
+    var y = +k.slice(0, 4), mo = +k.slice(5, 7), d = +k.slice(8, 10);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+    var dt = new Date(y, mo - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
+  }
+
   var dataMode = null;       // backup | csv | restore
   var restoreArmed = false;  // 恢复需点两次，避免误覆盖
 
@@ -1539,9 +1561,50 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
     };
   }
 
+  /* ⚠️ 剂量侧的校验（H-3）。
+   *
+   * 这段存在的理由：doses 里的每一处非法值都不会**当场**报错，而是
+   * 在被渲染/统计/排程时炸出来，用户看到的是"导入成功了，但记录页白屏"。
+   * 逐个堵住后果：
+   *   · 值不是数组        → S.doses[k].some/forEach → TypeError（整页崩）
+   *   · 日期键不是真日期  → 排序、按月前缀过滤（adherenceStats 按 'YYYY-MM' 取前缀）全错
+   *   · time 越界/非数字  → minToStr、排程比较得到荒谬结果
+   *   · 缺 id             → 照片回收、去重按 undefined 归组
+   *   · status 未知值     → 既不算已服也不算待服，静默丢出统计
+   *   · 单日剂量爆炸      → 体积/内存
+   * 返回 true 表示「有问题」，与上方 meds 的写法保持一致。 */
+  function dosesInvalid(doses) {
+    if (Array.isArray(doses)) return true;                  // 整体必须是「日期 → 数组」的对象，不是数组
+    var keys = Object.keys(doses), total = 0;
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (!isDateKey(k)) return true;
+      var arr = doses[k];
+      if (!Array.isArray(arr)) return true;                 // 一天的值必须是数组
+      if (arr.length > BACKUP_MAX_DOSES_PER_DAY) return true;
+      total += arr.length;
+      for (var j = 0; j < arr.length; j++) {
+        var d = arr[j];
+        if (!d || typeof d !== 'object' || Array.isArray(d)) return true;
+        if (typeof d.id !== 'string' || !d.id) return true;
+        if (typeof d.medId !== 'string' || !d.medId) return true;   // 允许指向已删除的药（保留历史）
+        if (typeof d.time !== 'number' || !isFinite(d.time)) return true;
+        if (d.time < 0 || d.time > 1439) return true;
+        if (DOSE_STATUSES.indexOf(d.status) < 0) return true;
+        /* takenAt 允许 null（未服）或数字（时间戳）；其它类型一律可疑 */
+        if (d.takenAt != null && (typeof d.takenAt !== 'number' || !isFinite(d.takenAt))) return true;
+      }
+    }
+    return false;
+  }
+
   /* 导入前严格校验：宁可拒绝，也不要让半截数据覆盖掉用户现有记录 */
   function parseBackup(txt) {
     if (!txt || !String(txt).trim()) return { err: '请先粘贴备份内容' };
+    /* 体积先于解析判断 —— JSON.parse 一个巨型字符串本身就可能把内存打满 */
+    if (String(txt).length > BACKUP_MAX_CHARS) {
+      return { err: '备份太大（超过 2 MB），可能不是本 App 导出的备份' };
+    }
     var o;
     try { o = JSON.parse(txt); } catch (e) { return { err: '内容不是合法 JSON，可能复制不完整' }; }
     if (!o || o.format !== BACKUP_FORMAT) return { err: '这不是本 App 导出的备份' };
@@ -1565,6 +1628,7 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
       return true;
     });
     if (badMed) return { err: '备份里的药品数据有问题' };
+    if (dosesInvalid(o.data.doses)) return { err: '备份里的服药记录有问题' };
     return { ok: o };
   }
 
