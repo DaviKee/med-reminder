@@ -56,7 +56,19 @@ def main():
     def read(name):
         return z.read(name).decode('utf-8')
 
-    app = read('assets/public/js/app.js')
+    def read_opt(name):
+        # 模块缺失时返回空串，让相关检查逐条报错 —— 而不是整个脚本崩在 KeyError 上
+        try:
+            return z.read(name).decode('utf-8')
+        except KeyError:
+            return ''
+
+    # 2026-09-28 架构重构：app 层已是多个 ES module。
+    # **所有源码级检查都在模块图的拼接文本上做**（与 tests/sources.js 同一套思路）——
+    # 否则函数一搬家，检查就会因为「不在 app.js 里」而误报，而那些检查本来是对的。
+    APP_MODULES = ['js/core/util.js', 'js/core/store.js', 'js/core/schedule.js', 'js/app.js']
+    app = read_opt('assets/public/js/app.js')
+    app_modules = [read_opt('assets/public/' + n) for n in APP_MODULES]
     notify = read('assets/public/js/notify.js')
     photo = read('assets/public/js/photo.js')
     backup = read('assets/public/js/backup.js')
@@ -64,7 +76,8 @@ def main():
     html = read('assets/public/index.html')
     sw = read('assets/public/sw.js')
 
-    APP, NOTIFY, PHOTO, CSS = strip_js(app), strip_js(notify), strip_js(photo), strip_css(css)
+    APP = '\n'.join(strip_js(x) for x in app_modules)
+    NOTIFY, PHOTO, CSS = strip_js(notify), strip_js(photo), strip_css(css)
     BACKUP = strip_js(backup)
     SW = strip_js(sw)
 
@@ -100,11 +113,20 @@ def main():
 
     print()
     print('=== 资源与源一致（构建没吃到旧文件）===')
-    for name in ['js/app.js', 'js/notify.js', 'js/photo.js', 'js/backup.js',
+    for name in ['js/app.js', 'js/core/util.js', 'js/core/store.js', 'js/core/schedule.js',
+                 'js/notify.js', 'js/photo.js', 'js/backup.js',
                  'css/app.css', 'index.html', 'sw.js']:
         src = os.path.join(WEB, name)
         zp = 'assets/public/' + name
-        ok = hashlib.md5(open(src, 'rb').read()).hexdigest() == hashlib.md5(z.read(zp)).hexdigest()
+        if not os.path.exists(src):
+            check('资源', os.path.basename(name), False, '源文件不存在: %s' % src)
+            continue
+        try:
+            packed = z.read(zp)
+        except KeyError:
+            check('资源', os.path.basename(name), False, 'APK 内缺少 %s' % zp)
+            continue
+        ok = hashlib.md5(open(src, 'rb').read()).hexdigest() == hashlib.md5(packed).hexdigest()
         check('资源', os.path.basename(name), ok, '与 www/ 下的源不一致')
 
     print()
@@ -173,6 +195,14 @@ def main():
         ('D-1 存储可见', 'storageError = {' in APP),
         ('权限卡状态驱动', 'isBlocked(after)' in APP),
         ('插件 JS 随包', len([x for x in z.namelist() if 'assets/public/vendor/' in x]) >= 5),
+        # 架构重构（2026-09-28 起）：core 模块必须随包，且 index.html 要显式声明
+        # —— SW 的预缓存清单靠解析 index.html 得到，而 import 是隐式的、解析不到。
+        ('架构-core 模块随包',
+         all(('assets/public/' + m) in z.namelist()
+             for m in APP_MODULES)),
+        ('架构-index.html 声明了全部 core 模块',
+         all(('href="' + m + '"') in html for m in APP_MODULES if m.endswith('.js')
+             and '/js/' in m)),
         # H-1 / H-2（v1.4.2）
         ('H-1-判定走 needRebuildDoses',
          'function needRebuildDoses(prev, next)' in APP
