@@ -111,7 +111,7 @@ export function exitApp() {
 export function closableDialogs() {
   return $$('.dlg-wrap.show').filter(function (el) {
     return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean'
-      || el.id === 'dlgView' || el.id === 'dlgPhoto';
+      || el.id === 'dlgView' || el.id === 'dlgPhoto' || el.id === 'dlgHistory';
   });
 }
 

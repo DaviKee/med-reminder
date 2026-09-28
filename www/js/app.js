@@ -59,7 +59,7 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.7';
+  var APP_VERSION = '1.4.8';
   var APP_BUILD = '2026-09-28';
 
 
@@ -939,52 +939,14 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
     }
     html += '<p class="hint" style="margin-top:-8px">每次服药后打卡，记录会自动更新。</p>';
 
-    /* ---- 历史记录：按天列出，可按药筛选 ----
-     * 之前记录页只有周点与两个统计，看不到"具体哪天哪次吃了什么" ——
-     * 对需要长期追踪服药规律的用户来说，等于没有记录页。 */
+    /* ---- 历史记录：页面只放摘要，完整列表进二级菜单 ----
+     * 之前这里把「近 14 天」的每一天都铺成卡片 —— 用得越久越长，翻不到底
+     * （2026-09-28 反馈）。现在页面留摘要 + 最近 3 天，剩下的点按钮进二级菜单看。 */
     if (S.meds.length) {
-      html += '<div class="chip-row" id="histFilter">'
-        + '<button class="chip fs-chip' + (histMedId ? '' : ' on') + '" data-hist=""'
-        + ' aria-pressed="' + (histMedId ? 'false' : 'true') + '">全部</button>'
-        + S.meds.map(function (m) {
-            var on = histMedId === m.id;
-            return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-hist="' + esc(m.id) + '"'
-              + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(m.name) + '</button>';
-          }).join('')
-        + '</div>';
+      html += histChipsHtml();
     }
+    html += historySummaryHtml();
 
-    var hdays = historyDays(HIST_DAYS).filter(function (k) {
-      return !histMedId || (S.doses[k] || []).some(function (x) { return x.medId === histMedId; });
-    });
-    if (hdays.length) {
-      html += '<div class="sect"><span class="eyebrow">HISTORY · 近 ' + HIST_DAYS + ' 天</span>';
-      hdays.forEach(function (k) {
-        var arr = (S.doses[k] || [])
-          .filter(function (x) { return !histMedId || x.medId === histMedId; })
-          .slice().sort(function (a, b) { return a.time - b.time; });
-        html += '<div class="card sched">'
-          + '<span class="eyebrow" style="display:block;margin:6px 0 2px">' + esc(histDayLabel(k)) + '</span>';
-        arr.forEach(function (x) {
-          var m = medById(x.medId);
-          var lbl = histStatusLabel(x, k);
-          var cam = x.photo
-            ? '<button class="cam-btn" data-photo="' + esc(x.id) + '" aria-label="查看这次服药的照片">' + ICON.cam + '</button>'
-            : '';
-          html += '<div class="dose">'
-            + '<div class="dose-l"><span class="dose-t">' + esc(minToStr(x.time)) + '</span>'
-            + '<span class="dose-n' + (x.status === 'taken' ? '' : ' dim') + '">'
-            + esc(m ? m.name : '已删除药品') + '</span></div>'
-            + '<span class="dose-s"><span class="txt' + (lbl === '已错过' ? ' no-shot' : '') + '">'
-            + esc(lbl) + '</span>' + cam + '</span>'
-            + '</div>';
-        });
-        html += '</div>';
-      });
-      html += '</div>';
-    } else {
-      html += '<p class="hint">还没有服药记录。回到「今天」打卡后，这里会按天列出来。</p>';
-    }
 
     /* 拍照打卡统计。跳过率单独列出来 —— 它是这个功能该收紧还是放宽的依据。 */
     var ph = photoTally();
@@ -1086,14 +1048,6 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
     var bcl = $('#btnClean');
     if (bcl) bcl.onclick = openCleanDlg;
 
-    /* 按药筛选。选中只影响统计与下面的历史列表，不动任何数据。 */
-    $$('[data-hist]').forEach(function (el) {
-      el.onclick = function () {
-        var v = el.getAttribute('data-hist');
-        histMedId = v ? v : null;
-        render();
-      };
-    });
     /* 历史行里的相机图标：点开看当时的照片 */
     $$('[data-photo]').forEach(function (el) {
       el.onclick = function (ev) {
@@ -1183,6 +1137,127 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
     if (k !== todayKey() || nowMin() - dueAt(x) > MISS_GRACE_MIN) return '已错过';
     return '未到时间';
   }
+
+  /* ---------------- 历史：摘要 / 全部列表 / 二级菜单 ---------------- */
+
+  /* 筛选 chips。**页面与二级菜单里各渲染一份** ——
+   * 页面上那份还在驱动「本月依从率」（按药看依从率是有意义的），
+   * 菜单里那份是因为菜单盖住了页面、够不着。两份都带 data-hist，走同一套委托处理。 */
+  function histChipsHtml() {
+    if (!S.meds.length) return '';
+    return '<div class="chip-row">'
+      + '<button class="chip fs-chip' + (histMedId ? '' : ' on') + '" data-hist=""'
+      + ' aria-pressed="' + (histMedId ? 'false' : 'true') + '">全部</button>'
+      + S.meds.map(function (m) {
+          var on = histMedId === m.id;
+          return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-hist="' + esc(m.id) + '"'
+            + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(m.name) + '</button>';
+        }).join('')
+      + '</div>';
+  }
+
+  /* 某天是否该出现（受按药筛选影响） */
+  function histDayMatch(k) {
+    return !histMedId || (S.doses[k] || []).some(function (x) { return x.medId === histMedId; });
+  }
+  /* 某天要显示的剂量（已按计划时刻排序） */
+  function histDayDoses(k) {
+    return (S.doses[k] || [])
+      .filter(function (x) { return !histMedId || x.medId === histMedId; })
+      .slice().sort(function (a, b) { return a.time - b.time; });
+  }
+  function histDays() {
+    return historyDays(HIST_DAYS).filter(histDayMatch);
+  }
+
+  /* 一行剂量（历史列表与今日页排版一致，只是没有可点的打卡按钮） */
+  function histDoseRowHtml(x, k) {
+    var m = medById(x.medId);
+    var lbl = histStatusLabel(x, k);
+    var cam = x.photo
+      ? '<button class="cam-btn" data-photo="' + esc(x.id) + '" aria-label="查看这次服药的照片">' + ICON.cam + '</button>'
+      : '';
+    return '<div class="dose">'
+      + '<div class="dose-l"><span class="dose-t">' + esc(minToStr(x.time)) + '</span>'
+      + '<span class="dose-n' + (x.status === 'taken' ? '' : ' dim') + '">'
+      + esc(m ? m.name : '已删除药品') + '</span></div>'
+      + '<span class="dose-s"><span class="txt' + (lbl === '已错过' ? ' no-shot' : '') + '">'
+      + esc(lbl) + '</span>' + cam + '</span>'
+      + '</div>';
+  }
+
+  /* 完整按天列表（二级菜单的内容） */
+  function historyListHtml() {
+    var hdays = histDays();
+    if (!hdays.length) return '<p class="hint">还没有服药记录。</p>';
+    return hdays.map(function (k) {
+      return '<div class="card sched">'
+        + '<span class="eyebrow" style="display:block;margin:6px 0 2px">' + esc(histDayLabel(k)) + '</span>'
+        + histDayDoses(k).map(function (x) { return histDoseRowHtml(x, k); }).join('')
+        + '</div>';
+    }).join('');
+  }
+
+  /* 记录页上的摘要：总量 + 最近 3 天 + 入口按钮。
+   * 摘要用「共 N 天有记录 · 合计 M 次」而不是只报最近一天 ——
+   * 用户想知道的是"我坚持得怎么样"，不是"昨天吃了没"。 */
+  function historySummaryHtml() {
+    var hdays = histDays();
+    if (!hdays.length) {
+      return '<p class="hint">还没有服药记录。回到「今天」打卡后，这里会按天列出来。</p>';
+    }
+    var total = 0;
+    hdays.forEach(function (k) { total += histDayDoses(k).length; });
+
+    var html = '<div class="sect"><span class="eyebrow">HISTORY · 近 ' + HIST_DAYS + ' 天</span>'
+      + '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
+      + '<p class="body" style="margin:0">共 <b>' + hdays.length + '</b> 天有记录 · 合计 <b>'
+      + total + '</b> 次服药</p>';
+
+    hdays.slice(0, 3).forEach(function (k) {
+      var arr = histDayDoses(k);
+      var taken = arr.filter(function (x) { return x.status === 'taken'; }).length;
+      html += '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
+        + '<span class="meta">' + esc(histDayLabel(k)) + '</span>'
+        + '<span class="meta">' + taken + ' / ' + arr.length + ' 次</span></div>';
+    });
+    if (hdays.length > 3) {
+      html += '<p class="hint" style="margin:0">上面是最近 3 天，更早的在下面。</p>';
+    }
+    html += '<button class="btn btn-ghost" id="btnHistAll" data-hall="1" style="height:44px">'
+      + '查看全部历史（' + hdays.length + ' 天）</button>'
+      + '</div></div>';
+    return html;
+  }
+
+  /* 二级菜单：渲染菜单里那份 chips 与全部列表，再打开 */
+  function openHistoryDlg() {
+    var hdays = histDays();
+    $('#histHint').textContent = hdays.length
+      ? '近 ' + HIST_DAYS + ' 天里共 ' + hdays.length + ' 天有记录。点上面的药品名可按药筛选。'
+      : '近 ' + HIST_DAYS + ' 天还没有服药记录。';
+    refreshHistoryDlg(true);
+    openDlg($('#dlgHistory'));
+  }
+
+  /* 重绘菜单内容。force=false 时只在菜单开着才做（筛选变化时被调用）。 */
+  function refreshHistoryDlg(force) {
+    var wrap = $('#dlgHistory');
+    if (!wrap) return;
+    if (!force && !wrap.classList.contains('show')) return;
+    $('#histFilter').innerHTML = histChipsHtml();
+    var body = $('#histBody');
+    body.innerHTML = historyListHtml();
+    /* 历史行里的相机图标：**每次重绘后重新绑**。菜单内容只在筛选变化时重建，
+     * 而重建正是用户主动点了一下之后发生的 —— 不存在「重绘吞掉点击」的窗口。 */
+    $$('[data-photo]', body).forEach(function (el) {
+      el.onclick = function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        openPhoto(el.getAttribute('data-photo'));
+      };
+    });
+  }
+
 
 
   function openSheet(medId) {
@@ -1880,6 +1955,53 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
     currentTab = name;
   }
   var currentTab = 'today';
+  /* ---------------- 左右滑动切换选项卡 ----------------
+   * 判定抽成**纯函数**（与 backAction 同一套路）：DOM 事件在调用方拍好再传进来，
+   * 所以判定矩阵可以直接单测，不必造触摸事件。
+   * 返回 null 表示「这次手势不该切页」。 */
+  var TAB_ORDER = ['today', 'meds', 'records'];
+  var SWIPE_MIN_PX = 60;          // 太短的多半是误触（也不是滚动，就是手抖）
+  function swipeTarget(cur, dx, dy) {
+    if (Math.abs(dx) < SWIPE_MIN_PX) return null;
+    /* 竖向位移不小于横向 → 用户是在滚页面，不是在切页。不判这一条，
+     * 一边上下滚一边手一歪就会莫名其妙换页。 */
+    if (Math.abs(dx) <= Math.abs(dy)) return null;
+    var i = TAB_ORDER.indexOf(cur);
+    if (i < 0) return null;
+    var j = dx < 0 ? i + 1 : i - 1;             // 左滑 → 下一个；右滑 → 上一个
+    if (j < 0 || j >= TAB_ORDER.length) return null;   // 到头就停住，不绕回
+    return TAB_ORDER[j];
+  }
+
+  /* 监听器挂在 #main 上（它不会被重建，所以绑一次就够）。
+   * ⚠️ 用 passive 监听、且**不设 touch-action** —— 设了会把双指缩放一起废掉，
+   *    而 capacitor.config 里的 zoomEnabled:true 是刻意开的。 */
+  function bindSwipe() {
+    var main = $('#main');
+    if (!main) return;
+    var x0 = 0, y0 = 0, tracking = false;
+
+    main.addEventListener('touchstart', function (ev) {
+      tracking = false;
+      if (ev.touches.length !== 1) return;                  // 双指 = 缩放，不参与
+      if (isOverlayOpen()) return;                          // 浮层开着时不切页
+      var t = ev.target;
+      if (t && t.closest && t.closest('.dlg-wrap, .sheet, input, textarea, .dlg-scroll')) return;
+      tracking = true;
+      x0 = ev.touches[0].clientX;
+      y0 = ev.touches[0].clientY;
+    }, { passive: true });
+
+    main.addEventListener('touchend', function (ev) {
+      if (!tracking) return;
+      tracking = false;
+      var t = ev.changedTouches && ev.changedTouches[0];
+      if (!t) return;
+      var next = swipeTarget(currentTab, t.clientX - x0, t.clientY - y0);
+      if (next) setTab(next);
+    }, { passive: true });
+  }
+
 
   /* ---------------- boot ---------------- */
   function boot() {
@@ -1895,6 +2017,25 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
 
     $$('.tab').forEach(function (t) {
       t.onclick = function () { setTab(t.getAttribute('data-tab')); };
+    });
+    bindSwipe();
+
+    /* 历史筛选与「查看全部历史」——**事件委托**（挂在 document，只注册一次）。
+     * 为什么不用 $$(...).forEach 直接绑：chips 在页面与二级菜单里各有一份，
+     * 而菜单内容会被重绘 —— 绑在元素上的 click 会随 innerHTML 重建而失效，
+     * 表现成"点了没反应"（这个项目已经踩过一次，见 MEMORY-数据与交互）。 */
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var chip = t.closest('[data-hist]');
+      if (chip) {
+        var v = chip.getAttribute('data-hist');
+        histMedId = v ? v : null;
+        render();                    // 页面：统计 + 摘要跟着变
+        refreshHistoryDlg(false);    // 菜单：若开着，列表与 chips 一起重绘
+        return;
+      }
+      if (t.closest('[data-hall]')) openHistoryDlg();
     });
 
     $('#scrim').onclick = function () { closeSheet(); };
@@ -2128,6 +2269,7 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
 
     /* ---- 备份 / 导出 / 恢复 ---- */
     $('#dataClose').onclick = function () { restoreArmed = false; closeDlg($('#dlgData')); };
+    $('#histClose').onclick = function () { closeDlg($('#dlgHistory')); };
     $('#dataCopy').onclick = function () {
       var txt = $('#dataArea').value;
       if (!txt) { toast('没有可复制的内容'); return; }
