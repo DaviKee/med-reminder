@@ -315,7 +315,15 @@ console.log('');
 console.log('=== G. 源码级接线（防改回去）===');
 {
   t('★ 启动时预生成固定时刻', APP.indexOf('ensureFixedDoses();') >= 0, '启动没接');
-  t('★ 跨天时重新预生成', /todayKey\(\) !== lastDay[\s\S]{0,220}ensureFixedDoses\(\)/.test(APP), '跨天没接');
+  /* ⚠️ 这条原先断言的是**内联跨天块**（`todayKey() !== lastDay ... ensureFixedDoses()`）。
+   * 2026-09-28 修「固定时刻被顺延」时，跨天处理被抽成 rollDayIfNeeded —— 因为
+   * **回到前台**也必须跑它（App 在后台时定时器被系统暂停，后台过夜就收不到轮询）。
+   * 内联写法没有这个入口，正是那个真机 bug 的根因。断言随实现更新为：
+   * 函数存在 + 里面会 ensureFixedDoses + 回到前台也调它。 */
+  t('★ 跨天时重新预生成（经 rollDayIfNeeded）',
+    /function rollDayIfNeeded\(\)[\s\S]{0,700}?ensureFixedDoses\(\)/.test(APP), '跨天没接');
+  t('★ 跨天处理在「回到前台」时也会跑（根因修复）',
+    /appStateChange[\s\S]{0,600}?isActive[\s\S]{0,400}?rollDayIfNeeded\(\)/.test(APP), '回到前台没接');
   t('★ 保存成固定模式后立刻生成', /if \(isFixed\) ensureFixedDoses\(\);/.test(APP), '保存后没接');
   /* ⚠️ 这一条原来写的是
    *      /modeChanged \|\| intervalChanged\) rebuildTodayDoses\(m\)/

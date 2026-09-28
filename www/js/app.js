@@ -330,9 +330,15 @@ import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNo
   /* 返回新建的剂量数组（失败返回 null）。之所以要返回而不是布尔值：
    * 拍照打卡需要在记录落库后，把照片路径挂到这一次新建的剂量上。 */
   function checkIn(medId) {
-    var list = todayDoses();
     var med = medById(medId);
     if (!med) return null;
+    /* ⚠️ 固定时刻模式**不走这里**：它的剂量由 ensureFixedDoses() 按时刻表预生成。
+     * 若误走下面「从此刻起按间隔排」，用户设的固定时刻会被改写成"从打卡时刻起的间隔"
+     * —— 看起来就是「顺延了、不按固定时间」（2026-09-28 真机反馈）。
+     * 顺手补调 ensureFixedDoses()：万一今天的剂量还没生成（例如 App 在后台过夜、
+     * 定时器被系统暂停），这里就是补救点。 */
+    if (medMode(med) === 'fixed') { ensureFixedDoses(); return null; }
+    var list = todayDoses();
     for (var i = 0; i < list.length; i++) if (list[i].medId === medId) return null; // 今天已排过
     var start = nowMin();
     var step = med.interval * 60;
@@ -486,6 +492,22 @@ import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNo
     });
     if (changed) save();
     return changed;
+  }
+
+  /* 跨天处理 —— **三个入口共用**：启动后、30 秒轮询、以及**从后台回到前台**。
+   * ⚠️ 最后一处最容易被漏掉：App 在后台时 JS 定时器被系统暂停，后台过夜就收不到轮询；
+   * 回到前台若不补这一下，今天一条剂量都不会生成 —— 用户此时点打卡，就会走进
+   * checkIn 的「从此刻起按间隔排」，表现为「固定时刻被顺延」（2026-09-28 真机反馈）。 */
+  var lastDay = null;
+  function rollDayIfNeeded() {
+    if (todayKey() === lastDay) return false;
+    lastDay = todayKey();
+    S.notified = {};
+    save();
+    ensureFixedDoses();      // 新的一天，固定时刻要重新排一遍
+    render();
+    syncNotifications();
+    return true;
   }
 
   /* 服药方式变了（间隔改了 / 模式换了）→ 重排今天还没吃的那些。
@@ -2624,24 +2646,21 @@ import { KEY, DEFAULT, load, S, isQuotaError, STORAGE_BUDGET, storageStats, gcNo
     if (window.MedNotify && window.MedNotify.native) {
       var AppP = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
       if (AppP) AppP.addListener('appStateChange', function (st) {
-        if (st.isActive) refreshPerm();
-        /* 切到后台时把还没写的备份立刻落盘 —— 防抖窗口内被杀掉就白改了 */
-        else if (window.MedAutoBackup) window.MedAutoBackup.flush();
+        if (st.isActive) {
+          refreshPerm();
+          /* ⚠️ 后台时 JS 定时器被系统暂停 —— 过夜后回到前台是第一现场，
+           * 必须在这里补一次跨天处理（否则今天没有剂量，见 rollDayIfNeeded 的注释）。 */
+          rollDayIfNeeded();
+        } else if (window.MedAutoBackup) {
+          /* 切到后台时把还没写的备份立刻落盘 —— 防抖窗口内被杀掉就白改了 */
+          window.MedAutoBackup.flush();
+        }
       });
     }
 
-    // 跨天自动刷新
-    var lastDay = todayKey();
-    setInterval(function () {
-      if (todayKey() !== lastDay) {
-        lastDay = todayKey();
-        S.notified = {};
-        save();
-        ensureFixedDoses();      // 新的一天，固定时刻要重新排一遍
-        render();
-        syncNotifications();
-      }
-    }, 30000);
+    // 跨天自动刷新（与「回到前台」共用同一套处理，见 rollDayIfNeeded）
+    lastDay = todayKey();
+    setInterval(rollDayIfNeeded, 30000);
 
     /* PWA。注册失败**不能静默** —— 静默的后果是"以为有离线缓存、其实没有"，
      * 而 H-2 那个"装了新版仍是旧代码"的问题，正是从"没人知道 SW 在干什么"开始的。
