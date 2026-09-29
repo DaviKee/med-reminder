@@ -151,23 +151,57 @@ echo "→ 已同步 Capacitor 插件 JS 到 www/vendor/"
 # 那部分配置与本项目无关，影响可忽略。
 #
 # 若哪天确实需要 `sync`（例如刚加/删了 Capacitor 插件，要重算插件清单）：
-#   先把 `android/capacitor-cordova-android-plugins` **改名让开**（不删），
-#   跑完 `cap sync android`，再改名回来 —— 见《MEMORY-出包与验收.md》§3。
+#   先把 `android/app/src/main/assets/public` **改名让开**（不删）再重建 ——
+#   ⚠️ 但**不要动 `android/capacitor-cordova-android-plugins`**：它是 `cap sync` 的
+#   `update` 阶段产物，`cap copy` **不会重建它**，改名让开只会让 gradle 直接报
+#   「Could not read script ... cordova.variables.gradle」（2026-09-29 实测踩到）。
 echo "→ 同步 www/ 到原生工程…（cap copy，绕开删除守卫）"
 ./node_modules/.bin/cap copy android
 
+# ---------- 编译 ----------
+# ⚠️ 这里必须让 gradlew 的**退出码真实传出来**。
+# 曾经写成 `./gradlew ... | tail -5`：管道只反映 tail 的退出码，
+# 于是**编译失败也会继续往下走**，最后照样打印「✓ 打包完成」——
+# 2026-09-29 就差点交出一个 assets 被删空的残缺包（靠手动核对才发现）。
+# 现在：`set -o pipefail` + 显式判 rc，失败即中止（set -e 也会兜底）。
 echo "→ 编译 APK…"
 cd android
-./gradlew assembleDebug --no-daemon --console=plain | tail -5
+set -o pipefail
+./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tail -12
+RC=${PIPESTATUS[0]}
+set +o pipefail
+if [ "$RC" -ne 0 ]; then
+  echo ""
+  echo "✗ 编译失败（gradlew 退出码 $RC）—— 出包中止，不要交付上面的任何产物。"
+  exit 1
+fi
 cd ..
 
 # 产物带版本号，避免「手里这个包是哪一版」再次搞混。
 # 同时清掉上一版产物，保证目录里永远只有一个待安装包（serve-apk.py 取最新那个）。
 OUT="MedReminder-v${VER}-${BUILDDATE}.apk"
+APKSRC="android/app/build/outputs/apk/debug/app-debug.apk"
+
+# ⚠️ 交付前先确认**产物真的存在**：编译"成功"不等于包在。
+# 2026-09-29 曾出现「BUILD SUCCESSFUL 但 assets 被删空」的残缺包 —— 验产物不是验命令。
+if [ ! -f "$APKSRC" ]; then
+  echo "✗ 没找到编译产物 $APKSRC —— 出包中止。"
+  exit 1
+fi
+
 rm -f MedReminder-v*.apk med-reminder-debug.apk
-cp android/app/build/outputs/apk/debug/app-debug.apk "$OUT"
+cp "$APKSRC" "$OUT"
+
+# 产物级自检：包内 APP_VERSION 必须与本次版本号一致（防止复制到旧包/残缺包）。
+PKGVER="$(unzip -p "$OUT" assets/public/js/app.js 2>/dev/null \
+          | sed -n "s/^  var APP_VERSION = '\([^']*\)';.*/\1/p" | head -1)"
+if [ "$PKGVER" != "$VER" ]; then
+  echo "✗ 包内 APP_VERSION='$PKGVER' 与本次 v$VER 不一致 —— 产物可疑，不要交付。"
+  exit 1
+fi
 
 echo ""
 echo "✓ 打包完成：$(pwd)/$OUT"
 echo "  版本 v$VER  ·  $BUILDDATE  ·  versionCode $VCODE"
+echo "  大小 $(stat -c '%s' "$OUT" 2>/dev/null || echo '?') B · 包内版本已核对 = v$PKGVER"
 echo "  装到手机：python serve-apk.py  然后手机扫码"
