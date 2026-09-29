@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "MedReminderSpike"
+    },
+    {
+      "name": "reason_agent_reminder",
+      "value": "用于按设定时间提醒服药"
+    },
+    {
+      "name": "reason_notification",
+      "value": "用于显示服药提醒通知"
+    }
+  ]
+}
