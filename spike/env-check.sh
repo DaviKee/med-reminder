@@ -28,6 +28,7 @@ echo ""
 echo "[1] DevEco Studio（唯一硬前置）"
 
 DEVECO_DIRS=(
+  "/d/Program Files/Huawei/DevEco Studio"
   "/c/Program Files/Huawei/DevEco Studio"
   "/c/DevEnv/DevEco Studio"
   "$LOCALAPPDATA/Programs/DevEco Studio"
@@ -36,10 +37,10 @@ found_deveco=""
 for d in "${DEVECO_DIRS[@]}"; do
   if [ -d "$d" ]; then found_deveco="$d"; break; fi
 done
-# 兜底：全盘找 bin/deveco-studio*.exe 太慢，改为查几个常见根
+# 兜底：找 DevEco 的典型标志文件（devecostudio64.exe / product-info.json）
 if [ -z "$found_deveco" ]; then
   for root in /c /d; do
-    hit=$(ls -d "$root"/DevEco* "$root"/Huawei/DevEco* 2>/dev/null | head -1)
+    hit=$(ls -d "$root"/Program\ Files/Huawei/DevEco\ Studio "$root"/DevEco* "$root"/Huawei/DevEco* 2>/dev/null | head -1)
     [ -n "$hit" ] && { found_deveco="$hit"; break; }
   done
 fi
@@ -61,24 +62,44 @@ SDK_ROOTS=(
   "$LOCALAPPDATA/Huawei/Sdk"
   "$HOME/AppData/Local/Huawei/Sdk"
   "/c/DevEnv/HarmonyOS/Sdk"
+  "/d/Huawei/Sdk"
 )
 found_sdk=""
 for d in "${SDK_ROOTS[@]}"; do
   if [ -d "$d" ]; then found_sdk="$d"; break; fi
 done
 
-if [ -n "$found_sdk" ]; then
+# ★ 新版 DevEco 把 SDK **内嵌**在安装目录的 sdk/default/ 下（本项目实测如此），
+#   没有独立的 %LOCALAPPDATA%\Huawei\Sdk。必须认这种情况。
+embedded_sdk=""
+if [ -n "$found_deveco" ] && [ -d "$found_deveco/sdk" ]; then
+  embedded_sdk="$found_deveco/sdk"
+fi
+
+if [ -n "$embedded_sdk" ]; then
+  say_ok "SDK（内嵌于 DevEco）: $embedded_sdk"
+  # 读 sdk-pkg.json 拿 API 版本
+  pkg=$(find "$embedded_sdk" -maxdepth 2 -name "sdk-pkg.json" 2>/dev/null | head -1)
+  if [ -n "$pkg" ]; then
+    api=$(grep -o '"apiVersion"[^,]*' "$pkg" 2>/dev/null | head -1)
+    name=$(grep -o '"displayName"[^,]*' "$pkg" 2>/dev/null | head -1)
+    rel=$(grep -o '"releaseType"[^,]*' "$pkg" 2>/dev/null | head -1)
+    say_note "$api ｜ $name ｜ $rel"
+  fi
+  found_sdk="$embedded_sdk"
+  hdc=$(find "$found_sdk" -name "hdc.exe" -o -name "hdc" 2>/dev/null | head -1)
+  if [ -n "$hdc" ]; then say_ok "hdc: $hdc"; else say_warn "SDK 里没找到 hdc"; fi
+elif [ -n "$found_sdk" ]; then
   say_ok "SDK 根目录: $found_sdk"
   for sub in "$found_sdk"/*/; do
     [ -d "$sub" ] && say_note "发现: $(basename "$sub")"
   done
-  # hdc 是 SDK toolchains 里的调试工具（鸿蒙的 adb）
   hdc=$(find "$found_sdk" -name "hdc.exe" -o -name "hdc" 2>/dev/null | head -1)
   if [ -n "$hdc" ]; then say_ok "hdc: $hdc"
   else say_warn "SDK 里没找到 hdc（可能在 toolchains/ 未下载）"; fi
 else
   say_crit "未找到 HarmonyOS SDK"
-  say_note "DevEco 首次启动会引导下载（SDK Manager），也可手动指定路径"
+  say_note "新版 DevEco 内置 SDK（<安装目录>/sdk/）；旧版首次启动会引导下载"
   say_note "SDK 路径同样不能有中文"
 fi
 
@@ -86,14 +107,18 @@ fi
 echo ""
 echo "[3] 命令行构建工具"
 
-find_tool() {  # $1 = 可执行名
+find_tool() {  # $1 = 可执行名, $2 = 备用名（可选，如 .bat）
   # 先看 PATH
   if command -v "$1" >/dev/null 2>&1; then command -v "$1"; return; fi
   # 再从 DevEco / SDK 目录里找
   # ⚠️ 用 \( ... \) 分组：否则 find 的 -o 优先级会让 -maxdepth 只作用于第一个 -name
   for base in "$found_deveco" "$found_sdk" /c/DevEnv; do
     [ -z "$base" ] && continue
-    hit=$(find "$base" -maxdepth 5 \( -name "$1" -o -name "$1.exe" \) 2>/dev/null | head -1)
+    if [ -n "${2:-}" ]; then
+      hit=$(find "$base" -maxdepth 6 \( -name "$1" -o -name "$2" \) 2>/dev/null | head -1)
+    else
+      hit=$(find "$base" -maxdepth 6 \( -name "$1" -o -name "$1.exe" \) 2>/dev/null | head -1)
+    fi
     [ -n "$hit" ] && { echo "$hit"; return; }
   done
   echo ""
