@@ -57,6 +57,57 @@ python harness/harness.py --json
 
 ---
 
+## ★ 自动跑：挂到 git pre-commit（推荐）
+
+**「改完不跑」这件事，从"要靠自觉"变成"物理上做不到"。**
+
+```bash
+bash harness/install-hooks.sh              # 安装（全量 16 关口，约 19 秒）
+bash harness/install-hooks.sh --fast       # 或快速版（syntax + apk，约 3 秒）
+bash harness/install-hooks.sh --status     # 看当前装的是什么
+bash harness/install-hooks.sh --uninstall  # 卸载
+```
+
+装完之后，**每次 `git commit` 会自动先跑一遍**：
+
+- **绿** → 打印 `✅ 验证通过（19s）—— 继续提交`，提交照常完成；
+- **红** → 打印 `❌ 验证未通过 —— 本次提交已被拦下`，**提交被中止**，
+  并给出「怎么查」的三步指引。
+
+### 逃生门（有意保留）
+
+| 方式 | 用途 |
+|---|---|
+| `SKIP_HARNESS=1 git commit ...` | **跳过一次**（会打印提醒，让你 push 前补跑） |
+| `git commit --no-verify` | 绕过全部 pre-commit hook（最粗暴） |
+
+> **为什么故意留逃生门**：一个**没有逃生门**的闸门，会逼人在急的时候去**删 hook 文件** ——
+> 那比绕过更糟（改回来很难记得）。**有逃生门、但默认开着的闸门，才是能长期活下去的闸门。**
+
+### 为什么用「安装脚本 + 转发器」而不是直接写 hook
+
+| 文件 | 进 git？ | 作用 |
+|---|---|---|
+| `harness/pre-commit.sh` | ✅ | **真正的逻辑**（可 review、可改） |
+| `harness/install-hooks.sh` | ✅ | 安装/卸载/切换模式 |
+| `.git/hooks/pre-commit` | ❌（`.git/` 不进版本库） | 只是个 3 行**转发器**，随时可重建 |
+
+> ⚠️ **`.git/hooks` 不随仓库走** —— 换台机器、重新克隆都会丢。
+> 所以**新环境第一件事是跑一次 `install-hooks.sh`**。这也是为什么逻辑不能只写在 hook 里。
+
+### 选全量还是快速版？
+
+| 模式 | 跑什么 | 耗时 | 适合 |
+|---|---|---|---|
+| 全量（默认） | 16 关口 | ~19s | 想要真正的保护（recommended） |
+| `--fast` | syntax + apk | ~3s | 提交频繁、嫌 19 秒烦 |
+
+> 耗时的真相：19 秒里 **17 秒是 13 次 Node 冷启动**（`syntax` 只要 1.3s，`apk` 只要 2.0s）。
+> 如果 19 秒让你开始想用 `--no-verify`，**那就该换成 `--fast`** ——
+> 一个你愿意用的 3 秒闸门，胜过一个人人都绕过的 19 秒闸门。
+
+---
+
 ## 退出码（含义不同，别混）
 
 | 码 | 含义 | 你该做什么 |

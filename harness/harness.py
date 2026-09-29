@@ -198,7 +198,8 @@ MARK = {'PASS': '\u2713', 'FAIL': '\u2717', 'SKIP': '\u25cb', 'CRASH': '\u203c',
 def main():
     ap = argparse.ArgumentParser(description='MedReminder 验证 harness')
     ap.add_argument('--list', action='store_true', help='只列关口清单')
-    ap.add_argument('--only', default=None, help='只跑 id 含该子串的关口')
+    ap.add_argument('--only', action='append', default=None, metavar='SUBSTR',
+                    help='只跑 id 含该子串的关口（可重复：--only syntax --only apk）')
     ap.add_argument('--selftest', action='store_true', help='自检 harness 自身的判定逻辑')
     ap.add_argument('--selftest-e2e', action='store_true',
                     help='端到端自检：注入假失败，确认 harness 真的会报红')
@@ -217,7 +218,7 @@ def main():
     G = gates_mod.gates(ctx)
 
     if args.only:
-        G = [g for g in G if args.only in g['id']]
+        G = [g for g in G if any(s in g['id'] for s in args.only)]
 
     if args.list:
         print('共 %d 个关口：' % len(G))
