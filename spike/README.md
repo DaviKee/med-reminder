@@ -36,7 +36,19 @@
 | **LocalNotifications** | ⚠️ 18 个方法在；`requestPermissions()`→granted、`schedule()` **成功**、`areEnabled()`→true；**但 `getPending()` 报 `Permission denied.`** |
 | **Camera** | ⏳ 未测（需手动点按钮） |
 
-> ★ **推翻调研文档一条**：文档说鸿蒙上 `EXTERNAL` 没有分支、会静默落沙箱 —— **实测可写可读**。
+> ★ **一处必须修正的判断**：我一度写「推翻调研文档（EXTERNAL 能写能读）」—— **草率了**。
+> 实测 `getUri()` 的真实落点：
+>
+> | Directory | URI |
+> |---|---|
+> | `DATA` | `.../data/storage/el2/base/files/...` |
+> | `CACHE` | `.../data/storage/el2/base/cache/...` |
+> | **`EXTERNAL`** | **`.../data/storage/el2/base/files/...`（与 DATA 完全相同）** |
+> | `DOCUMENTS` | **`file://docs/storage/Users/currentUser/Documents/...`（真·用户可见）** |
+>
+> → **调研文档是对的**：`EXTERNAL` 无分支、**静默落沙箱**。
+> → **我们的自动备份用 `EXTERNAL`，在鸿蒙上用户看不到** → **必须改用 `DOCUMENTS`**（已实测可行）。
+> → **教训：「不报错」≠「落点正确」**，这类静默降级最危险。
 
 ### ★★★ 最重要的发现：`getPending()` 在鸿蒙上不可用
 
