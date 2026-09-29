@@ -5,6 +5,9 @@
   "description": "定时服药提醒 — 打卡制排程 + 后台本地通知",
   "scripts": {
     "test": "node tests/run-all.js",
+    "verify": "python harness/harness.py",
+    "verify:list": "python harness/harness.py --list",
+    "verify:selftest": "python harness/harness.py --selftest && python harness/harness.py --selftest-e2e",
     "sync": "cap sync",
     "android": "cap open android"
   },

@@ -37,3 +37,6 @@ _*.js
 _*.py
 _*.json
 _*.md
+
+# ===== harness 自检的临时备份（selftest_e2e.py 用，正常 finally 会删） =====
+*.selftest-bak
