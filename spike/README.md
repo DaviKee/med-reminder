@@ -16,30 +16,94 @@
 |---|---|
 | ① 调研（读源码 + npm 核实） | ✅ 已完成（§24） |
 | ② 环境就绪自检脚本 | ✅ 已完成（`env-check.sh`） |
-| ③ **下载 + 安装 DevEco Studio** | ✅ **已完成**（2026-09-29，秦老师装于 `D:\Program Files\Huawei\DevEco Studio`） |
-| ④ 环境核实（工具链可执行性） | ✅ **已完成** —— SDK API 26 / `ohpm` 26.0.0.630 / `hvigorw` 6.26.8 / `hdc` 3.2.0f 全部实跑通过 |
-| ⑤ 建 harmony 分支 + 跑通最小工程 | ⏳ **待真机连接** |
-| ⑥ 逐个验证 4 个插件 | ⏳ |
+| ③ **安装 DevEco Studio** | ✅ **已完成**（2026-09-29，秦老师装于 `D:\Program Files\Huawei\DevEco Studio`） |
+| ④ **环境核实（工具链可执行性）** | ✅ **已完成** —— SDK API 26 / `ohpm` 26.0.0.630 / `hvigorw` 6.26.8 / `hdc` 3.2.0f 全部**实跑**通过 |
+| ⑤ **模拟器跑通** | ✅ **已完成**（2026-09-29）—— `hdc` 看到 `127.0.0.1:5555`，**已截图确认是完整 HarmonyOS 7.0.0 桌面** |
+| ⑥ 建 harmony 工程（含 Capacitor 6→8） | ⏳ **下一步** |
+| ⑦ 逐个验证 4 个插件 + 3 项新能力 | ⏳ |
 
 ---
 
-## 🔴 现在卡在哪里：需要连上鸿蒙真机
+## ✅ 好消息：**模拟器可用，不需要真机也能开工**
 
-**环境侧已全部就绪**（`bash spike/env-check.sh` 退出码 `0`）。唯一缺口是 **`hdc list targets` 返回 `[Empty]`** ——
-没有检测到设备。
+原先的判断「spike 必须真机」**过于绝对**。实测结论：
 
-**spike 的整个意义就是「在秦老师的机型上真跑一次」**，模拟器不算数（调研文档明确：适配层只声明在
-真机 ROM 5.1.0.150 测过）。所以这一步**只能等真机插上**。
+- 模拟器是**完整的 HarmonyOS 7.0.0 系统**（不是简化渲染），`hdc` 正常、shell 正常
+- **而且能用命令行操作它** —— 这对自动化验证极有价值：
+  ```bash
+  Emulator.exe -instance "Mate 90 Pro" -screenshot -screenshotPath <目录>
+  Emulator.exe -instance "Mate 90 Pro" -click <x> <y>
+  Emulator.exe -instance "Mate 90 Pro" -slide "<x1> <y1> <x2> <y2>"
+  ```
+  → **意味着 4 个插件的验证可以在模拟器上自动跑，我能自己截图看结果。**
 
-**需要秦老师做的**：
+**模拟器的能力边界**（华为官方文档）：
 
-1. 鸿蒙手机用 **USB 线**连到这台电脑
-2. 手机「**设置 → 系统 → 开发者选项**」→ 打开 **USB 调试**
-   （若没有「开发者选项」：设置 → 关于手机 → 连续点「版本号」7 次）
-3. 手机上若弹「是否允许 USB 调试」→ **允许**
-4. 然后跑 `bash spike/env-check.sh`，看到 `[4] 真机连接` 打 ✓ 即可开工
+| 能力 | 模拟器（x86） | 对我们的影响 |
+|---|---|---|
+| **系统通知** | ✅ 支持 | `local-notifications` 可验 |
+| **Web / ArkUI / 窗口** | ✅ 支持 | `www/` 界面可验 |
+| **文件管理** | ✅ 支持 | `filesystem` 可验 |
+| **相机** | ⚠️ 官方文档两处说法冲突（一处说 x86 支持、一处说 ×） | **必须实测** —— 见下方验证清单 |
+| 推送 / 华为账号 / 分布式 | ❌ 不支持 | 我们没用 |
+| 蓝牙 / NFC / 传感器 | ❌ 不支持 | 我们没用 |
 
-> 也可以用无线调试（`hdc tconn <手机IP>:<端口>`），但首次建议 USB，更稳。
+> ⚠️ **相机是模拟器最关键的不确定项**。好在启动日志里有
+> `Enable Camera. / Enable front and back cameras.`，而且模拟器支持「虚拟相机」
+> （官方 FAQ：无摄像头时可用虚拟相机）—— 但**能不能真出图**必须实测。
+
+**真机仍然值得连** —— 用来确认「秦老师的具体机型上确实能跑」，
+这是调研文档唯一没验证的假设（适配层只声明测过 ROM 5.1.0.150）。但**不再是阻塞项**。
+
+---
+
+## ▶️ 开工：启动模拟器
+
+```bash
+cd C:/WorkBuddy/med-reminder/med-reminder
+bash spike/start-emulator.sh          # 默认设备 Mate 90 Pro
+```
+
+脚本会自动：**先接受协议 → 启动 → 等 hdc 就绪**，成功后打印 `127.0.0.1:5555`。
+
+> 💡 **若要长期使用，建议在 DevEco Studio 的 Device Manager 里启动** ——
+> 更稳（不依赖命令行会话），而且有图形化错误提示。
+
+---
+
+## ⚠️⚠️ 三个坑（2026-09-29 现场踩出来的，都花了时间）
+
+### 坑 1 —— 启动参数：**不要传 `-instancePath` / `-imageRoot`**
+
+传了会 **794ms 就退出**，报 `Unable to start the emulator`，**而且连日志都不写** ——
+看着像环境问题，其实是参数问题。模拟器自己从 `deployed/lists.json` 读得到路径。
+
+```bash
+# ✅ 正确
+Emulator.exe -start "Mate 90 Pro"
+# ❌ 错误（会静默失败）
+Emulator.exe -start "Mate 90 Pro" -instancePath "..." -imageRoot "..."
+```
+
+### 坑 2 —— ★ **必须先 `-license accept`**（这是最误导人的一个）
+
+**现象**：模拟器能启动、能显示开机动画、日志看起来一切正常，
+但 **12 秒后自己 `quit`**（日志末尾 `StopMultiScreen before quit` / `quit emulator`），
+`hdc` 永远等不到设备。
+
+**极易误判成**：Hyper-V 没开 / 镜像坏了 / 内存不够。
+
+**真因**：`%LOCALAPPDATA%\Huawei\Emulator26.0\.emu_config` 里
+`HarmonyOS_SDK_Agreement: disagree` **没接受**。
+
+```bash
+Emulator.exe -license accept     # 输出 "All licenses have been automatically accepted." 后一次就起来
+```
+
+### 坑 3 —— 模拟器进程要活在我们的 shell 里
+
+沙箱会清理「脱离进程树」的子进程：用 Python `DETACHED_PROCESS` 启动的会被杀掉，
+**连日志都来不及写**。所以 `start-emulator.sh` 用「后台运行 + shell 保持存活」的方式。
 
 ---
 
@@ -53,25 +117,31 @@
 | `ohpm` | **26.0.0.630** | `ohpm.bat -v` **实跑** |
 | `hvigorw` | **6.26.8** | `hvigorw.bat --version` **实跑** |
 | `hdc` | **Ver 3.2.0f** | `hdc -v` **实跑** |
-| 真机连接 | ❌ 未连接 | `hdc list targets` → `[Empty]` |
+| 模拟器镜像 | `HarmonyOS-7.0.0/phone_all_x86`，4.6 GB | 目录实查 |
+| **模拟器设备** | **`127.0.0.1:5555`**，API 26，x86_64，Model `emulator` | `hdc list targets` + `hdc shell param get` |
+| **模拟器界面** | **完整 HarmonyOS 7.0.0 桌面（已截图）** | `Emulator.exe -screenshot` |
+| Hyper-V | ✅ 已启用（`hvix64.exe` 存在 + systeminfo「已检测到虚拟机监控程序」） | 二进制 + systeminfo |
 
-> ⭐ **两个好消息**：
+> ⭐ **三个好消息**：
 > ① **SDK 是 API 26**，比调研文档记的 API 17 新得多，能力只会更全；
-> ② **SDK 已随 IDE 装好**，省掉了「首次启动下载 SDK」这一大步（当年 Android 工具链要下很久）。
+> ② **SDK 已随 IDE 装好**，省掉了「首次启动下载 SDK」这一大步；
+> ③ **Hyper-V 本来就启用了** —— 我一开始误判成"没启用"（读了 18:20 的旧日志，
+>    且自检脚本用「vmms 服务是否注册」判断是**错的方法**，会把没启用误报成已启用）。
+>    **教训：报 False/True 都要先怀疑自己的判据。**
 
-> ⚠️ **一个提醒**：以上是「工具能跑」，**不等于「插件能跑」** —— 后者正是 spike 要验证的东西，
-> 且必须真机。别把前三项绿色当成 spike 已成功。
+> ⚠️ **一个提醒**：以上是「工具能跑、模拟器能起」，**不等于「插件能跑」** ——
+> 后者正是 spike 要验证的东西。别把绿色当成 spike 已成功。
 
 ---
 
-## 环境就绪后：先跑自检
+## 随时可跑：环境自检
 
 ```bash
 cd C:/WorkBuddy/med-reminder/med-reminder
 bash spike/env-check.sh
 ```
 
-它只读、不改任何东西，会逐项告诉你还缺什么。
+它只读、不改任何东西，逐项告诉你还缺什么。
 
 | 退出码 | 含义 |
 |---|---|
@@ -79,8 +149,9 @@ bash spike/env-check.sh
 | `1` | 缺非关键项 |
 | `2` | **关键项缺失**（DevEco / SDK 没装好） |
 
-**它会检查 7 类**：DevEco Studio · HarmonyOS SDK · `ohpm`/`hvigorw`/`hdc` 命令行工具 ·
-真机连接 · Node/JDK/内存 · 磁盘 · npm 侧鸿蒙包可达性。
+**它会检查 8 类**：DevEco Studio · HarmonyOS SDK · `ohpm`/`hvigorw`/`hdc` ·
+**设备连接（真机/模拟器）** · Node/JDK/内存 · 磁盘 · npm 侧鸿蒙包 ·
+**虚拟化 + 模拟器协议 + 镜像**。
 
 ---
 

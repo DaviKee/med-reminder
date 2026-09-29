@@ -136,16 +136,17 @@ HDC=$(find_tool hdc)
 if [ -n "$HDC" ]; then say_ok "hdc: $HDC"
 else say_miss "hdc 未找到（鸿蒙的 adb，在 SDK toolchains/）"; fi
 
-# ---------- 4. 关键项：真机连接 ----------
+# ---------- 4. 设备连接（真机 或 模拟器都可） ----------
 echo ""
-echo "[4] 真机连接（spike 必须真机，模拟器不算）"
+echo "[4] 设备连接（真机 / 模拟器任一即可）"
 if [ -n "$HDC" ]; then
   targets=$("$HDC" list targets 2>/dev/null | grep -v "^\[Empty\]" | head -5)
   if [ -n "$targets" ]; then
     say_ok "已连接设备:"; echo "$targets" | sed 's/^/       /'
   else
     say_warn "未发现设备"
-    say_note "鸿蒙手机：设置 → 系统 → 开发者选项 → 打开「USB 调试」"
+    say_note "模拟器：bash spike/start-emulator.sh"
+    say_note "真机：USB 连接 → 设置 → 系统 → 开发者选项 → 打开「USB 调试」"
   fi
 else
   say_note "（hdc 未就绪，跳过）"
@@ -198,6 +199,69 @@ for p in ohos app camera filesystem local-notifications; do
 done
 say_note "实测版本: ohos/app/camera/filesystem = 8.0.2, local-notifications = 8.0.1"
 say_note "⚠️ 它们 peerDependencies 要求 @capacitor/core ^8，本项目现为 6.2.2 → 需先升级"
+
+# ---------- 8. 虚拟化：模拟器的硬前置（2026-09-29 踩到） ----------
+echo ""
+echo "[8] 虚拟化（模拟器必需 —— 2026-09-29 启动失败根因）"
+
+# 8a. 组件是否可用
+if [ -f "/c/Windows/System32/vmcompute.exe" ]; then
+  say_ok "Hyper-V 组件可用（vmcompute.exe 存在）"
+else
+  say_crit "缺少 Hyper-V 组件（vmcompute.exe 不存在）—— 系统版本可能不支持"
+fi
+
+# 8b. Hyper-V / WHP 是否可用
+#     ⚠️ **不要用「vmms 服务是否注册」判断** —— 组件安装时服务就注册了，
+#        会把「没启用」误报成「已启用」（本机 2026-09-29 实测踩到这个假绿）。
+#     ✅ 用 hypervisor 二进制。
+hv_bin=""
+for f in hvix64.exe hvax64.exe; do
+  [ -f "/c/Windows/System32/$f" ] && { hv_bin="$f"; break; }
+done
+if [ -n "$hv_bin" ]; then
+  say_ok "hypervisor 二进制存在（$hv_bin）"
+else
+  say_warn "未找到 hypervisor 二进制（hvix64/hvax64）—— Hyper-V 很可能未启用"
+fi
+
+# 8c. ★ 模拟器协议是否已接受（2026-09-29 现场踩到的最大坑）
+#     现象：模拟器能启动、能显示开机动画，但 **12 秒后自己 quit**，
+#           hdc 永远等不到设备，日志末尾是 "StopMultiScreen before quit"。
+#           **极易误判成 Hyper-V / 镜像 / 网络问题。**
+cfg="$LOCALAPPDATA/Huawei/Emulator26.0/.emu_config"
+if [ -f "$cfg" ]; then
+  if grep -q "HarmonyOS_SDK_Agreement:agree" "$cfg" 2>/dev/null && \
+     grep -q "HarmonyOS_Software_Service_Agreement:agree" "$cfg" 2>/dev/null; then
+    say_ok "模拟器协议已接受（两个 agreement 都是 agree）"
+  else
+    say_crit "★ 模拟器协议**未接受** → 启动后 12 秒会自己退出（最误导人的坑）"
+    say_note "解决：\"${found_deveco}/tools/emulator/Emulator.exe\" -license accept"
+    grep -E "Agreement" "$cfg" 2>/dev/null | sed 's/^/       /'
+  fi
+else
+  say_warn "找不到 .emu_config（还没装过模拟器？）"
+fi
+
+# 8d. 冲突软件提醒
+for vmdir in "/c/Program Files/VMware/VMware Workstation" "/c/Program Files/Oracle/VirtualBox"; do
+  if [ -d "$vmdir" ]; then
+    say_warn "检测到 $(basename "$vmdir") —— 与模拟器共用底层虚拟化（本机实测可共存）"
+  fi
+done
+
+# 8d. 模拟器镜像
+EMU_IMG="$LOCALAPPDATA/Huawei/Sdk/system-image"
+if [ -d "$EMU_IMG" ]; then
+  n=$(find "$EMU_IMG" -maxdepth 2 -mindepth 2 -type d 2>/dev/null | wc -l)
+  sz=$(du -sh "$EMU_IMG" 2>/dev/null | awk '{print $1}')
+  say_ok "模拟器镜像已下载（${n} 个，共 ${sz}）"
+  find "$EMU_IMG" -maxdepth 2 -mindepth 2 -type d 2>/dev/null | while read d; do
+    say_note "$(basename "$(dirname "$d")")/$(basename "$d")"
+  done
+else
+  say_miss "模拟器镜像未下载（DevEco → Device Manager → New Emulator）"
+fi
 
 # ---------- 汇总 ----------
 echo ""
