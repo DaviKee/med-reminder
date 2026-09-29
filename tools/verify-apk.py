@@ -250,6 +250,23 @@ def main():
          'function sheetSaveBegin()' in APP and 'if (!sheetSaveBegin()) return;' in APP),
         ('打开浮层会重置防重入标记', 'sheetSaveReset();' in APP and APP.count('sheetSaveReset()') >= 2),
         ('假状态栏已删', 'statusbar' not in html),
+        # 2026-09-29 真机反馈：拍完照又让再拍一次（相机期间 App 被系统杀掉）
+        # —— 恢复期间必须挡住新的拍照会话，且 kind:'one' 的 medId/doseId 错配要修掉
+        ('拍照恢复-有 restoringShot 状态位', 'var restoringShot = false;' in APP),
+        ('拍照恢复-恢复中拒绝新拍照',
+         'if (restoringShot) { toast(' in APP),
+        ('拍照恢复-已有会话时拒绝重入',
+         'if (pendingShot) { toast(' in APP),
+        ('拍照恢复-boot 检测未消费留痕',
+         'if (loadPendingShot()) restoringShot = true;' in APP),
+        ('拍照恢复-有 30 秒兜底解锁',
+         'clearPendingShot();' in APP and re.search(r'\}, 30000\);', APP) is not None),
+        ('拍照恢复-「正在恢复」诚实态',
+         '正在恢复上次拍照' in APP),
+        ('拍照恢复-kinded one 走 checkIn(medId)',
+         'var arr = checkIn(p.doseId);' in APP),
+        ('拍照恢复-旧 medId/doseId 错配已移除',
+         'l[i].id === p.doseId' not in APP),
     ]
     for name, cond in regress:
         check('回归', name, cond)
