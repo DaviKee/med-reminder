@@ -56,8 +56,24 @@
       + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
 
-  /* 目标目录，按顺序尝试。两个都不需要「存储权限」，这是选它们的原因。 */
-  var DIRS = ['EXTERNAL', 'DATA'];
+  /* 目标目录，按顺序尝试。
+   *
+   * ⚠️ 2026-09-29 把 DOCUMENTS 提到最前 —— 依据是 S-0 鸿蒙 spike 的**实测结果**：
+   *
+   *   鸿蒙上 getUri() 的真实落点（实测）：
+   *     · EXTERNAL  → <包名>/data/storage/el2/base/files/   ← **与 DATA 完全相同**！
+   *     · DOCUMENTS → file://docs/storage/Users/currentUser/Documents/   ← 真·用户可见
+   *   也就是说 EXTERNAL 在鸿蒙上**能写能读、不报错，但落点就是沙箱** ——
+   *   用户和电脑都看不到，**备份就失去意义了**。
+   *
+   *   而 DOCUMENTS 在两边都对：
+   *     · 鸿蒙：落到用户文档目录（可见）✅
+   *     · Android：本 App 的 Manifest 里**没有任何存储权限**，scoped storage 下写公共目录会
+   *       **直接失败** → 自动退到 EXTERNAL（= 现在的行为，**完全不变**）✅
+   *
+   *   所以「DOCUMENTS → EXTERNAL → DATA」这个顺序是**双端无损**的。
+   */
+  var DIRS = ['DOCUMENTS', 'EXTERNAL', 'DATA'];
 
   function writeOne(dir, name, text) {
     /* ⚠️ writeFile 不会自动建父目录（父目录不存在会 reject

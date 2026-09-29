@@ -107,16 +107,17 @@ const namesIn = (fs, dir) => Array.from(fs.files.keys())
     A.schedule(() => '{"hello":"world"}');
     const r = await A.flush();
 
-    t('★ 写到了 EXTERNAL（app 专属外部目录，无需权限）', r && r.ok && r.dir === 'EXTERNAL', JSON.stringify(r));
-    t('★ latest.json 已落盘', has(fsimpl, 'EXTERNAL', 'latest.json'), namesIn(fsimpl, 'EXTERNAL').join(','));
+    t('★ 写到了 DOCUMENTS（双端最优：鸿蒙=用户可见；Android 无权限会退 EXTERNAL）',
+      r && r.ok && r.dir === 'DOCUMENTS', JSON.stringify(r));
+    t('★ latest.json 已落盘', has(fsimpl, 'DOCUMENTS', 'latest.json'), namesIn(fsimpl, 'DOCUMENTS').join(','));
     t('★ 当日备份已落盘（backup-YYYYMMDD.json）',
-      namesIn(fsimpl, 'EXTERNAL').some(n => /^backup-\d{8}\.json$/.test(n)), namesIn(fsimpl, 'EXTERNAL').join(','));
-    t('内容正确', fsimpl.files.get('EXTERNAL|MedReminder/latest.json') === '{"hello":"world"}',
-      fsimpl.files.get('EXTERNAL|MedReminder/latest.json'));
+      namesIn(fsimpl, 'DOCUMENTS').some(n => /^backup-\d{8}\.json$/.test(n)), namesIn(fsimpl, 'DOCUMENTS').join(','));
+    t('内容正确', fsimpl.files.get('DOCUMENTS|MedReminder/latest.json') === '{"hello":"world"}',
+      fsimpl.files.get('DOCUMENTS|MedReminder/latest.json'));
     t('先建了目录再写（否则 writeFile 会报父目录不存在）',
       fsimpl.log.findIndex(x => x[0] === 'mkdir') < fsimpl.log.findIndex(x => x[0] === 'write'),
       JSON.stringify(fsimpl.log.slice(0, 2)));
-    t('status 记录成功与目录', A.status().ok === true && A.status().dir === 'EXTERNAL', JSON.stringify(A.status()));
+    t('status 记录成功与目录', A.status().ok === true && A.status().dir === 'DOCUMENTS', JSON.stringify(A.status()));
     t('★ 状态落盘（重启后还能显示上次备份时间）', !!ls.get('medreminder.autoBackup.v1'), '没落盘');
   }
 
@@ -131,24 +132,25 @@ const namesIn = (fs, dir) => Array.from(fs.files.keys())
     await sleep(A.DEBOUNCE_MS + 400);
     const writes = fsimpl.log.filter(x => x[0] === 'write').length;
     t('★ 防抖后只写了一次（2 个文件：latest + 当日）', writes === 2, writes);
-    t('落盘的是最后一次的内容', fsimpl.files.get('EXTERNAL|MedReminder/latest.json') === '{"n":4}',
-      fsimpl.files.get('EXTERNAL|MedReminder/latest.json'));
+    t('落盘的是最后一次的内容', fsimpl.files.get('DOCUMENTS|MedReminder/latest.json') === '{"n":4}',
+      fsimpl.files.get('DOCUMENTS|MedReminder/latest.json'));
   }
 
   console.log('');
   console.log('=== D. 目录降级链（真实场景：某些目录写不进去）===');
   {
-    // EXTERNAL 写不进去 → 退到 DATA
-    const fsimpl = makeFs({ dead: ['EXTERNAL'] });
+    // ★ 真实场景：Android 上没有存储权限 → 写 DOCUMENTS 失败；鸿蒙上 EXTERNAL 会落沙箱
+    //   → DOCUMENTS + EXTERNAL 都不可用 → 退到 DATA
+    const fsimpl = makeFs({ dead: ['DOCUMENTS', 'EXTERNAL'] });
     const { A } = boot(fsimpl);
     A.schedule(() => '{"x":1}');
     const r = await A.flush();
-    t('★ EXTERNAL 失败时自动退到 DATA', r && r.ok && r.dir === 'DATA', JSON.stringify(r));
+    t('★ DOCUMENTS+EXTERNAL 都失败时自动退到 DATA', r && r.ok && r.dir === 'DATA', JSON.stringify(r));
     t('DATA 里确实写进去了', has(fsimpl, 'DATA', 'latest.json'), namesIn(fsimpl, 'DATA').join(','));
     t('EXTERNAL 里没有半截文件', namesIn(fsimpl, 'EXTERNAL').length === 0, namesIn(fsimpl, 'EXTERNAL').join(','));
 
-    // 两个都写不进去 → 记录失败，但**不抛**
-    const dead2 = makeFs({ dead: ['EXTERNAL', 'DATA'] });
+    // 三个都写不进去 → 记录失败，但**不抛**
+    const dead2 = makeFs({ dead: ['DOCUMENTS', 'EXTERNAL', 'DATA'] });
     const { A: A2 } = boot(dead2);
     let threw = '';
     let r2;
@@ -165,15 +167,15 @@ const namesIn = (fs, dir) => Array.from(fs.files.keys())
     // 预置 20 份历史日备份
     for (let i = 1; i <= 20; i++) {
       const d = String(i).padStart(2, '0');
-      fsimpl.files.set('EXTERNAL|MedReminder/backup-202609' + d + '.json', '{}');
+      fsimpl.files.set('DOCUMENTS|MedReminder/backup-202609' + d + '.json', '{}');
     }
     const { A } = boot(fsimpl);
     A.schedule(() => '{"new":1}');
     const r = await A.flush();
-    const left = namesIn(fsimpl, 'EXTERNAL').filter(n => /^backup-\d{8}\.json$/.test(n)).sort();
+    const left = namesIn(fsimpl, 'DOCUMENTS').filter(n => /^backup-\d{8}\.json$/.test(n)).sort();
     t('★ 清理后不超过 14 份', left.length <= 14, left.length);
     t('★ 删的是最旧的（保留 20260907 之后）', left[0] >= 'backup-20260907.json', left[0]);
-    t('latest.json 不受清理影响', has(fsimpl, 'EXTERNAL', 'latest.json'), '');
+    t('latest.json 不受清理影响', has(fsimpl, 'DOCUMENTS', 'latest.json'), '');
     t('count 反映了剩余份数', r && typeof r.count === 'number', JSON.stringify(r));
   }
 
@@ -200,8 +202,8 @@ const namesIn = (fs, dir) => Array.from(fs.files.keys())
     t('★ 并发调用返回同一形状（都带 boolean 的 ok）',
       rs.every(x => x && typeof x.ok === 'boolean'), JSON.stringify(rs.map(x => x && x.ok)));
     t('★ 没有交错（文件仍是一份，内容完整）',
-      fs2.files.get('EXTERNAL|MedReminder/latest.json') === '{"a":1}',
-      fs2.files.get('EXTERNAL|MedReminder/latest.json'));
+      fs2.files.get('DOCUMENTS|MedReminder/latest.json') === '{"a":1}',
+      fs2.files.get('DOCUMENTS|MedReminder/latest.json'));
   }
 
   console.log('');

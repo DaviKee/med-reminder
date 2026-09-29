@@ -174,7 +174,8 @@ def main():
         ('F-4-界面（模式切换+时刻编辑）', 'id="modeRow"' in html and 'id="timeList"' in html and 'id="addTime"' in html),
         ('F-4-样式 44px 触摸目标', '.time-input' in CSS and 'height:44px' in CSS),
         # F-7 自动本地备份
-        ('F-7-写 app 专属外部目录', "var DIRS = ['EXTERNAL', 'DATA'];" in BACKUP),
+        ('F-7-备份目录优先 DOCUMENTS（鸿蒙=用户可见；Android 无权限自动退 EXTERNAL）',
+         "var DIRS = ['DOCUMENTS', 'EXTERNAL', 'DATA'];" in BACKUP),
         ('F-7-先建目录再写文件', 'FS.mkdir(' in BACKUP and 'recursive: true' in BACKUP),
         ('F-7-防抖', 'DEBOUNCE_MS' in BACKUP and 'clearTimeout(timer)' in BACKUP),
         ('F-7-保留策略', 'KEEP' in BACKUP and 'deleteFile' in BACKUP),
