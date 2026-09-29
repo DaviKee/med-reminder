@@ -20,38 +20,84 @@
 | ④ **环境核实（工具链可执行性）** | ✅ **已完成** —— SDK API 26 / `ohpm` 26.0.0.630 / `hvigorw` 6.26.8 / `hdc` 3.2.0f 全部**实跑**通过 |
 | ⑤ **模拟器跑通** | ✅ **已完成**（2026-09-29）—— `hdc` 看到 `127.0.0.1:5555`，**已截图确认是完整 HarmonyOS 7.0.0 桌面** |
 | ⑥ 建 harmony 工程（含 Capacitor 6→8） | ✅ **已完成** —— `hionic` 全自动：建工程 + 复制框架源码 + 装 4 插件 + 改 CMake + 注册插件 |
-| ⑦ 编译 HAP | ⚠️ **卡在最后一步** —— C++ 编译**通过**（openssl 不是问题），`GeneratePkgContextInfo` 报 **00308018** |
-| ⑧ 逐个验证 4 个插件 | ⏳ 待编译通过 |
+| ⑦ 编译 HAP | ✅ **已完成** —— `BUILD SUCCESSFUL`，42.8 MB 未签名 Debug 包 |
+| ⑧ 装 + 跑 + 实测 4 插件 | ✅ **已完成** —— **应用在模拟器里跑起来了，19 通过 / 1 失败** |
 
 ---
 
-## 📌 卡点：`hvigor` 报 00308018（Unknown Error）
+## ✅ 实测结果（2026-09-29，这是本项目第一次拿到鸿蒙侧真实运行数据）
 
-`hvigorw assembleHap` 的表现：
+**应用启动成功，网页由 `ArkWeb/7.0.0.105` 渲染，4 个插件全部注册。**
 
-```
-✓ BuildNativeWithNinja      ← C++ 编译通过（openssl 不是问题！）
-✓ CompileResource / ProcessLibs / CacheNativeLibs
-✓ CompileArkTS（ohpm install 之后）
-✗ GeneratePkgContextInfo → 00308018 Unknown Error
-```
+| 插件 | 结果 |
+|---|---|
+| **App** | ✅ 11 个方法全在 |
+| **Filesystem** | ✅ **12/12 全过** —— DATA / DOCUMENTS / CACHE / **EXTERNAL 全部能写能读** + readdir + getUri |
+| **LocalNotifications** | ⚠️ 18 个方法在；`requestPermissions()`→granted、`schedule()` **成功**、`areEnabled()`→true；**但 `getPending()` 报 `Permission denied.`** |
+| **Camera** | ⏳ 未测（需手动点按钮） |
 
-**已排除**：
-- ~~openssl 缺失~~ —— C++ 编译直接过了，模板自带 `libssl`
-- ~~签名~~ —— Debug 包本不需要签名（产物是 `-unsigned.hap`）
-- ~~`targetSdkVersion` 不匹配~~ —— 从 `5.0.5(17)` 改成 `26.0.0(26)` 后仍报同一错
+> ★ **推翻调研文档一条**：文档说鸿蒙上 `EXTERNAL` 没有分支、会静默落沙箱 —— **实测可写可读**。
 
-**下一个要验证的假设**：**路径含空格**。
-官方 FAQ 提示 hvigor 对含空格的路径敏感，且**两次都推荐"用 DevEco GUI 构建，已验证可正常构建"**。
-我们的 SDK 路径正是 `D:\Program Files\Huawei\DevEco Studio`。
+### ★★★ 最重要的发现：`getPending()` 在鸿蒙上不可用
 
-**推荐动作（下次开工第一步）**：
+**根因（查到源码级）**：插件实现调 `reminderAgentManager.getValidReminders()`
+（`LocalNotifications.ets:257`），该 API 需要 **`ohos.permission.NOTIFICATION_AGENT_CONTROLLER`**
+—— **系统级权限，普通应用申请不到**。
+
+**为什么极其重要**：我们 v1.2.1 修「一次冒出一堆通知」的**整套清场机制，完全建立在 `getPending` 上**。
+
+**好消息**：`cancelAll()` 本来就有兜底（`.catch(() => false)` → 退回自建台账 `pendingIds`），**不会崩**。
+
+**⚠️ 但有个坑**：我们的判断是 `typeof LN.getPending !== 'function'` ——
+鸿蒙上**函数存在、只是调用被拒** → 这个判断不成立，靠的是后面那层 `.catch` 兜底。
+**移植时不能只依赖 `typeof` 判断。**
+
+**移植建议**：鸿蒙上完全依赖自建台账 → 台账要**每次 schedule 后立即持久化**；
+可考虑"保守清场"（用足够大的 id 范围 cancel）；真机要再验一次。
+
+---
+
+## ⚠️ 七个坑（全部实测踩过，`spike/README` 与今日记忆里有完整版）
+
+| # | 坑 | 解法 |
+|---|---|---|
+| 1 | `npm install` 卡死 8 分钟 | 用 `--registry=https://registry.npmmirror.com` → **29 秒** |
+| 2 | `hionic buildapp` 强制要签名配置 | 绕过它，直接 `hvigorw assembleHap`（**Debug 包不需签名**） |
+| 3 | `hdc install` 把绝对路径拼错 | **cd 进目录，用文件名** |
+| 4 | `Cannot find module 'harmony-capacitor'` | 在 `openharmony/` 跑 **`ohpm install`** |
+| 5 | ★ `ninja: error: libssl.so.3 missing` | **集成 openssl**：克隆 `openharmony-capacitor-openssl3.5`，拷 `libs/`→`capacitor/`、`openssl/`→`capacitor/src/main/cpp/`（**有 x86_64**） |
+| 6 | 加 `compileSdkVersion` 报 00303313 | **删掉**（hvigor 用内置的，不要显式配） |
+| 7 | `hionic sync` 没同步 www | **手动 `cp`** 到 `rawfile/www/` |
+
+> ⚠️ **最大的教训**：第 5 条我一度以为"openssl 不是问题"—— 因为第一次编译时
+> `BuildNativeWithNinja` 显示 `Finished ... after **6 ms**`。
+> **6 毫秒不可能编译 C++，那是缓存跳过（`10 up-to-date`）。**
+> **干净的重新编译立刻暴露了真错误。**
+> → **「Finished」不等于「真干过活」。判断构建成功要看实际耗时和产物，别只看状态行。**
+
+---
+
+## 🔁 一键复现（照抄即可）
+
 ```bash
-# 在 DevEco GUI 里构建一次 —— 最快能区分「是 CLI/路径问题」还是「工程配置问题」
-hionic open openharmony
+cd C:/WorkBuddy/med-reminder/med-reminder/spike/harmony-test
+source ../env-harmony.sh
+npm install --registry=https://registry.npmmirror.com --legacy-peer-deps --no-audit
+./node_modules/.bin/hionic platform add openharmony
+for p in app camera filesystem local-notifications; do ./node_modules/.bin/hionic plugin add "@capacitor/$p"; done
+
+# ★ 集成 openssl —— 不做这步编译必失败
+git clone --depth 1 https://gitcode.com/li_in/openharmony-capacitor-openssl3.5.git /tmp/openssl-repo
+cd openharmony && ohpm install
+cp -r /tmp/openssl-repo/libs    capacitor/
+cp -r /tmp/openssl-repo/openssl capacitor/src/main/cpp/
+cp ../www/index.html entry/src/main/resources/rawfile/www/     # ★ 手动同步网页
+
+hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon
+cd entry/build/default/outputs/default
+hdc -t 127.0.0.1:5555 install entry-default-unsigned.hap
+hdc -t 127.0.0.1:5555 shell aa start -b com.medreminder.spike -a EntryAbility
 ```
-- GUI 能过 → 是命令行/路径问题，再回头调 CLI
-- GUI 也报同样错 → 是 SDK 版本（API 26 vs 模板 API 17）不匹配，需装 API 17 SDK
 
 ---
 

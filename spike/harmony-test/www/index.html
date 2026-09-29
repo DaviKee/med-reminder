@@ -256,14 +256,24 @@ window.SPIKE = (function () {
       })
       .then(function (at) {
         ok(g, 'schedule() 登记成功', '计划时刻 ' + at.toTimeString().slice(0, 8) + '（约 8 秒后）');
-        return LN.getPending();
+        /* ★ 单独测 getPending —— 它是我们「通知清场」机制的唯一依赖，必须查清 */
+        return LN.getPending()
+          .then(function (r) {
+            var list = (r && r.notifications) || [];
+            if (list.length) {
+              ok(g, '★ getPending() 支持（清场机制可用）', '待触发 ' + list.length + ' 条: ' +
+                list.map(function (n) { return '#' + n.id + ' ' + (n.title || ''); }).join(' | '));
+            } else {
+              warn(g, '★ getPending() 返回空数组', '排程登记了但查不到 —— 清场机制会失效\n原始返回: ' + S(r));
+            }
+          })
+          .catch(function (e) {
+            fail(g, '★ getPending() 调用失败（★ 重点看这里）',
+              '错误: ' + String((e && e.message) || e) +
+              '\ngetPending 是「通知清场」的唯一依赖 —— 它在鸿蒙上不可用的话，清场机制要改设计');
+          });
       })
-      .then(function (r) {
-        var list = (r && r.notifications) || [];
-        if (list.length) ok(g, '★ getPending() 支持（清场机制可用）', '待触发 ' + list.length + ' 条: ' +
-          list.map(function (n) { return '#' + n.id + ' ' + (n.title || ''); }).join(' | '));
-        else fail(g, '★ getPending() 返回空', '排程没登记上 —— 清场机制会失效');
-      })
+      .then(function () { return LN.areEnabled ? LN.areEnabled().then(function (r) { info(g, 'areEnabled()', S(r)); }).catch(function (e) { warn(g, 'areEnabled() 失败', String(e && e.message || e)); }) : null; })
       .catch(function (e) { fail(g, '通知排程链路失败', String(e && e.message || e)); });
   }
 
