@@ -19,8 +19,87 @@
 | ③ **安装 DevEco Studio** | ✅ **已完成**（2026-09-29，秦老师装于 `D:\Program Files\Huawei\DevEco Studio`） |
 | ④ **环境核实（工具链可执行性）** | ✅ **已完成** —— SDK API 26 / `ohpm` 26.0.0.630 / `hvigorw` 6.26.8 / `hdc` 3.2.0f 全部**实跑**通过 |
 | ⑤ **模拟器跑通** | ✅ **已完成**（2026-09-29）—— `hdc` 看到 `127.0.0.1:5555`，**已截图确认是完整 HarmonyOS 7.0.0 桌面** |
-| ⑥ 建 harmony 工程（含 Capacitor 6→8） | ⏳ **下一步** |
-| ⑦ 逐个验证 4 个插件 + 3 项新能力 | ⏳ |
+| ⑥ 建 harmony 工程（含 Capacitor 6→8） | ✅ **已完成** —— `hionic` 全自动：建工程 + 复制框架源码 + 装 4 插件 + 改 CMake + 注册插件 |
+| ⑦ 编译 HAP | ⚠️ **卡在最后一步** —— C++ 编译**通过**（openssl 不是问题），`GeneratePkgContextInfo` 报 **00308018** |
+| ⑧ 逐个验证 4 个插件 | ⏳ 待编译通过 |
+
+---
+
+## 📌 卡点：`hvigor` 报 00308018（Unknown Error）
+
+`hvigorw assembleHap` 的表现：
+
+```
+✓ BuildNativeWithNinja      ← C++ 编译通过（openssl 不是问题！）
+✓ CompileResource / ProcessLibs / CacheNativeLibs
+✓ CompileArkTS（ohpm install 之后）
+✗ GeneratePkgContextInfo → 00308018 Unknown Error
+```
+
+**已排除**：
+- ~~openssl 缺失~~ —— C++ 编译直接过了，模板自带 `libssl`
+- ~~签名~~ —— Debug 包本不需要签名（产物是 `-unsigned.hap`）
+- ~~`targetSdkVersion` 不匹配~~ —— 从 `5.0.5(17)` 改成 `26.0.0(26)` 后仍报同一错
+
+**下一个要验证的假设**：**路径含空格**。
+官方 FAQ 提示 hvigor 对含空格的路径敏感，且**两次都推荐"用 DevEco GUI 构建，已验证可正常构建"**。
+我们的 SDK 路径正是 `D:\Program Files\Huawei\DevEco Studio`。
+
+**推荐动作（下次开工第一步）**：
+```bash
+# 在 DevEco GUI 里构建一次 —— 最快能区分「是 CLI/路径问题」还是「工程配置问题」
+hionic open openharmony
+```
+- GUI 能过 → 是命令行/路径问题，再回头调 CLI
+- GUI 也报同样错 → 是 SDK 版本（API 26 vs 模板 API 17）不匹配，需装 API 17 SDK
+
+---
+
+## 🧪 最小测试工程 `harmony-test/`
+
+**独立工程，完全不碰主项目（零风险）**。跑通的前半程（实测）：
+
+| 步骤 | 命令 | 结果 |
+|---|---|---|
+| 装依赖 | `npm install --registry=https://registry.npmmirror.com --legacy-peer-deps` | ✅ **29 秒** |
+| 建工程 | `hionic platform add openharmony` | ✅ 自动复制框架源码到 `openharmony/capacitor/` |
+| 装 4 插件 | `hionic plugin add @capacitor/<名>` | ✅ 4/4，自动改 CMake + 注册插件 |
+| 同步网页 | `hionic sync openharmony` | ✅ 测试页进 `rawfile/www/` |
+| ohpm 依赖 | `ohpm install` | ✅ 1.4 秒 |
+
+> ⚠️⚠️ **`npm install` 必须用国内镜像** —— 默认源**卡死 8 分钟**（`node_modules` 一直空），
+> 换 `registry.npmmirror.com` **29 秒**完成。这一条能省你 8 分钟。
+
+**测试页 `www/index.html`** 是分级探测设计（基础环境 → App → Filesystem → 通知 → 相机），
+结果直接显示在页面上，跑起来后截图即可判读。
+
+### hionic 完整命令链（官方 README）
+
+```bash
+hionic init <应用名> <包名>              # 已有 web 项目就地初始化
+hionic platform add openharmony
+hionic plugin add @capacitor/camera      # ← 用**官方包名**，hionic 自动找鸿蒙实现
+hionic sync openharmony                   # 同步网页资源
+hionic buildui                            # 构建前端（如有前端框架）
+hionic buildapp openharmony               # 编 HAP（**会强制检查签名配置**）
+hionic run openharmony                    # 装到设备并启动
+```
+
+**环境变量**（`source spike/env-harmony.sh` 一键设置）：
+`DEVECO_SDK_HOME` + `DEVECO_IDE_PATH`，另需 `hdc`/`ohpm`/`hvigor` 在 PATH。
+
+**目录结构**：
+```
+harmony-test/
+├── openharmony/               # 鸿蒙原生工程
+│   ├── capacitor/             # capacitor 框架（自动从 @capacitor-ohos/ohos 复制）
+│   └── entry/.../rawfile/www/ # 网页资源
+├── www/index.html             # 我的测试页（源）
+├── capacitor.config.json
+└── package.json
+```
+
+> ⚠️ 模板默认带 `HotCodePushPlugin`（热更新）——**华为应用市场对此有严格限制，不要启用**。
 
 ---
 

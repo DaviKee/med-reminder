@@ -52,3 +52,14 @@ _*.md
 
 # 模拟器截图（运行时产物，会越积越多）
 /spike/shots/
+
+# ===== S-0 最小测试工程：依赖与生成的鸿蒙原生工程不入库 =====
+# 但 package.json / capacitor.config.json / www/ 要入库 —— 它们是可复现的 spike 产物
+/spike/harmony-test/node_modules/
+/spike/harmony-test/openharmony/
+/spike/harmony-test/oh-plugins/
+/spike/harmony-test/.hvigor/
+/spike/harmony-test/build/
+/spike/harmony-test/oh_modules/
+# oh-plugins/ 是 hionic 从 @capacitor-ohos/* 复制的**第三方（华为）源码**，
+# 不该进我们的版本库 —— 用 `hionic plugin add` 随时能重建。

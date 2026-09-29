@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>S-0 鸿蒙插件验证</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 14px 14px 40px;
+    font: 15px/1.5 -apple-system, "HarmonyOS Sans", "Noto Sans SC", sans-serif;
+    background: #0A0A0A; color: #E8E8E8;
+  }
+  h1 { font-size: 19px; margin: 4px 0 2px; }
+  .sub { font-size: 12px; color: #888; margin-bottom: 14px; }
+  .grp { margin: 0 0 14px; }
+  .grp > h2 {
+    font-size: 13px; color: #7aa2f7; margin: 0 0 6px;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .row {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 7px 10px; margin-bottom: 4px;
+    background: #161616; border-radius: 8px;
+    border-left: 3px solid #444;
+    font-size: 13px;
+  }
+  .row .tag { flex: 0 0 54px; font-weight: 700; font-size: 11px; padding-top: 2px; }
+  .row .body { flex: 1; min-width: 0; }
+  .row .body b { display: block; font-weight: 600; }
+  .row .body span {
+    display: block; color: #999; font-size: 12px;
+    word-break: break-all; white-space: pre-wrap; margin-top: 2px;
+  }
+  .ok   { border-left-color: #2ea043; } .ok .tag   { color: #3fb950; }
+  .fail { border-left-color: #d1242f; } .fail .tag { color: #f85149; }
+  .warn { border-left-color: #d29922; } .warn .tag { color: #e3b341; }
+  .info { border-left-color: #388bfd; } .info .tag { color: #58a6ff; }
+  .run  { border-left-color: #6e7681; } .run .tag  { color: #8b949e; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+  button {
+    flex: 1 1 45%; padding: 13px 10px; font-size: 14px; font-weight: 600;
+    background: #1f6feb; color: #fff; border: 0; border-radius: 9px;
+    font-family: inherit;
+  }
+  button.alt { background: #30363d; }
+  button:active { opacity: .7; }
+  img.shot { max-width: 100%; border-radius: 8px; margin-top: 6px; }
+  .big { font-size: 15px; }
+</style>
+</head>
+<body>
+
+<h1>S-0 鸿蒙插件验证</h1>
+<div class="sub" id="sub">正在初始化…</div>
+
+<div class="btns">
+  <button onclick="SPIKE.all()">▶ 跑全部测试</button>
+  <button class="alt" onclick="SPIKE.camera()">📷 只测相机</button>
+</div>
+
+<div id="out"></div>
+
+<script>
+/* S-0 spike 测试页 —— 无打包器，纯 <script>
+ * 目的：验证 4 个 Capacitor 插件在鸿蒙（ArkWeb + @capacitor-ohos）上能否跑。
+ * 分级报告，一眼看出卡在哪一层。
+ */
+window.SPIKE = (function () {
+  'use strict';
+
+  var out = document.getElementById('out');
+  var sub = document.getElementById('sub');
+  var groups = {};
+
+  function grp(title) {
+    var g = groups[title];
+    if (g) return g;
+    g = document.createElement('div');
+    g.className = 'grp';
+    var h = document.createElement('h2');
+    h.textContent = title;
+    g.appendChild(h);
+    out.appendChild(g);
+    groups[title] = g;
+    return g;
+  }
+
+  function row(cls, tag, name, detail) {
+    var d = document.createElement('div');
+    d.className = 'row ' + cls;
+    var t = document.createElement('div');
+    t.className = 'tag'; t.textContent = tag;
+    var b = document.createElement('div');
+    b.className = 'body';
+    var n = document.createElement('b'); n.textContent = name; b.appendChild(n);
+    if (detail !== undefined && detail !== null && detail !== '') {
+      var s = document.createElement('span');
+      s.textContent = (typeof detail === 'string') ? detail : JSON.stringify(detail, null, 1);
+      b.appendChild(s);
+    }
+    d.appendChild(t); d.appendChild(b);
+    (grp(arguments[5] || '结果')).appendChild(d);
+    return d;
+  }
+
+  function ok(g, name, detail)   { return row('ok',   '✓ OK',   name, detail, 0, g); }
+  function fail(g, name, detail) { return row('fail', '✗ FAIL', name, detail, 0, g); }
+  function warn(g, name, detail) { return row('warn', '⚠ WARN', name, detail, 0, g); }
+  function info(g, name, detail) { return row('info', 'ℹ INFO', name, detail, 0, g); }
+
+  function P(name, fn) {           /* 跑一步，自动判成败 */
+    return function () {
+      return Promise.resolve().then(fn);
+    };
+  }
+
+  /* ---- 工具：安全的字符串化 ---- */
+  function S(v) {
+    if (v === undefined) return 'undefined';
+    if (v === null) return 'null';
+    if (typeof v === 'string') return v;
+    try { return JSON.stringify(v); } catch (e) { return String(v); }
+  }
+
+  var C = window.Capacitor;
+
+  /* ============ 第 1 层：基础环境 ============ */
+  function t1() {
+    var g = '1 · 基础环境';
+    ok(g, '页面已加载（HTML/CSS/JS 正常）', location.href);
+    info(g, 'UserAgent', navigator.userAgent);
+    info(g, '屏幕', screen.width + '×' + screen.height + ' @' + window.devicePixelRatio + 'x');
+
+    if (!C) { fail(g, 'window.Capacitor 不存在', '→ WebView 里没有 Capacitor 桥接，后面全免谈'); return false; }
+    ok(g, 'window.Capacitor 存在');
+
+    try {
+      info(g, 'getPlatform()', C.getPlatform ? C.getPlatform() : '(无此方法)');
+    } catch (e) { warn(g, 'getPlatform() 抛错', String(e)); }
+
+    var pl = (C.Plugins && Object.keys(C.Plugins)) || [];
+    if (pl.length) ok(g, '原生已注入的插件（Capacitor.Plugins 的键）', pl.join(', '));
+    else fail(g, 'Capacitor.Plugins 为空', '→ 原生侧没注册任何插件');
+
+    return true;
+  }
+
+  /* ============ 第 2 层：App 插件 ============ */
+  function t2() {
+    var g = '2 · App 插件';
+    var App = C && C.Plugins && C.Plugins.App;
+    if (!App) { fail(g, 'Capacitor.Plugins.App 不存在', '→ 插件 JS 没加载或原生没实现'); return Promise.resolve(); }
+    ok(g, 'Capacitor.Plugins.App 存在', '方法: ' + Object.keys(App).filter(function (k) {
+      return typeof App[k] === 'function';
+    }).join(', '));
+
+    return Promise.resolve()
+      .then(function () { return typeof App.getInfo === 'function' ? App.getInfo() : Promise.reject(new Error('无 getInfo')); })
+      .then(function (r) { ok(g, 'App.getInfo() 可用', S(r)); })
+      .catch(function (e) { fail(g, 'App.getInfo() 失败', String(e && e.message || e)); })
+      .then(function () { return typeof App.getState === 'function' ? App.getState() : Promise.reject(new Error('无 getState')); })
+      .then(function (r) { ok(g, 'App.getState() 可用', S(r)); })
+      .catch(function (e) { fail(g, 'App.getState() 失败', String(e && e.message || e)); });
+  }
+
+  /* ============ 第 3 层：Filesystem（含文档说的目录语义差异） ============ */
+  function fsWriteRead(g, dirName) {
+    var label = dirName;
+    var FS = C.Plugins.Filesystem;
+    var text = 'spike-' + Date.now();
+    return FS.mkdir({ path: 'spiketest', directory: dirName, recursive: true })
+      .catch(function (e) { /* 已存在 */ })
+      .then(function () {
+        return FS.writeFile({ path: 'spiketest/a.txt', data: text, directory: dirName, encoding: 'utf8' });
+      })
+      .then(function () {
+        return FS.readFile({ path: 'spiketest/a.txt', directory: dirName, encoding: 'utf8' });
+      })
+      .then(function (r) {
+        if (r && r.data === text) ok(g, 'Filesystem 写入+读回成功（' + label + '）', '内容一致');
+        else fail(g, 'Filesystem 读回内容不一致（' + label + '）', '期望 ' + text + '，实得 ' + S(r && r.data));
+      })
+      .then(function () {
+        if (typeof FS.readdir !== 'function') { warn(g, 'readdir 不存在（' + label + '）'); return null; }
+        return FS.readdir({ path: 'spiketest', directory: dirName }).then(function (r) {
+          ok(g, 'Filesystem.readdir 可用（' + label + '）', '条目: ' + S((r && r.files || []).map(function (f) {
+            return typeof f === 'string' ? f : f.name;
+          })));
+        });
+      })
+      .then(function () {
+        return FS.getUri ? FS.getUri({ path: 'spiketest/a.txt', directory: dirName })
+          .then(function (r) { info(g, 'getUri（' + label + '）', S(r)); })
+          .catch(function (e) { warn(g, 'getUri 失败（' + label + '）', String(e && e.message || e)); }) : null;
+      })
+      .catch(function (e) {
+        fail(g, 'Filesystem 失败（' + label + '）', String(e && e.message || e));
+      });
+  }
+
+  function t3() {
+    var g = '3 · Filesystem（★ 目录语义是关键差异）';
+    var FS = C && C.Plugins && C.Plugins.Filesystem;
+    if (!FS) { fail(g, 'Capacitor.Plugins.Filesystem 不存在'); return Promise.resolve(); }
+    ok(g, 'Capacitor.Plugins.Filesystem 存在', '方法: ' + Object.keys(FS).filter(function (k) {
+      return typeof FS[k] === 'function';
+    }).join(', '));
+
+    /* 注意：调研文档说鸿蒙上 EXTERNAL 没有分支（会落到沙箱），DOCUMENTS 才是用户可见的 */
+    return fsWriteRead(g, 'DATA')
+      .then(function () { return fsWriteRead(g, 'DOCUMENTS'); })
+      .then(function () { return fsWriteRead(g, 'CACHE'); })
+      .then(function () { return fsWriteRead(g, 'EXTERNAL'); });
+  }
+
+  /* ============ 第 4 层：本地通知（核心功能） ============ */
+  function t4() {
+    var g = '4 · LocalNotifications（核心功能）';
+    var LN = C && C.Plugins && C.Plugins.LocalNotifications;
+    if (!LN) { fail(g, 'Capacitor.Plugins.LocalNotifications 不存在'); return Promise.resolve(); }
+    ok(g, 'Capacitor.Plugins.LocalNotifications 存在', '方法: ' + Object.keys(LN).filter(function (k) {
+      return typeof LN[k] === 'function';
+    }).join(', '));
+
+    /* 逐个报告关键 API 是否存在 —— 调研文档说 getPending 支持、action listener 不支持 */
+    ['checkPermissions', 'requestPermissions', 'schedule', 'cancel', 'getPending',
+     'areEnabled', 'registerActionTypes'].forEach(function (m) {
+      var has = typeof LN[m] === 'function';
+      info(g, 'API ' + m + '()', has ? '存在' : '★ 不存在');
+    });
+
+    return Promise.resolve()
+      .then(function () { return LN.checkPermissions(); })
+      .then(function (r) { ok(g, 'checkPermissions()', S(r)); })
+      .catch(function (e) { fail(g, 'checkPermissions() 失败', String(e && e.message || e)); })
+
+      .then(function () { return LN.requestPermissions(); })
+      .then(function (r) {
+        if (r && r.display === 'granted') ok(g, 'requestPermissions() → granted', S(r));
+        else warn(g, 'requestPermissions() 未授予', S(r) + '\n（返回值只反映当前状态，不等于失败）');
+      })
+      .catch(function (e) { fail(g, 'requestPermissions() 失败', String(e && e.message || e)); })
+
+      /* 排一条 8 秒后的通知，然后立刻查 pending —— 验证插件真的登记了 */
+      .then(function () {
+        var at = new Date(Date.now() + 8000);
+        return LN.schedule({
+          notifications: [{
+            id: 9001,
+            title: 'Spike 测试提醒',
+            body: '这条通知来自鸿蒙模拟器 · ' + at.toTimeString().slice(0, 8),
+            schedule: { at: at }
+          }]
+        }).then(function () { return at; });
+      })
+      .then(function (at) {
+        ok(g, 'schedule() 登记成功', '计划时刻 ' + at.toTimeString().slice(0, 8) + '（约 8 秒后）');
+        return LN.getPending();
+      })
+      .then(function (r) {
+        var list = (r && r.notifications) || [];
+        if (list.length) ok(g, '★ getPending() 支持（清场机制可用）', '待触发 ' + list.length + ' 条: ' +
+          list.map(function (n) { return '#' + n.id + ' ' + (n.title || ''); }).join(' | '));
+        else fail(g, '★ getPending() 返回空', '排程没登记上 —— 清场机制会失效');
+      })
+      .catch(function (e) { fail(g, '通知排程链路失败', String(e && e.message || e)); });
+  }
+
+  /* ============ 第 5 层：相机（唯一存疑项） ============ */
+  function t5() {
+    var g = '5 · Camera（★ 模拟器能否拍照，官方文档说法冲突）';
+    var Cam = C && C.Plugins && C.Plugins.Camera;
+    if (!Cam) { fail(g, 'Capacitor.Plugins.Camera 不存在'); return Promise.resolve(); }
+    ok(g, 'Capacitor.Plugins.Camera 存在', '方法: ' + Object.keys(Cam).filter(function (k) {
+      return typeof Cam[k] === 'function';
+    }).join(', '));
+
+    return Promise.resolve()
+      .then(function () { return Cam.checkPermissions ? Cam.checkPermissions() : null; })
+      .then(function (r) { if (r) info(g, 'checkPermissions()', S(r)); })
+      .catch(function () {})
+      .then(function () {
+        return Cam.getPhoto({
+          quality: 80,
+          allowEditing: false,
+          resultType: 'dataUrl',      /* 用 dataUrl 便于直接显示 */
+          source: 'CAMERA',           /* ★ 全大写（项目踩过的坑） */
+          saveToGallery: false
+        });
+      })
+      .then(function (img) {
+        var len = (img && img.dataUrl) ? img.dataUrl.length : 0;
+        ok(g, '★ getPhoto() 成功！', '返回 dataUrl 长度 ' + len + '，format=' + S(img && img.format));
+        if (img && img.dataUrl) {
+          var el = document.createElement('img');
+          el.className = 'shot';
+          el.src = img.dataUrl;
+          row('ok', '✓', '拍照结果预览', '', 0, g).appendChild(el);
+        }
+      })
+      .catch(function (e) {
+        fail(g, '★ getPhoto() 失败', String(e && e.message || e) +
+          '\n→ 若这里是"相机不可用"，则与官方文档"x86 不支持相机"一致。\n' +
+          '→ 但华为 FAQ 提到可用"虚拟相机"（lcam001/lcam002），需在 DevEco 里检查。');
+      });
+  }
+
+  /* ============ 汇总 ============ */
+  function summarize() {
+    var g = '汇总';
+    var rows = out.querySelectorAll('.row');
+    var n = { ok: 0, fail: 0, warn: 0, info: 0 };
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].classList.contains('ok')) n.ok++;
+      else if (rows[i].classList.contains('fail')) n.fail++;
+      else if (rows[i].classList.contains('warn')) n.warn++;
+      else if (rows[i].classList.contains('info')) n.info++;
+    }
+    var line = '✓ ' + n.ok + ' ｜ ✗ ' + n.fail + ' ｜ ⚠ ' + n.warn + ' ｜ ℹ ' + n.info;
+    if (n.fail) row('fail', '✗ 有失败', line, '', 0, g);
+    else row('ok', '✓ 全过', line, '', 0, g);
+    sub.textContent = line;
+    return n;
+  }
+
+  /* ============ 对外 ============ */
+  function run(fn) { return Promise.resolve().then(fn).catch(function (e) { console.error(e); }); }
+
+  function all() {
+    out.innerHTML = ''; groups = {};
+    sub.textContent = '测试中…';
+    var basics = t1();
+    return run(function () { return Promise.resolve().then(t2); })
+      .then(function () { return run(function () { return Promise.resolve().then(t3); }); })
+      .then(function () { return run(function () { return Promise.resolve().then(t4); }); })
+      .then(function () { return summarize(); })
+      .then(function () { sub.textContent = '测试完成（相机需手动点「只测相机」）—— ' + sub.textContent; });
+  }
+
+  function camera() {
+    return run(function () { return Promise.resolve().then(t5); })
+      .then(function () { return summarize(); });
+  }
+
+  /* 自动跑第一层，让"页面能不能加载"立刻可见 */
+  window.addEventListener('load', function () {
+    var g = '0 · 启动';
+    ok(g, 'onload 触发（WebView 正常工作）', new Date().toISOString());
+    var baseOk = t1();
+    if (baseOk) sub.textContent = '基础环境 OK —— 点「跑全部测试」继续';
+    else sub.textContent = '★ 基础环境就有问题，看下面红色项';
+  });
+
+  return { all: all, camera: camera, step1: t1 };
+})();
+</script>
+</body>
+</html>
