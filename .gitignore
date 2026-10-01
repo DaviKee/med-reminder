@@ -53,6 +53,9 @@ _*.md
 # 模拟器截图（运行时产物，会越积越多）
 /spike/shots/
 
+# AGC 截图采集的临时目录（spike/agc-shots/capture.py 会自动重建）
+/spike/harmony-test/screenshots-for-agc/_tmp/
+
 # ===== S-0 最小测试工程：依赖与生成的鸿蒙原生工程不入库 =====
 # 但 package.json / capacitor.config.json / www/ 要入库 —— 它们是可复现的 spike 产物
 /spike/harmony-test/node_modules/
