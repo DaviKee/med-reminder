@@ -5,12 +5,12 @@
 > 📁 **2026-10-01 起：活文档已收进仓库 `docs/`**（纳入版本控制）。**2026-09-24 结构优化**：历史文档与旧版 APK 移入**工作区根**的 `归档/`（说明见 `归档/README.md`）。
 > 文档间引用写的是「文件名」而非路径，故移动未影响任何引用。
 
-## 🆕 最新进展（2026-10-01）：**多平台架构「A-1 平台层收口」完成**；Android 线推进到 v1.4.16
+## 🆕 最新进展（2026-10-01）：**阶段 C 完成** —— A-1 平台层收口 + S-1/S-2/S-7 全落地（**v1.5.0**）
 
 **一句话**：可行性 spike 跑完 —— 鸿蒙**能跑**（主项目 `www/` 已在鸿蒙模拟器里完整渲染）；
 也摸清了**唯一的生死线**（代理提醒必须 AGC 审批）；并明确**不全量重写 ArkTS**。
 
-### Android 线：版本推进到 v1.4.16（全绿可发布）
+### Android 线：版本推进到 v1.5.0（全绿可发布）
 
 | 版本 | 提交 | 日期 | 内容 |
 |---|---|---|---|
@@ -33,10 +33,11 @@
 | **v1.4.14** | `0efd601` | 10-01 | **S-1** 剂量 / 单位 / 服用说明 —— 三个可空字段（旧数据天然兼容）+ 卡片展示 |
 | **v1.4.15** | `7fcd504` | 10-01 | **S-2** 库存管理 —— 剩余量 / 打卡自动扣减 / 预计用完日 + 低库存提醒 |
 | **v1.4.16** | `b8c40ce` | 10-01 | **修（真机）**：备注输入框文字与光标出框 —— 多行框不能复用 `height:54px` 的单行壳 |
+| **v1.5.0** | `4284df9` | 10-01 | **S-7 服药报告**（近 7 天给医生 / 家属）—— `adherenceReport()` + 报告浮层，**未引 PDF 库**；**阶段 C 完成** |
 
-- 测试：**16 套 530 条 spec 全绿**；harness 18 关口 **17 通过 / 0 失败**
-- 最新 APK：`med-reminder/MedReminder-v1.4.16-2026-10-01.apk` · **6.22 MB** ·
-  MD5 `87B897F5885E3FC400565B5FE8E70772`
+- 测试：**17 套 559 条 spec 全绿**；harness 19 关口 **18 通过 / 0 失败**
+- 最新 APK：`med-reminder/MedReminder-v1.5.0-2026-10-01.apk` · **6.22 MB** ·
+  MD5 `6098BB95A027ED5B8CB2C2003E6BA368`
 - ✅ **真机确认「平台层搬迁」稳住了**（返回键 / 切后台 / 拍照恢复均正常）→「只收口、不抽象」策略成立
 - ✅ **验证 harness 已建成**（`harness/harness.py`）—— 16 关口一键跑、三态退出码（0 全过 / 1 有失败 / 2 环境问题），
   并**挂到 git pre-commit**（红了拦住提交）
@@ -102,18 +103,18 @@
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    b8c40ce  DaviKee <davi.kee@outlook.com>  fix(ui): 备注输入框文字与光标出框 · v1.4.16
-工作区  clean（干净）                    ✅ 与远端同步（待推/待拉 0/0）
+HEAD    4284df9  DaviKee <davi.kee@outlook.com>  feat(S-7): 服药报告（近 7 天）· v1.5.0
+工作区  clean（干净）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.4.16   APP_BUILD = 2026-10-01
+源码    APP_VERSION = 1.5.0   APP_BUILD = 2026-10-01
 结构    www/js/core/{util,store,schedule}.js · ui/overlay.js
         · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
-        app.js 2595 行 ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/overlay ← app
+        app.js 2673 行 ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/overlay ← app
         ★ 平台差异（插件调用 / 生命周期 / 返回键 / 前后台）**全部收在 www/js/platform/**
           —— 业务层已无 window.Capacitor，这是「多平台准备」的关键一条
-测试    harness/harness.py → 18 关口（16 套 530 条 spec + APK 验收）；已挂 git pre-commit
-APK     med-reminder/MedReminder-v1.4.16-2026-10-01.apk（6.22 MB · MD5 87B897F5…）
+测试    harness/harness.py → 19 关口（17 套 559 条 spec + APK 验收）；已挂 git pre-commit
+APK     med-reminder/MedReminder-v1.5.0-2026-10-01.apk（6.22 MB · MD5 6098BB95…）
         旧版（v1.4.1 / v1.4.1-rebuild / v1.4.2 / v1.4.5 等）已归入 归档/apk/
 鸿蒙    spike/harmony-test/ 独立工程（不碰主项目）；devecocli 已装；代理提醒等 AGC 审批
 D 盘    仅剩回收站 + 无关目录；D:\WorkBuddy 与 D:\DevEnv 均已不存在
