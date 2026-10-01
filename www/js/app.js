@@ -66,7 +66,7 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.15';
+  var APP_VERSION = '1.4.16';
   var APP_BUILD = '2026-10-01';
 
 

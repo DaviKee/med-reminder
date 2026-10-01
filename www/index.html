@@ -95,9 +95,12 @@
 
     <div class="field">
       <label class="field-label" for="medNote">服用说明 / 备注（可不填）</label>
-      <div class="input-wrap">
-        <textarea id="medNote" rows="2" maxlength="60" placeholder="例如 饭后服用、不可与某药同服"
-          style="width:100%;resize:none;background:transparent;border:0;color:inherit;font:inherit;padding:12px 14px;line-height:1.5"></textarea>
+      <!-- ⚠️ 多行输入用 .multi 变体：.input-wrap 是给**单行 input** 的固定 54px 壳，
+           直接把 rows=2 的 textarea 塞进去，内容会垂直溢出、文字与光标跑到框外
+           （2026-10-01 真机反馈）。样式统一交给 CSS，不再写 inline —— 这样字号才会
+           跟随「显示」里的缩放档位（--fs），和其它输入框一致。 -->
+      <div class="input-wrap multi">
+        <textarea id="medNote" rows="2" maxlength="60" placeholder="例如 饭后服用、不可与某药同服"></textarea>
       </div>
     </div>
 

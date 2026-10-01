@@ -101,6 +101,30 @@ console.log('=== C. 源码级接线（防改回去）===');
 }
 
 console.log('');
+console.log('=== D. 备注是多行框：外壳与骨架必须配对（2026-10-01 真机 bug）===');
+{
+  /* 真机现象：备注里的文字和光标跑到输入框外。
+   * 根因不是文字太长，是**壳选错了** —— .input-wrap 是给单行 input 的 `height:54px` 固定壳，
+   * `rows=2` 的 textarea 塞进去必然垂直溢出。这组断言锁死「壳 + 骨架」的配对关系，
+   * 防止以后有人图省事又把它塞回单行壳。 */
+  const CSS = fs.readFileSync(path.join(ROOT, 'www/css/app.css'), 'utf8');
+  const iNote = HTML_SRC.indexOf('id="medNote"');
+  const iDiv = HTML_SRC.lastIndexOf('<div class="input-wrap', iNote);
+  const shell = HTML_SRC.slice(iDiv, iNote);
+
+  t('★ 备注的外壳带 multi 类（不能复用单行壳）',
+    /class="input-wrap multi"/.test(shell), '缺 multi');
+  t('★ 备注 textarea 不再写 inline style（字号要走 --fs 档位）',
+    !/id="medNote"[^>]*style=/.test(HTML_SRC), '仍有 inline style');
+  t('★ CSS 有 .input-wrap.multi 且壳高自适应',
+    /\.input-wrap\.multi\{[^}]*height:auto/.test(CSS), '缺 height:auto');
+  t('★ multi 壳的内边距清零（padding 交给 textarea，避免双重缩进）',
+    /\.input-wrap\.multi\{[^}]*padding:0/.test(CSS), '没清零');
+  t('★ 备注字号跟随 --fs（否则「显示」里的字号档位对它无效）',
+    /\.input-wrap\.multi textarea\{[\s\S]{0,220}?calc\(16px \* var\(--fs\)\)/.test(CSS), '没跟 --fs');
+}
+
+console.log('');
 /* ⚠️ 汇总行必须是 `通过 N / 共 M` —— harness 按这个格式解析（见 harness/gates.py 第 11 行）。
  * 写成别的样子会被判为「未打印汇总行 → 套件自身出错」。 */
 console.log('通过 ' + pass + ' / 共 ' + (pass + fail));
