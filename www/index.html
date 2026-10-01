@@ -62,6 +62,35 @@
       </div>
     </div>
 
+    <!-- ★ S-1（2026-10-01）：剂量与单位。
+         适老化设计 —— 只多两行，不引入更多弹层；两项都可留空。
+         旧数据没有这三个字段 → 视为空，**天然向后兼容**（备份 JSON 自动携带）。 -->
+    <div class="field">
+      <label class="field-label" for="medDose">每次剂量与单位（可不填）</label>
+      <div style="display:flex;gap:10px">
+        <div class="input-wrap" style="flex:1">
+          <input id="medDose" type="text" inputmode="decimal" placeholder="1" maxlength="8" autocomplete="off">
+        </div>
+        <div class="input-wrap" style="flex:1">
+          <input id="medUnit" type="text" list="unitList" placeholder="片" maxlength="6" autocomplete="off">
+        </div>
+      </div>
+      <datalist id="unitList">
+        <option value="片"></option><option value="粒"></option><option value="袋"></option>
+        <option value="支"></option><option value="喷"></option><option value="滴"></option>
+        <option value="丸"></option><option value="毫升(ml)"></option><option value="毫克(mg)"></option>
+      </datalist>
+      <p class="hint">例如「1 片」「0.5 片」。留空就只显示药名。</p>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="medNote">服用说明 / 备注（可不填）</label>
+      <div class="input-wrap">
+        <textarea id="medNote" rows="2" maxlength="60" placeholder="例如 饭后服用、不可与某药同服"
+          style="width:100%;resize:none;background:transparent;border:0;color:inherit;font:inherit;padding:12px 14px;line-height:1.5"></textarea>
+      </div>
+    </div>
+
     <div class="field">
       <label class="field-label">服药方式</label>
       <div class="chip-row" id="modeRow">

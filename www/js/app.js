@@ -65,7 +65,7 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.13';
+  var APP_VERSION = '1.4.14';
   var APP_BUILD = '2026-10-01';
 
 
@@ -522,6 +522,25 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
   };
 
   /* ---------------- render: TODAY ---------------- */
+  /* ★ S-1（2026-10-01）：剂量标签 —— 把 dose / unit 拼成「每次 1 片」。
+   * 两个字段都可缺，优雅降级：只有单位 → 「每次 片」；都没有 → 空串（调用方不渲染）。
+   * 纯函数，便于单测（tests/med-fields.spec.js）。 */
+  function doseLabel(m) {
+    if (!m) return '';
+    var d = (m.dose == null ? '' : String(m.dose)).trim();
+    var u = (m.unit == null ? '' : String(m.unit)).trim();
+    if (!d && !u) return '';
+    if (!d) return '每次 ' + u;
+    return '每次 ' + d + (u ? ' ' + u : '');
+  }
+
+  /* ★ S-1：有值就写、没值就**删属性** ——
+   * 让「没填」只有一种表示法（属性不存在）。这样旧数据（本来就没这字段）
+   * 与新数据的空值形状一致，导出 / 统计不必区分「空串」与「没有此字段」。 */
+  function setOrDel(obj, key, val) {
+    if (val) obj[key] = val; else delete obj[key];
+  }
+
   function medCardHtml(m, clickable) {
     return '<' + (clickable ? 'button' : 'div') + ' class="card medcard' + (clickable ? ' tappable' : '') + '"'
       + (clickable ? ' data-checkin="' + m.id + '"' : '')
@@ -530,6 +549,9 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
       + '<span style="font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs))">' + esc(m.name) + '</span>'
       + '<span class="pill">' + esc(medScheduleLabel(m)) + '</span>'
       + '</div>'
+      /* ★ S-1：剂量与备注各自成行（没有就不占位置 —— 不显示空的占位行） */
+      + (doseLabel(m) ? '<p class="meta">' + esc(doseLabel(m)) + '</p>' : '')
+      + (m.note ? '<p class="meta">' + esc(m.note) + '</p>' : '')
       + '<p class="meta">' + esc(medMetaText(m)) + '</p>'
       + '</' + (clickable ? 'button' : 'div') + '>';
   }
@@ -1319,6 +1341,10 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     var med = medId ? medById(medId) : null;
     $('#sheetTitle').textContent = med ? '编辑药品' : '添加药品';
     $('#medName').value = med ? med.name : '';
+    /* ★ S-1：三个新字段也要预填 —— 否则「编辑」一次就会把原有剂量 / 备注清空。 */
+    $('#medDose').value = (med && med.dose != null) ? med.dose : '';
+    $('#medUnit').value = (med && med.unit != null) ? med.unit : '';
+    $('#medNote').value = (med && med.note != null) ? med.note : '';
     stepVal = med ? med.interval : 8;
     /* 编辑态的临时值：改完点「保存」才写进数据，中途关掉不影响原有设置 */
     medModeDraft = med ? medMode(med) : 'interval';
@@ -2163,6 +2189,17 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
       var name = $('#medName').value.trim();
       if (!name) { toast('请填写药品名称'); $('#medName').focus(); return; }
 
+      /* ★ S-1：剂量可以留空；但**填了就必须是数字** ——
+       * 「半片 / 一片」这类没法参与后续的库存与统计，也会让「每次 X 片」自相矛盾。
+       * 校验同样放在改数据之前（沿用本函数的既有纪律：先全验完，再落值）。 */
+      var doseRaw = $('#medDose').value.trim();
+      if (doseRaw && !/^\d+(\.\d+)?$/.test(doseRaw)) {
+        toast('剂量请填数字（如 1 或 0.5）；不填也可以');
+        $('#medDose').focus(); return;
+      }
+      var unitRaw = $('#medUnit').value.trim();
+      var noteRaw = $('#medNote').value.trim();
+
       /* 校验必须放在改数据**之前** —— 否则会「改一半」再报错，
        * 留下一个模式变了、时刻却没存上的坏状态。 */
       var isFixed = medModeDraft === 'fixed';
@@ -2180,6 +2217,10 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
           m.mode = medModeDraft;
           if (isFixed) m.times = ts;
           else m.interval = stepVal;
+          /* ★ S-1：三个新字段（空值走 setOrDel 删属性，而不是留空串） */
+          setOrDel(m, 'dose', doseRaw);
+          setOrDel(m, 'unit', unitRaw);
+          setOrDel(m, 'note', noteRaw);
           /* 模式换了 / 间隔改了 / **固定模式时刻改了** → 今天的排程要重排（已打卡的记录一律保留）。
            * ⚠️ H-1：这里原先是 `modeChanged || intervalChanged`，而固定模式下两者恒为 false
            * （intervalChanged 带 `!isFixed` 前置，modeChanged 要求模式真的变了）——
@@ -2193,6 +2234,10 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
       } else {
         var nm = { id: uid(), name: name, interval: stepVal };
         if (isFixed) { nm.mode = 'fixed'; nm.times = ts; }
+        /* ★ S-1：三个新字段 */
+        setOrDel(nm, 'dose', doseRaw);
+        setOrDel(nm, 'unit', unitRaw);
+        setOrDel(nm, 'note', noteRaw);
         S.meds.push(nm);
         toast('已添加 ' + name);
         isFirstMed = true;
