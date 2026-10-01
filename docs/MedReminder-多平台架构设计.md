@@ -201,17 +201,31 @@ main ──→ 装配以上所有（唯一允许"知道全部"的地方）
 **建议先做 P0**：它风险最低、且直接服务于"多平台"这个目标；
 P1 是"代码可维护性"，P2 依赖鸿蒙落地进度（可等审批）。
 
-### P0 的细分步骤（每步一个提交）
+### P0 的细分步骤与进度
 
-| # | 步骤 | 验收 |
+| # | 步骤 | 状态 |
 |---|---|---|
-| 0.1 | 建 `platform/` + README（写契约） | harness 全绿（无代码变化） |
-| 0.2 | 搬 `notify.js` → `platform/notifications.js`（保留 `window.MedNotify` 兼容） | 13 套 478 条全绿，条数不变 |
-| 0.3 | 搬 `photo.js` → `platform/camera.js`（同上） | 同上 |
-| 0.4 | 搬 `backup.js` → `platform/storage.js`（同上） | 同上 |
-| 0.5 | 抽 `platform/capabilities.js`（app.js:1886 的插件清单） | 同上 |
-| 0.6 | 抽 `platform/lifecycle.js`（返回键 / appRestoredResult / 前后台，共 5 处） | 同上 + **真机验证返回键与拍照恢复** |
-| 0.7 | 出包 v1.4.12，真机验证 | 四项核对（大小/时间戳/包内版本/MD5） |
+| 0.1 | 建 `platform/` + README（写契约） | ✅ `df88433` |
+| 0.2 | 搬 `notify.js` → `platform/notifications.js` | ✅ `df88433` |
+| 0.3 | 搬 `photo.js` → `platform/camera.js` | ✅ `df88433` |
+| 0.4 | 搬 `backup.js` → `platform/storage.js` | ✅ `df88433` |
+| 0.5 | 抽 `platform/capabilities.js`（`app.js:1886` 的插件清单） | ⬜ **下一步** |
+| 0.6 | 抽 `platform/lifecycle.js`（返回键 / `appRestoredResult` / 前后台，共 5 处） | ⬜ |
+| 0.7 | 出包 + 真机验证 | 🟡 **v1.4.12 已出包**（`df88433`），待真机确认 |
+
+> 📌 **0.2–0.4 的实际做法**（与最初设想不同，更稳）：
+> 用的是 **`git mv` + 保持 IIFE 形态**，**没有**在搬迁的同一步里做 module 化。
+> 理由：§18.5「一次只改一件事」—— 把"搬位置"与"改形态"分开，
+> 出问题才分得清是哪一步的错。
+> 结果：`git` 把 3 个文件都识别为 **100% 相似度的 rename**（证明确实"一字未改"），
+> 13 套 478 条 spec 全绿、条数不变。
+>
+> 搬迁同时更新了 **9 处引用**（`index.html` / `sw.js` ×2 / `harness/gates.py` /
+> 4 个 spec / `verify-apk.py` ×3）—— 这是无打包器项目里最容易漏的地方，
+> 详见 `www/js/platform/README.md` 末尾的清单。
+>
+> ⏭ **module 化**（加 `export` + `app.js` 改 `import`、去掉 `window.MedXxx`）**留到后一步**，
+> 届时需要同步改 4 个 spec 的源码读取方式（它们现在直接按路径读文本喂给 `vm`）。
 
 ### 无打包器的代价（每加一个模块必须做四件事，§18.3）
 
