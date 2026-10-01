@@ -17,7 +17,8 @@ import { intervalLabel, medMode, normTimes, needRebuildDoses, timeInputToMin,
          nextPending, progress, isMissed, missedDoses, silenceOverdue,
          checkIn, checkInAll, markTaken, ensureFixedDoses, rebuildTodayDoses,
          snoozeDose, snoozeToast, droppedToday, droppedAcked, ackDropped,
-         MAX_TIMES, MISS_GRACE_MIN } from './core/schedule.js';
+         MAX_TIMES, MISS_GRACE_MIN,
+         stockInfo } from './core/schedule.js';
 
 
 /* ⬆ 2026-09-28 架构重构：浮层原语与返回键判定已抽到 ui/overlay.js。
@@ -65,7 +66,7 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.14';
+  var APP_VERSION = '1.4.15';
   var APP_BUILD = '2026-10-01';
 
 
@@ -536,9 +537,27 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
 
   /* ★ S-1：有值就写、没值就**删属性** ——
    * 让「没填」只有一种表示法（属性不存在）。这样旧数据（本来就没这字段）
-   * 与新数据的空值形状一致，导出 / 统计不必区分「空串」与「没有此字段」。 */
+   * 与新数据的空值形状一致，导出 / 统计不必区分「空串」与「没有此字段」。
+   * ⚠️ 判空用 `'' / null / undefined`，**不能用 falsy** ——
+   *    S-2 的剩余量是数字，`0`（吃完了）是**合法值**，`if (val)` 会把它当"没填"删掉。 */
   function setOrDel(obj, key, val) {
-    if (val) obj[key] = val; else delete obj[key];
+    if (val === '' || val == null) delete obj[key];
+    else obj[key] = val;
+  }
+
+  /* ★ S-2：库存展示行。返回 '' 表示这药没填剩余量 → **完全不占位置**（旧数据友好）。
+   * 文案分三档：① 能算出天数 ② 只知剩余量（剂量未知，**不猜天数**）③ 低库存警告。 */
+  function stockHtml(m) {
+    var s = stockInfo(m);
+    if (!s) return '';
+    var unit = (m.unit == null ? '' : String(m.unit)).trim();
+    var left = s.stock + (unit ? ' ' + unit : '');
+    if (s.days == null) return '<p class="meta">还剩 ' + esc(left) + '</p>';
+    if (s.low) {
+      return '<p class="meta" style="color:#FF7A17">⚠ 只剩 ' + esc(left)
+        + '，约够 ' + s.days + ' 天 —— 该买药了</p>';
+    }
+    return '<p class="meta">还剩 ' + esc(left) + ' · 约够 ' + s.days + ' 天</p>';
   }
 
   function medCardHtml(m, clickable) {
@@ -549,8 +568,9 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
       + '<span style="font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs))">' + esc(m.name) + '</span>'
       + '<span class="pill">' + esc(medScheduleLabel(m)) + '</span>'
       + '</div>'
-      /* ★ S-1：剂量与备注各自成行（没有就不占位置 —— 不显示空的占位行） */
+      /* ★ S-1 / S-2：剂量、库存、备注各自成行 —— 没有就不占位置（不渲染空占位行） */
       + (doseLabel(m) ? '<p class="meta">' + esc(doseLabel(m)) + '</p>' : '')
+      + stockHtml(m)
       + (m.note ? '<p class="meta">' + esc(m.note) + '</p>' : '')
       + '<p class="meta">' + esc(medMetaText(m)) + '</p>'
       + '</' + (clickable ? 'button' : 'div') + '>';
@@ -1345,6 +1365,8 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     $('#medDose').value = (med && med.dose != null) ? med.dose : '';
     $('#medUnit').value = (med && med.unit != null) ? med.unit : '';
     $('#medNote').value = (med && med.note != null) ? med.note : '';
+    /* ★ S-2：剩余量也要预填 —— 否则「编辑」一次就把库存清零了。 */
+    $('#medStock').value = (med && med.stock != null) ? med.stock : '';
     stepVal = med ? med.interval : 8;
     /* 编辑态的临时值：改完点「保存」才写进数据，中途关掉不影响原有设置 */
     medModeDraft = med ? medMode(med) : 'interval';
@@ -2200,6 +2222,14 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
       var unitRaw = $('#medUnit').value.trim();
       var noteRaw = $('#medNote').value.trim();
 
+      /* ★ S-2：剩余量与剂量同规则 —— 可留空，填了必须是非负数字。
+       * ⚠️ `0` 是**合法值**（这盒吃完了），所以判空只能用 `=== ''`。 */
+      var stockRaw = $('#medStock').value.trim();
+      if (stockRaw !== '' && !/^\d+(\.\d+)?$/.test(stockRaw)) {
+        toast('剩余量请填数字（如 28 或 28.5）；不填也可以');
+        $('#medStock').focus(); return;
+      }
+
       /* 校验必须放在改数据**之前** —— 否则会「改一半」再报错，
        * 留下一个模式变了、时刻却没存上的坏状态。 */
       var isFixed = medModeDraft === 'fixed';
@@ -2221,6 +2251,8 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
           setOrDel(m, 'dose', doseRaw);
           setOrDel(m, 'unit', unitRaw);
           setOrDel(m, 'note', noteRaw);
+          /* ★ S-2：剩余量存**数字**（要参与减法）；填 0 表示这盒吃完了，是合法值 */
+          setOrDel(m, 'stock', stockRaw === '' ? '' : Number(stockRaw));
           /* 模式换了 / 间隔改了 / **固定模式时刻改了** → 今天的排程要重排（已打卡的记录一律保留）。
            * ⚠️ H-1：这里原先是 `modeChanged || intervalChanged`，而固定模式下两者恒为 false
            * （intervalChanged 带 `!isFixed` 前置，modeChanged 要求模式真的变了）——
@@ -2238,6 +2270,8 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
         setOrDel(nm, 'dose', doseRaw);
         setOrDel(nm, 'unit', unitRaw);
         setOrDel(nm, 'note', noteRaw);
+        /* ★ S-2：剩余量（数字） */
+        setOrDel(nm, 'stock', stockRaw === '' ? '' : Number(stockRaw));
         S.meds.push(nm);
         toast('已添加 ' + name);
         isFirstMed = true;

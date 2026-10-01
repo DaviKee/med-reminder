@@ -8,7 +8,7 @@
  * ⚠️ window.MedNotify 属于**插件层**（notify.js 的独立 IIFE），不是 UI 层，可直接用。
  */
 
-import { uid, nowMin, minToStr, minOfDay, todayKey } from './util.js';
+import { uid, nowMin, minToStr, minOfDay, todayKey, fmtDate } from './util.js';
 import { S, save, readJSON, writeJSON } from './store.js';
 
 /* 间隔的显示（F-1）。
@@ -115,6 +115,62 @@ export function todayDoseCount(medId) {
   return todayDoses().filter(function (d) { return d.medId === medId; }).length;
 }
 
+/* ---------------- S-2：库存推算 ----------------
+ * 纯计算、不碰数据（便于单测）。要算「还能吃几天」需要三样：
+ *   `med.stock`（用户填的剩余量）+ `med.dose`（每次几片）+ 每天吃几次。
+ * **缺任何一样就只能「少说一点」，绝不猜** ——
+ * 猜出来的「还能吃 X 天」比不显示更糟（用户会照着一个错数字决定要不要买药）。 */
+
+/* 低库存阈值：剩余不足这么多天的量就提醒。
+ * 取 3 天 —— 大致够一次「发现→买药→拿到」的往返，再少就来不及了。 */
+export var LOW_STOCK_DAYS = 3;
+
+/* 每天服几次。
+ * fixed 模式 = 时刻表长度（确定值）；
+ * interval 模式 = 24 / 间隔（**近似** —— 实际是打卡后滚动排程，
+ *   一天可能只有 2 次而不是 3 次，所以下面算天数时会向下取整兜底）。 */
+export function dailyDoseCount(m) {
+  if (!m) return 0;
+  if (medMode(m) === 'fixed') return normTimes(m.times).length;
+  var h = Number(m.interval);
+  if (!isFinite(h) || h <= 0) return 0;
+  return Math.max(1, Math.round(24 / h));
+}
+
+/* 库存快照。`med` 没有 stock 字段 → 返回 **null**（上层据此完全不显示库存 UI，
+ * 所以旧数据天然兼容，不会冒出「还剩 undefined」）。 */
+export function stockInfo(m) {
+  if (!m || m.stock == null) return null;
+  var stock = Number(m.stock);
+  if (!isFinite(stock) || stock < 0) return null;
+
+  var perDay = dailyDoseCount(m);
+  var dose = Number(m.dose);
+  /* 剂量或每日次数未知 → 只报「还剩多少」，**算不出天数就不硬算** */
+  if (!isFinite(dose) || dose <= 0 || !perDay) {
+    return { stock: stock, dose: null, perDay: perDay, perDayAmount: null, days: null, runOut: null, low: false };
+  }
+
+  var perDayAmount = dose * perDay;
+  /* 向下取整：宁可说「还够 2 天」也不说「还够 3 天」，后者会让人拖延 */
+  var days = Math.floor(stock / perDayAmount);
+  var runOut = null;
+  if (stock > 0) {
+    var d = new Date();
+    d.setDate(d.getDate() + days);
+    runOut = fmtDate(d);
+  }
+  return {
+    stock: stock,
+    dose: dose,
+    perDay: perDay,
+    perDayAmount: perDayAmount,
+    days: days,
+    runOut: runOut,
+    low: stock > 0 && days <= LOW_STOCK_DAYS
+  };
+}
+
 /* ---------------- check-in / scheduling ---------------- */
 /* 返回新建的剂量数组（失败返回 null）。之所以要返回而不是布尔值：
  * 拍照打卡需要在记录落库后，把照片路径挂到这一次新建的剂量上。 */
@@ -162,12 +218,28 @@ export function checkInAll() {
 export function markTaken(dose, takenMs) {
   dose.status = 'taken';
   dose.takenAt = takenMs;
+  var m = medById(dose.medId);
+  /* ★ S-2：自动扣库存。
+   * 放在这里、而不是各个调用点 —— markTaken 是**唯一的「服用」入口**
+   * （卡片打卡 / 提醒弹窗 / 漏服补记走的都是它），放这里才不会漏一处。
+   * 扣减条件：药有剩余量 **且** 剂量是正数；两者缺一就不扣（算不清就别乱扣）。 */
+  if (m) deductStock(m);
   /* 固定时刻模式**不顺延**：它的语义就是「到点吃」。
    * 晚吃两小时不该把 20:00 也推成 22:00 —— 那会越推越晚，
    * 而且把医嘱规定的时刻改掉了（这正是固定时刻模式存在的理由）。 */
-  var m = medById(dose.medId);
   if (m && medMode(m) === 'fixed') return { shifted: 0, dropped: 0 };
   return rollForward(dose, takenMs);
+}
+
+/* ★ S-2：扣一次库存。
+ * ⚠️ 扣到 0 就停，**绝不出现负数** —— 负数会让「还够几天」算出负值，
+ *    界面上会显示成莫名其妙的「-3 天」。
+ * ⚠️ 用十分位取整抹掉浮点误差：0.5 片连扣两次不该变成 0.9999999。 */
+function deductStock(m) {
+  var used = Number(m.dose);
+  if (m.stock == null || !isFinite(used) || used <= 0) return;
+  var left = Number(m.stock) - used;
+  m.stock = left > 0 ? Math.round(left * 10) / 10 : 0;
 }
 
 /* 顺延：把该药今天**排在这一针之后**的 pending，从 takenMs 起按间隔重排。

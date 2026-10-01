@@ -83,6 +83,16 @@
       <p class="hint">例如「1 片」「0.5 片」。留空就只显示药名。</p>
     </div>
 
+    <!-- ★ S-2（2026-10-01）：剩余量。单位沿用上面的「单位」字段，不重复问一遍。
+         填了才会算「还够几天」并做低库存提醒；留空则完全不显示库存 UI。 -->
+    <div class="field">
+      <label class="field-label" for="medStock">目前还剩（可不填）</label>
+      <div class="input-wrap">
+        <input id="medStock" type="text" inputmode="decimal" placeholder="例如 28" maxlength="8" autocomplete="off">
+      </div>
+      <p class="hint">用上面的单位（如「片」）。填了会自动算还够几天、快吃完时提醒，且每次打卡自动扣减。</p>
+    </div>
+
     <div class="field">
       <label class="field-label" for="medNote">服用说明 / 备注（可不填）</label>
       <div class="input-wrap">

@@ -50,7 +50,11 @@ const HEADERS = [
   'function sameTimes(a, b)', 'function needRebuildDoses(prev, next)',
   'function medScheduleLabel(m)', 'function reindexMed(medId)',
   'function ensureFixedDoses()', 'function rebuildTodayDoses(m)',
-  'function rollForward(dose, takenMs)', 'function markTaken(dose, takenMs)'
+  'function rollForward(dose, takenMs)', 'function markTaken(dose, takenMs)',
+  /* ⚠️ S-2（2026-10-01）：markTaken 现在会调 deductStock 扣库存 ——
+   * 不把这个函数一起抽进 sandbox，整个 spec 会 ReferenceError 直接崩
+   * （harness 会报「未打印汇总行 → 套件自身出错」）。 */
+  'function deductStock(m)'
 ];
 function extract(header) {
   if (header.indexOf('var uid') === 0) {
