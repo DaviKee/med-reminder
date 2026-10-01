@@ -34,6 +34,9 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
  * `exitApp` 也一并移过去了（它原本在 ui/overlay.js，但那是平台操作、不是浮层原语）。 */
 import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './platform/lifecycle.js';
 
+
+import { medScheduleLabel, medMetaText, doseClockHtml, FS_HINT_KEY, fsHintDismissed, fsHintHtml, droppedCardHtml, snoozeTag, ICON, doseLabel, setOrDel, stockHtml, medCardHtml, storageAlertHtml } from './ui/cards.js';
+
 (function () {
   'use strict';
 
@@ -66,7 +69,7 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.0';
+  var APP_VERSION = '1.5.1';
   var APP_BUILD = '2026-10-01';
 
 
@@ -76,32 +79,8 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
 
 
 
-  /* 服药方式的统一文案（药品卡 / 药品列表 / 提醒弹窗共用） */
-  function medScheduleLabel(m) {
-    if (medMode(m) === 'fixed') {
-      var ts = normTimes(m && m.times);
-      return ts.length ? ('每天 ' + ts.map(minToStr).join(' / ')) : '未设时刻';
-    }
-    return '每 ' + intervalLabel(m && m.interval);
-  }
 
-  /* 药品卡下面那行说明 */
-  function medMetaText(m) {
-    var n = todayDoseCount(m.id);
-    if (n) return '今日 ' + n + ' 次 · 已排程';
-    if (medMode(m) === 'fixed') {
-      return normTimes(m.times).length ? '今天还没排程 · 回「今天」页刷新' : '还没设时刻，去编辑里加一个';
-    }
-    return '每 ' + intervalLabel(m.interval) + ' · 打卡后开始计时';
-  }
 
-  /* 展示用：已服用的剂量显示**真实打卡时刻**（takenAt），未服用/跳过显示计划时刻。
-   * 旧记录没有 takenAt（此字段 2026-09-14 前只写不读），用 ≈ 标出这是按计划推定、非真实打卡。 */
-  function doseClockHtml(ds) {
-    if (ds.status === 'taken' && ds.takenAt) return minToStr(minOfDay(ds.takenAt));
-    if (ds.status === 'taken') return '<span title="旧记录：按计划时刻推定，非真实打卡时刻">≈' + minToStr(ds.time) + '</span>';
-    return minToStr(ds.time);
-  }
 
 
   var notifyPerm = 'unknown';   // granted / denied / unsupported / unknown
@@ -193,18 +172,8 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     toast('顺手把通知权限开一下，锁屏时才能收到提醒');
   }
 
-  /* 一次性提示：把"字可以调大"告诉需要它的人（A-1） */
-  var FS_HINT_KEY = 'medreminder.fsHint.v1';
-  function fsHintDismissed() {
-    try { return localStorage.getItem(FS_HINT_KEY) === '1'; } catch (e) { return true; }
-  }
   function dismissFsHint() {
     try { localStorage.setItem(FS_HINT_KEY, '1'); } catch (e) { /* ignore */ }
-  }
-  function fsHintHtml() {
-    return '<button class="card" id="btnFsHint" style="display:flex;flex-direction:column;gap:6px;width:100%;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent">'
-      + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs))">字太小看不清？</span>'
-      + '<span class="meta">到「记录」页可以把字调大（大 / 特大），布局不会乱。点这里去看看。</span></button>';
   }
 
   function fsLabel() {
@@ -258,16 +227,6 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
 
 
 
-  function droppedCardHtml() {
-    var n = droppedToday();
-    if (!n || droppedAcked()) return '';
-    return '<div class="card card-miss" style="display:flex;flex-direction:column;gap:6px">'
-      + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">有 ' + n
-      + ' 次服药排到了次日，今天不再提醒</span>'
-      + '<span class="meta">这次打卡比较晚，按间隔本该排到明天凌晨。今天不会再响，建议明早打卡后补记一次。</span>'
-      + '<button class="btn btn-ghost" id="btnDropAck" style="align-self:flex-start;min-height:44px;margin-top:2px">知道了</button>'
-      + '</div>';
-  }
 
 
   /* 顺延后重排序号，保证「第 N / 共 M 次」仍然正确 */
@@ -313,12 +272,6 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     return s;
   }
 
-  /* 已延后的剂量在排程行上标出来。不标的话，用户会以为"刚才明明延后了，
-   * 怎么列表还是原来的时间"——其实计划时刻本就该保持原样，是响铃时刻变了。 */
-  function snoozeTag(ds) {
-    if (!ds || ds.status !== 'pending' || ds.snoozeUntil == null) return '';
-    return '<span class="snooze-tag">延后至 ' + esc(minToStr(ds.snoozeUntil)) + '</span>';
-  }
 
 
   /* 本月拍照打卡统计。跳过率是这个功能最关键的观察指标：
@@ -514,67 +467,10 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2000);
   }
 
-  /* ---------------- icons ---------------- */
-  var ICON = {
-    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 9.5 17.5 19.5 7" stroke="#7D8187" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    pill: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)" stroke="currentColor" stroke-width="1.8"/><path d="M9 9l6 6" stroke="currentColor" stroke-width="1.8"/></svg>',
-    chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9.5 5.5 16 12l-6.5 6.5" stroke="#7D8187" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    cam: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5c0-1.1.9-2 2-2h1.6c.6 0 1.1-.3 1.4-.8l.5-.9c.3-.5.8-.8 1.4-.8h4.2c.6 0 1.1.3 1.4.8l.5.9c.3.5.8.8 1.4.8h1.6c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H5.5c-1.1 0-2-.9-2-2v-8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="currentColor" stroke-width="1.7"/></svg>'
-  };
 
-  /* ---------------- render: TODAY ---------------- */
-  /* ★ S-1（2026-10-01）：剂量标签 —— 把 dose / unit 拼成「每次 1 片」。
-   * 两个字段都可缺，优雅降级：只有单位 → 「每次 片」；都没有 → 空串（调用方不渲染）。
-   * 纯函数，便于单测（tests/med-fields.spec.js）。 */
-  function doseLabel(m) {
-    if (!m) return '';
-    var d = (m.dose == null ? '' : String(m.dose)).trim();
-    var u = (m.unit == null ? '' : String(m.unit)).trim();
-    if (!d && !u) return '';
-    if (!d) return '每次 ' + u;
-    return '每次 ' + d + (u ? ' ' + u : '');
-  }
 
-  /* ★ S-1：有值就写、没值就**删属性** ——
-   * 让「没填」只有一种表示法（属性不存在）。这样旧数据（本来就没这字段）
-   * 与新数据的空值形状一致，导出 / 统计不必区分「空串」与「没有此字段」。
-   * ⚠️ 判空用 `'' / null / undefined`，**不能用 falsy** ——
-   *    S-2 的剩余量是数字，`0`（吃完了）是**合法值**，`if (val)` 会把它当"没填"删掉。 */
-  function setOrDel(obj, key, val) {
-    if (val === '' || val == null) delete obj[key];
-    else obj[key] = val;
-  }
 
-  /* ★ S-2：库存展示行。返回 '' 表示这药没填剩余量 → **完全不占位置**（旧数据友好）。
-   * 文案分三档：① 能算出天数 ② 只知剩余量（剂量未知，**不猜天数**）③ 低库存警告。 */
-  function stockHtml(m) {
-    var s = stockInfo(m);
-    if (!s) return '';
-    var unit = (m.unit == null ? '' : String(m.unit)).trim();
-    var left = s.stock + (unit ? ' ' + unit : '');
-    if (s.days == null) return '<p class="meta">还剩 ' + esc(left) + '</p>';
-    if (s.low) {
-      return '<p class="meta" style="color:#FF7A17">⚠ 只剩 ' + esc(left)
-        + '，约够 ' + s.days + ' 天 —— 该买药了</p>';
-    }
-    return '<p class="meta">还剩 ' + esc(left) + ' · 约够 ' + s.days + ' 天</p>';
-  }
 
-  function medCardHtml(m, clickable) {
-    return '<' + (clickable ? 'button' : 'div') + ' class="card medcard' + (clickable ? ' tappable' : '') + '"'
-      + (clickable ? ' data-checkin="' + m.id + '"' : '')
-      + ' style="display:flex;flex-direction:column;gap:14px;text-align:left;color:inherit;font:inherit">'
-      + '<div class="card-row">'
-      + '<span style="font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs))">' + esc(m.name) + '</span>'
-      + '<span class="pill">' + esc(medScheduleLabel(m)) + '</span>'
-      + '</div>'
-      /* ★ S-1 / S-2：剂量、库存、备注各自成行 —— 没有就不占位置（不渲染空占位行） */
-      + (doseLabel(m) ? '<p class="meta">' + esc(doseLabel(m)) + '</p>' : '')
-      + stockHtml(m)
-      + (m.note ? '<p class="meta">' + esc(m.note) + '</p>' : '')
-      + '<p class="meta">' + esc(medMetaText(m)) + '</p>'
-      + '</' + (clickable ? 'button' : 'div') + '>';
-  }
 
   function renderToday() {
     var host = $('#todayView');
@@ -2085,22 +1981,6 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
 
   /* ---------------- 存储 UI（D-1） ---------------- */
 
-  /* 写失败告警卡：**跨页可见**（今日页与记录页都放）。
-   * 用户可能整天停在今日页打卡，只在记录页提示等于没提示。 */
-  function storageAlertHtml() {
-    if (!storageError) return '';
-    var quota = storageError.kind === 'quota';
-    var title = quota ? '数据没能保存 · 本地存储已满' : '数据没能保存';
-    /* 文案里刻意说清「已存的数据没坏」——否则用户第一反应是「我的记录全没了」 */
-    var body = quota
-      ? '最近的改动没写进手机。重启 App 会退回上一次保存成功的状态，之前的记录没丢。请先导出备份，再清理旧记录。'
-      : '写入失败：' + storageError.msg + '。请先导出备份，避免记录丢失。';
-    /* 用 data 属性而非 id 绑定：这张卡在两个视图里各出现一次，用 id 会产生重复 id */
-    return '<button class="card card-alert" data-storage-fix="1">'
-      + '<span class="alert-title">⚠︎ ' + title + '</span>'
-      + '<span class="meta">' + esc(body) + '</span>'
-      + '<span class="alert-cta">去处理 →</span></button>';
-  }
 
   /* 存储状态卡：让「什么时候会满」提前可见，而不是等它满了才知道 */
   function storageCardHtml() {
