@@ -29,6 +29,7 @@ const MODULES = [
   'core/util.js',
   'core/store.js',
   'core/schedule.js',
+  'ui/render.js',
   'ui/cards.js',
   'ui/toast.js',
   'ui/overlay.js',
