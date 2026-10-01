@@ -37,6 +37,9 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
 
 import { medScheduleLabel, medMetaText, doseClockHtml, FS_HINT_KEY, fsHintDismissed, fsHintHtml, droppedCardHtml, snoozeTag, ICON, doseLabel, setOrDel, stockHtml, medCardHtml, storageAlertHtml } from './ui/cards.js';
 
+
+import { toastTimer, toast } from './ui/toast.js';
+
 (function () {
   'use strict';
 
@@ -69,7 +72,7 @@ import { medScheduleLabel, medMetaText, doseClockHtml, FS_HINT_KEY, fsHintDismis
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.1';
+  var APP_VERSION = '1.5.2';
   var APP_BUILD = '2026-10-01';
 
 
@@ -457,15 +460,6 @@ import { medScheduleLabel, medMetaText, doseClockHtml, FS_HINT_KEY, fsHintDismis
 
 
 
-  /* ---------------- toast ---------------- */
-  var toastTimer = null;
-  function toast(msg) {
-    var el = $('#toast');
-    el.textContent = msg;
-    el.classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2000);
-  }
 
 
 
