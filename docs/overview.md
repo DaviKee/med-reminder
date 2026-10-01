@@ -36,9 +36,11 @@
 | **v1.5.0** | `4284df9` | 10-01 | **S-7 服药报告**（近 7 天给医生 / 家属）—— `adherenceReport()` + 报告浮层，**未引 PDF 库**；**阶段 C 完成** |
 | **v1.5.1** | `192378c` | 10-01 | **A-2**：抽 `ui/cards.js`（共享渲染片段）—— app.js 2673 → 2553 行 |
 | **v1.5.2** | `1492d5f` | 10-01 | **A-2**：抽 `ui/toast.js`（**被所有块依赖的叶子先归位**）—— app.js → 2547 行 |
+| **v1.5.3** | `5f9f72d` | 10-01 | **A-2**：建 **`ui/render.js` 重绘调度（订阅式）** —— `render()` 收口，55 处调用点不动 |
+| **v1.5.4** | `307e653` | 10-01 | **A-2**：**`render()` 移入 `ui/render.js`** —— 视图模块调它不再算「引用上层」 |
 
-- 测试：**17 套 559 条 spec 全绿**；harness 19 关口 **18 通过 / 0 失败**
-- 最新 APK：`med-reminder/MedReminder-v1.5.2-2026-10-01.apk` · **6.27 MB**
+- 测试：**18 套 579 条 spec 全绿**；harness 20 关口 **19 通过 / 0 失败**
+- 最新 APK：`med-reminder/MedReminder-v1.5.4-2026-10-01.apk` · **6.27 MB**
 - ✅ **真机确认「平台层搬迁」稳住了**（返回键 / 切后台 / 拍照恢复均正常）→「只收口、不抽象」策略成立
 - ✅ **验证 harness 已建成**（`harness/harness.py`）—— 16 关口一键跑、三态退出码（0 全过 / 1 有失败 / 2 环境问题），
   并**挂到 git pre-commit**（红了拦住提交）
@@ -104,19 +106,20 @@
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    1492d5f  DaviKee <davi.kee@outlook.com>  refactor(arch): 抽 ui/toast.js · v1.5.2
+HEAD    307e653  DaviKee <davi.kee@outlook.com>  refactor(arch): render() 移入 ui/render.js · v1.5.4
 工作区  clean（干净）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.5.2   APP_BUILD = 2026-10-01
-结构    www/js/core/{util,store,schedule}.js · ui/{cards,toast,overlay}.js
+源码    APP_VERSION = 1.5.4   APP_BUILD = 2026-10-01
+结构    www/js/core/{util,store,schedule}.js · ui/{render,cards,toast,overlay}.js
         · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
-        app.js 2547 行 ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/* ← app
+        app.js 2557 行 ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/* ← app
         ★ 平台差异（插件调用 / 生命周期 / 返回键 / 前后台）**全部收在 www/js/platform/**
           —— 业务层已无 window.Capacitor，这是「多平台准备」的关键一条
-        ⚠️ A-2 进行中：`render()` / `toast()` 是**中枢**，拆视图前要先做**订阅式重绘**（见计划 §32.3）
-测试    harness/harness.py → 19 关口（17 套 559 条 spec + APK 验收）；已挂 git pre-commit
-APK     med-reminder/MedReminder-v1.5.2-2026-10-01.apk（6.27 MB）
+        ★ **重绘调度**在 `ui/render.js`（`markDirty` / `render` / `setRenderers`）——
+          拆视图的前置已就位（见计划 §33）
+测试    harness/harness.py → 20 关口（18 套 579 条 spec + APK 验收）；已挂 git pre-commit
+APK     med-reminder/MedReminder-v1.5.4-2026-10-01.apk（6.27 MB）
         旧版（v1.4.1 / v1.4.1-rebuild / v1.4.2 / v1.4.5 等）已归入 归档/apk/
 鸿蒙    spike/harmony-test/ 独立工程（不碰主项目）；devecocli 已装；代理提醒等 AGC 审批
 D 盘    仅剩回收站 + 无关目录；D:\WorkBuddy 与 D:\DevEnv 均已不存在
