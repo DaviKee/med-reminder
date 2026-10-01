@@ -24,6 +24,8 @@ const JS = path.join(ROOT, 'www', 'js');
  * notify.js / photo.js / backup.js 是**独立的 IIFE script**（挂 window.MedXxx），
  * 不属于这个图 —— 它们各自被对应的 spec 单独读取。 */
 const MODULES = [
+  /* platform/lifecycle.js 无依赖（只用 window.Capacitor），放最前 */
+  'platform/lifecycle.js',
   'core/util.js',
   'core/store.js',
   'core/schedule.js',

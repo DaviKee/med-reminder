@@ -23,9 +23,15 @@ import { intervalLabel, medMode, normTimes, needRebuildDoses, timeInputToMin,
 /* ⬆ 2026-09-28 架构重构：浮层原语与返回键判定已抽到 ui/overlay.js。
  * openCount / lastFocus / confirmCb 由它自己管 —— 本文件只读、或走它给的小 API 写。 */
 import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
-         openDlg, closeDlg, closableDialogs, trapTab, backAction, exitApp,
+         openDlg, closeDlg, closableDialogs, trapTab, backAction,
          isOverlayOpen, enterOverlay, leaveOverlay,
          rememberFocus, restoreFocus, clearConfirmCb, takeConfirmCb } from './ui/overlay.js';
+
+/* ⬆ 2026-10-01 架构重构（多平台准备）：**平台生命周期**已抽到 platform/lifecycle.js。
+ * 这里原本散着 3 处 `window.Capacitor` 直取（backButton / appRestoredResult / appStateChange），
+ * 现在统一走本模块的回调注入 —— 业务层不再认识 Capacitor。
+ * `exitApp` 也一并移过去了（它原本在 ui/overlay.js，但那是平台操作、不是浮层原语）。 */
+import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './platform/lifecycle.js';
 
 (function () {
   'use strict';
@@ -59,7 +65,7 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.12';
+  var APP_VERSION = '1.4.13';
   var APP_BUILD = '2026-10-01';
 
 
@@ -2320,16 +2326,10 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
     $('#viewClose').onclick = function () { closeDlg($('#dlgView')); };
 
     /* 拍照会启动一个独立的相机 Activity，系统可能在过程中杀掉本 App。
-     * Capacitor 官方明确要求监听这个事件 —— 不处理会**同时丢照片和打卡**。 */
+     * Capacitor 官方明确要求监听这个事件 —— 不处理会**同时丢照片和打卡**。
+     * 事件接在 platform/lifecycle.js；这里只提供「拿到路径之后干什么」。 */
     if (window.MedPhoto && window.MedPhoto.ready()) {
-      var AppCam = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-      if (AppCam && AppCam.addListener) {
-        AppCam.addListener('appRestoredResult', function (d) {
-          if (!d || d.pluginId !== 'Camera' || !d.success) return;
-          var photo = d.data || {};
-          if (photo.path) resumeShot(photo.path);
-        });
-      }
+      onCameraRestored(function (path) { resumeShot(path); });
       refreshPhotoStats();
       /* 安全回收：只删「没有任何记录引用」的照片文件（纯垃圾回收，不碰被引用的）。
        * 与 D-1 的 gcNotified 同一思路。 */
@@ -2426,11 +2426,9 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
 
     /* ---- Android 返回键 / 侧滑返回 ----
      * 不注册这个监听，侧滑返回就没反应；浮层开着时更是出不来。
-     * 注册后由 Capacitor 把返回动作交给我们，语义见 backAction()。 */
-    var CapApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-    if (CapApp && CapApp.addListener) {
-      CapApp.addListener('backButton', function () { handleBackButton(); });
-    }
+     * 事件注册在 platform/lifecycle.js；「关浮层 → 回今天 → 退出」的判定仍在
+     * ui/overlay.js 的 backAction()（纯函数、可单测），这里只把两者接上。 */
+    onBackButton(handleBackButton);
 
     /* Esc 关闭浮层。只对「非打断式」浮层生效：
      * 提醒弹窗仍要求用户明确选择「已服用 / 稍后」，不能被一键抹掉。 */
@@ -2482,9 +2480,8 @@ import { setScrim, sheetSaveBegin, sheetSaveReset, askConfirm,
     /* 从系统设置页回来时立刻重查一次。只靠 5 秒轮询最坏要等 5 秒，用户会以为「改了没用」；
      * 而且 App 在后台时 JS 定时器本就被系统暂停，所以「回到前台」这个时机比轮询更准。 */
     if (window.MedNotify && window.MedNotify.native) {
-      var AppP = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-      if (AppP) AppP.addListener('appStateChange', function (st) {
-        if (st.isActive) {
+      onAppStateChange(function (isActive) {
+        if (isActive) {
           refreshPerm();
           /* ⚠️ 后台时 JS 定时器被系统暂停 —— 过夜后回到前台是第一现场，
            * 必须在这里补一次跨天处理（否则今天没有剂量，见 rollDayIfNeeded 的注释）。 */

@@ -51,8 +51,8 @@ t('★ 抽出了 rollDayIfNeeded（不再只挂在 30 秒轮询上）',
 t('★ rollDayIfNeeded 里会 ensureFixedDoses（新的一天重排固定时刻）',
   /function rollDayIfNeeded\(\)[\s\S]{0,700}?ensureFixedDoses\(\)/.test(APP), '缺');
 
-t('★ appStateChange 的 isActive 分支调用了 rollDayIfNeeded',
-  /appStateChange[\s\S]{0,600}?isActive[\s\S]{0,400}?rollDayIfNeeded\(\)/.test(APP), '缺');
+t('★ 回到前台（isActive）时调用了 rollDayIfNeeded',
+  /onAppStateChange\(function \(isActive\)[\s\S]{0,400}?rollDayIfNeeded\(\)/.test(APP), '缺');
 
 t('30 秒轮询改共用 rollDayIfNeeded',
   /setInterval\(rollDayIfNeeded,\s*30000\)/.test(APP), '缺');

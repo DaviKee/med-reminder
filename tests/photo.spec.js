@@ -239,8 +239,11 @@ const setPhoto = o => Object.assign(sandbox.window.MedPhoto, o);
       /addListener\('appRestoredResult'/.test(APP), '没监听');
     t('★ 只处理 Camera 插件的结果',
       /pluginId !== 'Camera'/.test(APP), '没按 pluginId 过滤');
+    /* ⚠️ 2026-10-01：appRestoredResult 的注册移到 platform/lifecycle.js（判空也在那里），
+     * app.js 只提供「拿到路径之后干什么」→ 一条断言覆盖两处。 */
     t('★ 有 photo.path 才走恢复（防空结果）',
-      /photo\.path\)\s*resumeShot/.test(APP), '没判空');
+      /if \(photo\.path\) cb\(photo\.path\)/.test(APP)
+      && /onCameraRestored\(function \(path\) \{ resumeShot\(path\); \}\)/.test(APP), '没判空或没接上');
     t('★ resumeShot 开头就清留痕（防止重复触发）',
       /function resumeShot\(photoPath\) \{[\s\S]{0,200}clearPendingShot\(\)/.test(APP), '没清');
     t('★ 拍照框打开时按钮文案复位（重拍场景）',

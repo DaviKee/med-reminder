@@ -322,8 +322,10 @@ console.log('=== G. 源码级接线（防改回去）===');
    * 函数存在 + 里面会 ensureFixedDoses + 回到前台也调它。 */
   t('★ 跨天时重新预生成（经 rollDayIfNeeded）',
     /function rollDayIfNeeded\(\)[\s\S]{0,700}?ensureFixedDoses\(\)/.test(APP), '跨天没接');
+  /* ⚠️ 2026-10-01：appStateChange 的注册移到 platform/lifecycle.js，
+   * 断言改从**业务层的回调入口**算起（原来靠两词距离、隐含跨文件）。 */
   t('★ 跨天处理在「回到前台」时也会跑（根因修复）',
-    /appStateChange[\s\S]{0,600}?isActive[\s\S]{0,400}?rollDayIfNeeded\(\)/.test(APP), '回到前台没接');
+    /onAppStateChange\(function \(isActive\)[\s\S]{0,400}?rollDayIfNeeded\(\)/.test(APP), '回到前台没接');
   t('★ 保存成固定模式后立刻生成', /if \(isFixed\) ensureFixedDoses\(\);/.test(APP), '保存后没接');
   /* ⚠️ 这一条原来写的是
    *      /modeChanged \|\| intervalChanged\) rebuildTodayDoses\(m\)/

@@ -247,8 +247,10 @@ const namesIn = (fs, dir) => Array.from(fs.files.keys())
     t('卡片说明了位置', APP.indexOf('Android/data/com.medreminder.app/files/') >= 0, '缺位置说明');
     t('★ 卡片明确警告「卸载会连目录一起删」（不隐瞒局限）',
       APP.indexOf('卸载 App 会连这个目录一起删掉') >= 0, '缺警告');
+    /* ⚠️ 2026-10-01：appStateChange 的注册移到 platform/lifecycle.js，
+     * 断言改从**业务层的回调入口**算起（原来靠两词距离、隐含跨文件，一抽就断）。 */
     t('★ 切后台时把待写的落盘（防抖窗口内被杀不至于白改）',
-      /appStateChange[\s\S]{0,300}MedAutoBackup\.flush\(\)/.test(APP), '没 flush');
+      /onAppStateChange\(function \(isActive\)[\s\S]{0,300}MedAutoBackup\.flush\(\)/.test(APP), '没 flush');
     t('备份文件不写进 S（不污染业务数据）',
       APP.indexOf('autoBackup.v1') < 0, '不该出现在 app.js');
   }

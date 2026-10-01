@@ -100,12 +100,9 @@ export function backAction(s) {
   return 'exit';
 }
 
-export function exitApp() {
-  var A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-  if (A && A.exitApp) { A.exitApp(); return; }
-  if (navigator.app && navigator.app.exitApp) { navigator.app.exitApp(); return; }   // 老 Cordova
-  /* 浏览器 / PWA 没有「退出」这个概念，什么都不做 */
-}
+/* ⚠️ `exitApp()` 已于 2026-10-01 **移入 `platform/lifecycle.js`** ——
+ *    它是平台操作（Capacitor `App` 插件），不该住在「浮层原语」里。
+ *    本模块只保留与 DOM 有关的判定（`backAction` / `closableDialogs` / `trapTab`）。 */
 
 /* 可被「一键关掉」的浮层。提醒弹窗与确认框不在其中 —— 见 backAction 的注释。 */
 export function closableDialogs() {

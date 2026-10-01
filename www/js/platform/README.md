@@ -38,8 +38,8 @@ main ─────────→ 装配以上所有（唯一允许「知道�
 | `notifications.js` | 通知：权限、排程、清场（`MedNotify`） | 原 `js/notify.js` |
 | `camera.js` | 拍照：相机调用、照片落盘与孤儿回收（`MedPhoto`） | 原 `js/photo.js` |
 | `storage.js` | 文件落盘与自动本地备份（`MedAutoBackup`） | 原 `js/backup.js` |
-| `capabilities.js` | 已注册插件清单 / 能力探测 | ⬜ 待抽（现散在 `app.js:1886`） |
-| `lifecycle.js` | `appRestoredResult` / 返回键 / 前后台 | ⬜ 待抽（现散在 `app.js`、`ui/overlay.js`） |
+| `lifecycle.js` | `appRestoredResult` / 返回键 / 前后台 / `exitApp` | ✅ 2026-10-01 抽出（原散在 `app.js` 与 `ui/overlay.js`） |
+| `capabilities.js` | 已注册插件清单 / 能力探测 | ⬜ 待抽（`app.js:1886`）。⚠️ **那其实不是独立能力模块，而是 DEBUG 卡的 HTML 渲染函数**（`plugLine()`），要先把 UI 与探测拆开 —— **收益偏低，暂缓** |
 
 ## 过渡期：为什么保留 `window.MedXxx`
 

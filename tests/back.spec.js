@@ -74,9 +74,13 @@ console.log('=== B. 优先级（顺序错了会出怪事）===');
 console.log('');
 console.log('=== C. 源码级接线（防改回去）===');
 {
+  /* ⚠️ 2026-10-01 架构重构（多平台）：返回键的**注册**移到了 platform/lifecycle.js。
+   * 断言改为「平台层注册事件 + 业务层把 handleBackButton 接上」——
+   * 原来锁死了 addListener 的字面写法（连空格都钉住），一搬就是假失败。 */
   t('★ 注册了返回键监听',
     /addListener\('backButton'/.test(APP), '没注册 —— 侧滑返回会继续没反应');
-  t('返回键走 handleBackButton', /addListener\('backButton', function \(\) \{ handleBackButton\(\); \}\)/.test(APP), '没接上');
+  t('返回键走 handleBackButton',
+    /onBackButton\(handleBackButton\)/.test(APP), '没接上');
   t('★ Esc 与返回键共用同一套「关最上层」逻辑',
     /if \(closeTopDialog\(\)\) return;/.test(APP), '各写一套，迟早不一致');
   t('提醒弹窗不在可关清单里',
