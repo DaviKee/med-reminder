@@ -68,7 +68,8 @@ def main():
     # 否则函数一搬家，检查就会因为「不在 app.js 里」而误报，而那些检查本来是对的。
     APP_MODULES = ['js/platform/lifecycle.js', 'js/core/util.js', 'js/core/store.js',
                    'js/core/schedule.js', 'js/ui/render.js', 'js/ui/cards.js',
-                   'js/ui/toast.js', 'js/ui/overlay.js', 'js/app.js']
+                   'js/ui/actions.js', 'js/ui/toast.js', 'js/ui/overlay.js',
+                   'js/app.js']
     app = read_opt('assets/public/js/app.js')
     app_modules = [read_opt('assets/public/' + n) for n in APP_MODULES]
     notify = read('assets/public/js/platform/notifications.js')

@@ -43,6 +43,9 @@ import { setRenderers, markDirty, render } from './ui/render.js';
 
 import { toastTimer, toast } from './ui/toast.js';
 
+
+import { dismissFsHint, syncNotifications, deleteMed, takenToast } from './ui/actions.js';
+
 (function () {
   'use strict';
 
@@ -81,7 +84,7 @@ import { toastTimer, toast } from './ui/toast.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.4';
+  var APP_VERSION = '1.5.5';
   var APP_BUILD = '2026-10-01';
 
 
@@ -184,30 +187,12 @@ import { toastTimer, toast } from './ui/toast.js';
     toast('顺手把通知权限开一下，锁屏时才能收到提醒');
   }
 
-  function dismissFsHint() {
-    try { localStorage.setItem(FS_HINT_KEY, '1'); } catch (e) { /* ignore */ }
-  }
 
   function fsLabel() {
     for (var i = 0; i < FS_LEVELS.length; i++) if (FS_LEVELS[i].v === fontScale) return FS_LEVELS[i].label;
     return '标准';
   }
 
-  function syncNotifications() {
-    if (!window.MedNotify) return;
-    var list = todayDoses()
-      .filter(function (d) { return d.status === 'pending'; })
-      .map(function (d) {
-        var m = medById(d.medId);
-        /* 系统通知的**响铃时刻**用 dueAt（延后过就按延后时刻），
-         * 但正文里仍写计划时刻 —— 用户关心的是"这次药本来该几点吃"。
-         * 延后过则把延后时刻一并说清，避免"通知怎么晚响了"的困惑。 */
-        var t = minToStr(d.time);
-        if (d.snoozeUntil != null) t += '（已延后至 ' + minToStr(d.snoozeUntil) + '）';
-        return { id: d.id, timeStr: t, medName: m ? m.name : '服药', at: dateAt(dueAt(d)) };
-      });
-    window.MedNotify.sync(list);
-  }
 
 
 
@@ -241,22 +226,6 @@ import { toastTimer, toast } from './ui/toast.js';
 
 
 
-  /* 顺延后重排序号，保证「第 N / 共 M 次」仍然正确 */
-  /* 删除药品。两件事缺一不可：
-   *   ① **撤掉今天该药已经排进系统的通知**。旧实现只清了 App 内的剂量数组，
-   *      系统闹钟照旧会响；点开时那一刻 doseId 已经查不到了（onNotifyAction 里
-   *      `if (!ds) return;`）—— 表现就是「点了没反应」。
-   *   ② **保留历史记录**。吃过药的事实不该因为药品被删掉而消失，
-   *      否则按药统计和依从率会凭空变好看。 */
-  function deleteMed(id) {
-    var med = medById(id);
-    if (!med) return null;
-    var todays = todayDoses().filter(function (d) { return d.medId === id; });
-    todays.forEach(function (d) { if (window.MedNotify) window.MedNotify.cancelOne(d.id); });
-    S.meds = S.meds.filter(function (m) { return m.id !== id; });
-    S.doses[todayKey()] = todayDoses().filter(function (d) { return d.medId !== id; });
-    return { name: med.name, doses: todays.length };
-  }
 
 
 
@@ -277,12 +246,6 @@ import { toastTimer, toast } from './ui/toast.js';
   }
 
 
-  function takenToast(med, takenMs, r) {
-    var s = '已记录 ' + minToStr(minOfDay(takenMs)) + ' · ' + (med ? med.name : '');
-    if (r && r.shifted) s += '，后续 ' + r.shifted + ' 次已顺延';
-    if (r && r.dropped) s += '，' + r.dropped + ' 次越过零点不再提醒';
-    return s;
-  }
 
 
 
