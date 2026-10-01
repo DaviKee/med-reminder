@@ -227,6 +227,23 @@
     </div>
   </div>
 
+  <!-- S-7 报告（近 7 天）—— 回答医生唯一关心的那个问题：**按时没按时**。
+       主场景是当场拿给医生看，所以正文排版好、不塞进文本框；「复制」只作次要出口。 -->
+  <div class="dlg-wrap" id="dlgReport">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="rptTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent">REPORT</span>
+        <div class="dlg-title" id="rptTitle">服药情况报告</div>
+        <div class="dlg-body" id="rptHint"></div>
+      </div>
+      <div class="rpt-area" id="rptArea"></div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="rptClose">关闭</button>
+        <button class="btn btn-accent" id="rptCopy">复制文字</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 全部历史（二级菜单）—— 记录页只放摘要，长列表收进来 -->
   <div class="dlg-wrap" id="dlgHistory">
     <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="histTitle">

@@ -104,11 +104,14 @@ export function backAction(s) {
  *    它是平台操作（Capacitor `App` 插件），不该住在「浮层原语」里。
  *    本模块只保留与 DOM 有关的判定（`backAction` / `closableDialogs` / `trapTab`）。 */
 
-/* 可被「一键关掉」的浮层。提醒弹窗与确认框不在其中 —— 见 backAction 的注释。 */
+/* 可被「一键关掉」的浮层。提醒弹窗与确认框不在其中 —— 见 backAction 的注释。
+ * ⚠️ 新增浮层必须同时加进这份名单，否则**返回键关不掉它** ——
+ *    而且不会报错，只表现为"按了没反应"（2026-10-01 加 dlgReport 时就踩过这个提醒点）。 */
 export function closableDialogs() {
   return $$('.dlg-wrap.show').filter(function (el) {
     return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean'
-      || el.id === 'dlgView' || el.id === 'dlgPhoto' || el.id === 'dlgHistory';
+      || el.id === 'dlgView' || el.id === 'dlgPhoto' || el.id === 'dlgHistory'
+      || el.id === 'dlgReport';
   });
 }
 

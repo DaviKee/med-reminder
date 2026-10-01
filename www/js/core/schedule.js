@@ -8,7 +8,7 @@
  * ⚠️ window.MedNotify 属于**插件层**（notify.js 的独立 IIFE），不是 UI 层，可直接用。
  */
 
-import { uid, nowMin, minToStr, minOfDay, todayKey, fmtDate } from './util.js';
+import { uid, nowMin, minToStr, minOfDay, todayKey, fmtDate, pad } from './util.js';
 import { S, save, readJSON, writeJSON } from './store.js';
 
 /* 间隔的显示（F-1）。
@@ -455,4 +455,63 @@ export function progress() {
   var l = todayDoses();
   var done = l.filter(function (d) { return d.status === 'taken' || d.status === 'skipped'; }).length;
   return { done: done, total: l.length };
+}
+
+/* ---------------- S-7：依从性报告（近 N 天，给医生 / 家属看） ----------------
+ *
+ * 目标**不是**「导出全部原始记录」（那是 CSV 的活儿），而是回答医生唯一关心的那个问题：
+ *   **「近 7 天到底按时没按时」**。
+ *
+ * 判定规则**与记录页完全一致**（已服 / 已跳过 / 已错过 / 未到时间），不另立一套 ——
+ * 否则报告数字与界面显示会对不上，而那比「算错」更难查。
+ *
+ * ⚠️ **过去日期的 pending 一律算漏服**：那些时刻早就过去了，不会再变成「未到时间」。
+ *    `isMissed()` 内部拿 `nowMin()` 比较，**只对今天安全**，所以这里不能直接复用：
+ *    反例 —— 昨天 23:00 的剂量，今天 00:10 看，`nowMin() - dueAt = 10 - 1380` 是负的，
+ *    复用会把它误判成「未到时间」。
+ *
+ * 依从率 = 已服 / (已服 + 漏服)。**「已跳过」不计入分母** ——
+ * 跳过是用户主动的（如医嘱停药），算进去会冤枉人；单列出来让医生自己判断。 */
+export function adherenceReport(days) {
+  /* 没传 → 默认 7 天；传了但非法（NaN / ≤0）→ 至少 1 天。
+   * ⚠️ 别写成 `Number(days) || 7` —— `0` 是 falsy，传 0 会被当成「没传」变成 7 天。 */
+  var n = (days === undefined || days === null) ? 7 : Math.floor(Number(days));
+  if (!isFinite(n) || n < 1) n = 1;
+  var to = todayKey();
+  var rows = [];
+  var sum = { taken: 0, missed: 0, skipped: 0, pending: 0, rate: null };
+
+  for (var i = n - 1; i >= 0; i--) {
+    var k = dayKeyShift(to, -i);
+    var list = (S.doses && S.doses[k]) || [];
+    var r = { key: k, taken: 0, missed: 0, skipped: 0, pending: 0, rate: null };
+    for (var j = 0; j < list.length; j++) {
+      var d = list[j];
+      if (d.status === 'taken') r.taken++;
+      else if (d.status === 'skipped') r.skipped++;
+      else if (k !== to || nowMin() - dueAt(d) > MISS_GRACE_MIN) r.missed++;
+      else r.pending++;
+    }
+    r.rate = rateOf(r.taken, r.missed);
+    sum.taken += r.taken; sum.missed += r.missed;
+    sum.skipped += r.skipped; sum.pending += r.pending;
+    rows.push(r);
+  }
+  sum.rate = rateOf(sum.taken, sum.missed);
+  return { days: n, from: rows.length ? rows[0].key : to, to: to, rows: rows, total: sum };
+}
+
+/* 依从率（整数百分比）。**分母为 0 时返回 `null`，不是 0** ——
+ * 「这几天没有数据」和「一次都没吃」是两回事，显示成 0% 会冤枉人。 */
+function rateOf(taken, missed) {
+  var denom = taken + missed;
+  return denom > 0 ? Math.round(taken * 100 / denom) : null;
+}
+
+/* 日期 key 平移。**用本地时间构造 Date**，不走字符串解析 ——
+ * `new Date('2026-10-01')` 按 UTC 解析，东八区会整体差一天。 */
+function dayKeyShift(key, delta) {
+  var p = String(key).split('-');
+  var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + delta);
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 }

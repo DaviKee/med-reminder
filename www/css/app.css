@@ -204,6 +204,26 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
 }
 .input-wrap.multi textarea::placeholder{color:#5F6368}
 
+/* ---- S-7 报告浮层 ----
+   正文是「当场给医生看」的，所以是可滚动的排版内容，**不是文本框**。
+   字号同样走 --fs —— 老人把字号档位调大后，报告也要跟着变大。 */
+.rpt-area{max-height:44vh;overflow-y:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:2px 0}
+.rpt-head{display:flex;align-items:baseline;gap:10px;margin:14px 0 4px}
+.rpt-rate{font-family:var(--font-num);font-size:calc(38px * var(--fs));line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+.rpt-rate-cap{font-size:calc(13px * var(--fs));color:var(--muted)}
+.rpt-meta{font-size:calc(12px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted);margin-bottom:10px}
+.rpt-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.rpt-chip{border:1px solid var(--line-2);border-radius:9999px;padding:3px 10px;font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--text);white-space:nowrap}
+/* 只有「漏服」用警示色 —— 项目里 #FF7A17 就是「漏服」的既定语义（见 .btn-miss / .dose-miss） */
+.rpt-chip.bad{border-color:#FF7A17;color:#FF7A17}
+.rpt-tb{width:100%;border-collapse:collapse;font-size:calc(13px * var(--fs))}
+.rpt-tb th{text-align:left;font-weight:400;color:var(--muted);font-size:calc(12px * var(--fs));padding:6px 0;border-bottom:1px solid var(--line)}
+.rpt-tb td{padding:7px 0;border-bottom:1px solid var(--line);color:var(--sub);font-variant-numeric:tabular-nums}
+.rpt-tb td:first-child{color:var(--text);font-family:var(--font-num)}
+.rpt-tb b.bad{color:#FF7A17;font-weight:500}
+.rpt-tb tr:last-child td{border-bottom:0}
+
+
 
 .stepper{
   display:flex;align-items:center;justify-content:space-between;

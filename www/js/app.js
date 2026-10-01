@@ -18,7 +18,7 @@ import { intervalLabel, medMode, normTimes, needRebuildDoses, timeInputToMin,
          checkIn, checkInAll, markTaken, ensureFixedDoses, rebuildTodayDoses,
          snoozeDose, snoozeToast, droppedToday, droppedAcked, ackDropped,
          MAX_TIMES, MISS_GRACE_MIN,
-         stockInfo } from './core/schedule.js';
+         stockInfo, adherenceReport } from './core/schedule.js';
 
 
 /* ⬆ 2026-09-28 架构重构：浮层原语与返回键判定已抽到 ui/overlay.js。
@@ -66,7 +66,7 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.4.16';
+  var APP_VERSION = '1.5.0';
   var APP_BUILD = '2026-10-01';
 
 
@@ -1078,6 +1078,7 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
       + '<button class="btn btn-primary" id="btnBackup" style="height:44px;font-size:calc(14px * var(--fs))">导出备份</button>'
       + '<button class="btn btn-ghost" id="btnCsv" style="height:44px;font-size:calc(14px * var(--fs))">导出 CSV</button>'
       + '</div>'
+      + '<button class="btn btn-ghost" id="btnReport" style="height:44px;font-size:calc(14px * var(--fs))">给医生看的报告（近 7 天）</button>'
       + '<button class="btn btn-ghost" id="btnRestore" style="height:44px;font-size:calc(14px * var(--fs))">从备份恢复</button>'
       + '</div>';
 
@@ -1136,6 +1137,8 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     if (bc) bc.onclick = function () { openDataDlg('csv'); };
     var br = $('#btnRestore');
     if (br) br.onclick = function () { openDataDlg('restore'); };
+    var brp = $('#btnReport');
+    if (brp) brp.onclick = openReportDlg;
     var bcl = $('#btnClean');
     if (bcl) bcl.onclick = openCleanDlg;
 
@@ -1754,6 +1757,72 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     var n = 0;
     Object.keys(S.doses).forEach(function (k) { n += (S.doses[k] || []).length; });
     return n;
+  }
+
+  /* ---------------- S-7：服药报告（近 7 天，给医生 / 家属看） ----------------
+   * 与 CSV 的分工：CSV 是**原始记录**（给会看表的人、可导进 Excel）；
+   * 报告是**结论**（回答"近 7 天按时没按时"这一个问题）。
+   * 主场景是**当场把屏幕拿给医生看** → 正文用排版好的 HTML，不塞进文本框；
+   * 「复制文字」只作次要出口（发给家人时纯文本最通用）。 */
+
+  /* `null`（没有可统计的剂量）显示成「—」，**不能显示 0%** ——「没数据」≠「没吃」。 */
+  function reportRateText(rate) {
+    return (rate == null) ? '—' : rate + '%';
+  }
+
+  function reportHtml(rep) {
+    var tot = rep.total;
+    var h = '<div class="rpt-head">'
+      + '<div class="rpt-rate">' + reportRateText(tot.rate) + '</div>'
+      + '<div class="rpt-rate-cap">依从率</div>'
+      + '</div>'
+      + '<div class="rpt-meta">' + esc(rep.from) + ' ～ ' + esc(rep.to) + ' · 共 ' + rep.days + ' 天</div>'
+      + '<div class="rpt-chips">'
+      + '<span class="rpt-chip ok">已服 ' + tot.taken + '</span>'
+      + '<span class="rpt-chip bad">漏服 ' + tot.missed + '</span>'
+      + (tot.skipped ? '<span class="rpt-chip">主动跳过 ' + tot.skipped + '</span>' : '')
+      + '</div>'
+      + '<table class="rpt-tb"><tr><th>日期</th><th>已服</th><th>漏服</th><th>跳过</th><th>依从率</th></tr>';
+    rep.rows.forEach(function (r) {
+      h += '<tr><td>' + esc(r.key.slice(5)) + '</td><td>' + r.taken + '</td>'
+        + '<td>' + (r.missed ? '<b class="bad">' + r.missed + '</b>' : '0') + '</td>'
+        + '<td>' + r.skipped + '</td><td>' + reportRateText(r.rate) + '</td></tr>';
+    });
+    return h + '</table>';
+  }
+
+  function reportPlain(rep) {
+    var tot = rep.total;
+    var L = ['服药情况报告',
+             '统计范围：' + rep.from + ' ~ ' + rep.to + '（共 ' + rep.days + ' 天）',
+             '生成时间：' + fmtDate(new Date()) + ' ' + minToStr(nowMin()),
+             '',
+             '总计：已服 ' + tot.taken + ' 次 · 漏服 ' + tot.missed + ' 次'
+               + (tot.skipped ? ' · 主动跳过 ' + tot.skipped + ' 次' : '')
+               + ' · 依从率 ' + reportRateText(tot.rate),
+             '',
+             '逐日：'];
+    rep.rows.forEach(function (r) {
+      L.push(r.key + '  已服 ' + r.taken + '  漏服 ' + r.missed
+        + (r.skipped ? '  跳过 ' + r.skipped : '') + '  依从率 ' + reportRateText(r.rate));
+    });
+    L.push('');
+    L.push('（数据来自本机打卡记录，由「药准时」生成）');
+    return L.join('\n');
+  }
+
+  var reportText = '';   // 当前报告的可复制文本
+
+  function openReportDlg() {
+    var rep = adherenceReport(7);
+    reportText = reportPlain(rep);
+    /* 一条都没统计到 vs 数据不全（比如今天刚装的 App）要分开说 —— 别让医生以为"全没吃"。 */
+    $('#rptHint').textContent = (rep.total.taken + rep.total.missed === 0)
+      ? '最近 7 天还没有服药记录。有记录后，这里会显示每天按时吃药的情况。'
+      : '近 7 天的服药情况，可直接拿给医生看，或点「复制文字」发给家人。';
+    $('#rptArea').innerHTML = reportHtml(rep);
+    rememberFocus();
+    openDlg($('#dlgReport'));
   }
 
   function downloadText(filename, text, mime) {
@@ -2456,6 +2525,15 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
     /* ---- 备份 / 导出 / 恢复 ---- */
     $('#dataClose').onclick = function () { restoreArmed = false; closeDlg($('#dlgData')); };
     $('#histClose').onclick = function () { closeDlg($('#dlgHistory')); };
+    /* S-7 报告：「复制」读的是内存里的 reportText，不是 DOM ——
+     * 报告正文是给眼睛看的 HTML，直接抄 DOM 会把表格拍成一团乱码文本。 */
+    $('#rptClose').onclick = function () { closeDlg($('#dlgReport')); };
+    $('#rptCopy').onclick = function () {
+      if (!reportText) { toast('没有可复制的内容'); return; }
+      copyText(reportText).then(function (ok) {
+        toast(ok ? '已复制到剪贴板' : '复制失败，请长按选择后手动复制');
+      });
+    };
     $('#dataCopy').onclick = function () {
       var txt = $('#dataArea').value;
       if (!txt) { toast('没有可复制的内容'); return; }
