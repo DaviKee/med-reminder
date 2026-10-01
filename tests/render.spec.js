@@ -104,8 +104,12 @@ console.log('=== C. 源码级接线（防改回去）===');
   t('★ app.js 注册了三个视图的渲染函数',
     /setRenderers\(\s*\{\s*today:\s*renderToday,\s*meds:\s*renderMeds,\s*records:\s*renderRecords\s*\}\s*\)/.test(APP_RAW),
     '没注册');
-  t('★ render() 已变成 markDirty 的别名（旧调用点无需改）',
-    /function render\(\)\s*\{\s*markDirty\(\);\s*\}/.test(APP_RAW), '还是老实现');
+  t('★ render 已移入调度器 —— app.js 不再自己定义它（否则视图模块永远拆不动）',
+    /export function render\(\)\s*\{\s*markDirty\(\);\s*\}/.test(RENDER_SRC), 'render.js 里没有');
+  t('★ app.js 改从 ui/render.js import render',
+    !/^\s*function render\(\)/m.test(APP_CODE)
+    && /import\s*\{[^}]*\brender\b[^}]*\}\s*from\s*'\.\/ui\/render\.js'/.test(APP_RAW),
+    '还留着本地定义或没 import');
   t('★ 老的三连调用已移除（否则绕过调度器）',
     !/renderToday\(\);\s*renderMeds\(\);\s*renderRecords\(\);/.test(APP_CODE), '还在');
 

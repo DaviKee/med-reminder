@@ -44,6 +44,16 @@ export function markDirty(view) {
   flush();
 }
 
+/* 「全量重绘」的语义入口 —— **它属于这里，不属于 app.js**。
+ *
+ * 为什么搬过来：`render` 只要还住在 app.js，视图模块调用它的时候就会被判定为
+ * 「引用上层的函数」→ 拆视图时永远卡在这一格。放到底层之后，
+ * `ui/today.js` 之流可以堂堂正正 `import { render }`（同目录）。
+ *
+ * 它与 `markDirty()` 的区别只在**语义**：这个说"我不知道变了什么，全重绘"，
+ * 那个说"我知道是今天页变了"。新代码优先用后者。 */
+export function render() { markDirty(); }
+
 /* 重绘标脏的视图。**同步** —— 见文件头部的警告。 */
 function flush() {
   if (!registered) return;

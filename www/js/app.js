@@ -38,7 +38,7 @@ import { exitApp, onBackButton, onCameraRestored, onAppStateChange } from './pla
 import { medScheduleLabel, medMetaText, doseClockHtml, FS_HINT_KEY, fsHintDismissed, fsHintHtml, droppedCardHtml, snoozeTag, ICON, doseLabel, setOrDel, stockHtml, medCardHtml, storageAlertHtml } from './ui/cards.js';
 /* ⬆ 2026-10-01（A-2 第 14 步）：**重绘调度器**。它是"请重绘"的底层入口，
  * 让视图模块（将来的 ui/today.js 等）不必 import 上层的 `render` —— 那是反向依赖。 */
-import { setRenderers, markDirty } from './ui/render.js';
+import { setRenderers, markDirty, render } from './ui/render.js';
 
 
 import { toastTimer, toast } from './ui/toast.js';
@@ -81,7 +81,7 @@ import { toastTimer, toast } from './ui/toast.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.3';
+  var APP_VERSION = '1.5.4';
   var APP_BUILD = '2026-10-01';
 
 
@@ -2056,10 +2056,10 @@ import { toastTimer, toast } from './ui/toast.js';
     openDlg($('#dlgClean'));
   }
 
-  /* 兼容别名 —— 55 处老调用点保持不动（一行没改）。
-   * 语义**没变**（仍是三个视图全量重绘），但它现在走 `ui/render.js` 的调度器。
-   * 将来要省渲染，只需把热点处改成 `markDirty('today')` 这种细粒度调用。 */
-  function render() { markDirty(); }
+  /* ⚠️ `render()` 已**移入 `ui/render.js`**（2026-10-01）——
+   * 它只要还住在 app.js，视图模块调它就等于"引用上层的函数"，拆视图永远卡住这一格。
+   * 本文件里 55 处 `render()` 调用照旧，只是现在从 import 来。
+   * 语义：`render()` = 全量重绘；`markDirty('today')` = 只重绘今天页（新代码优先用后者）。 */
 
   /* ---------------- tabs ---------------- */
   function setTab(name) {
