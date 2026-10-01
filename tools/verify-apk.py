@@ -70,9 +70,9 @@ def main():
                    'js/ui/overlay.js', 'js/app.js']
     app = read_opt('assets/public/js/app.js')
     app_modules = [read_opt('assets/public/' + n) for n in APP_MODULES]
-    notify = read('assets/public/js/notify.js')
-    photo = read('assets/public/js/photo.js')
-    backup = read('assets/public/js/backup.js')
+    notify = read('assets/public/js/platform/notifications.js')
+    photo = read('assets/public/js/platform/camera.js')
+    backup = read('assets/public/js/platform/storage.js')
     css = read('assets/public/css/app.css')
     html = read('assets/public/index.html')
     sw = read('assets/public/sw.js')
@@ -116,7 +116,7 @@ def main():
     print('=== 资源与源一致（构建没吃到旧文件）===')
     for name in ['js/app.js', 'js/core/util.js', 'js/core/store.js', 'js/core/schedule.js',
                  'js/ui/overlay.js',
-                 'js/notify.js', 'js/photo.js', 'js/backup.js',
+                 'js/platform/notifications.js', 'js/platform/camera.js', 'js/platform/storage.js',
                  'css/app.css', 'index.html', 'sw.js']:
         src = os.path.join(WEB, name)
         zp = 'assets/public/' + name
@@ -234,7 +234,7 @@ def main():
          and '.addAll(' not in SW
          and re.search(r'isShellRequest\(req, url\)[\s\S]{0,600}?fetch\(req\)\.then', SW) is not None),
         ('H-2-预缓存含照片/备份/插件',
-         all(x in SW for x in ["'./js/photo.js'", "'./js/backup.js'", "'./vendor/plugin-camera.js'"])),
+         all(x in SW for x in ["'./js/platform/camera.js'", "'./js/platform/storage.js'", "'./vendor/plugin-camera.js'"])),
         ('H-2-注册失败不静默',
          "serviceWorker.register('sw.js').then" in APP and "console.warn('[sw]" in APP),
         # 2026-09-24 真机反馈批次

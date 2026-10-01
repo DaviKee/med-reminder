@@ -269,9 +269,9 @@
 <script src="vendor/plugin-local-notifications.js"></script>
 <script src="vendor/plugin-camera.js"></script>
 <script src="vendor/plugin-filesystem.js"></script>
-<script src="js/notify.js"></script>
-<script src="js/backup.js"></script>
-<script src="js/photo.js"></script>
+<script src="js/platform/notifications.js"></script>
+<script src="js/platform/storage.js"></script>
+<script src="js/platform/camera.js"></script>
 <!-- ⚠️ app.js 是 ES module（2026-09-24 架构重构起）：它 import 的模块要在下面显式声明 ——
      Service Worker 的预缓存清单是「从 index.html 解析所有本地 src/href」得到的，
      而 import 是隐式的、解析不到。不声明的话离线会加载失败。

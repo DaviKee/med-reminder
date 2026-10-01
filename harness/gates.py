@@ -71,7 +71,7 @@ def gates(ctx):
     app_modules = [
         'www/js/core/util.js', 'www/js/core/store.js', 'www/js/core/schedule.js',
         'www/js/ui/overlay.js', 'www/js/app.js',
-        'www/js/notify.js', 'www/js/photo.js', 'www/js/backup.js',
+        'www/js/platform/notifications.js', 'www/js/platform/camera.js', 'www/js/platform/storage.js',
     ]
     G.append({
         'id': 'imports',

@@ -13,7 +13,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const APP_SRC = require('./sources').all();
-const PHOTO_SRC = fs.readFileSync(path.join(ROOT, 'www/js/photo.js'), 'utf8');
+const PHOTO_SRC = fs.readFileSync(path.join(ROOT, 'www/js/platform/camera.js'), 'utf8');
 const HTML_SRC = fs.readFileSync(path.join(ROOT, 'www/index.html'), 'utf8');
 
 const stripJs = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');

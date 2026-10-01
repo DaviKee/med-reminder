@@ -17,7 +17,7 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const SRC = fs.readFileSync(require("path").join(__dirname, "..", "www/js/notify.js"), "utf8");
+const SRC = fs.readFileSync(require("path").join(__dirname, "..", "www/js/platform/notifications.js"), "utf8");
 let pass = 0, fail = 0;
 const fails = [];
 function t(name, cond, extra) {

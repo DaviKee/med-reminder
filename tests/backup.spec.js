@@ -13,7 +13,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = fsmod.readFileSync(path.join(ROOT, 'www/js/backup.js'), 'utf8');
+const SRC = fsmod.readFileSync(path.join(ROOT, 'www/js/platform/storage.js'), 'utf8');
 const APP = require('./sources').all()
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const HTML = fsmod.readFileSync(path.join(ROOT, 'www/index.html'), 'utf8');
@@ -227,9 +227,9 @@ const namesIn = (fs, dir) => Array.from(fs.files.keys())
   console.log('');
   console.log('=== H. 与 app 的接线（源码级）===');
   {
-    t('★ index.html 引入了 backup.js', HTML.indexOf('js/backup.js') >= 0, '没引入');
+    t('★ index.html 引入了 backup.js', HTML.indexOf('js/platform/storage.js') >= 0, '没引入');
     t('★ backup.js 在 app.js 之前加载',
-      HTML.indexOf('js/backup.js') < HTML.indexOf('js/app.js'), '顺序反了');
+      HTML.indexOf('js/platform/storage.js') < HTML.indexOf('js/app.js'), '顺序反了');
     /* 2026-09-28：save() 搬到了 core/store.js，自动备份改走 saveHooks.backup 钩子。
      * 断言必须跟着改，而且要看**整条链**：
      *   ① store 的 save() 每次都会调 saveHooks.backup()

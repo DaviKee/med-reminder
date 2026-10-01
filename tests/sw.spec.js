@@ -156,9 +156,9 @@ function makeEnv(opts) {
     t('没有用 addAll（用了一个 404 就全盘失败）', !/\.addAll\(/.test(SW), '还在用 addAll');
     t('缓存名带版本号', /medreminder-v\d+/.test(e.CACHE), String(e.CACHE));
 
-    t('★ 含 js/photo.js（原缺失）', A.indexOf('./js/photo.js') >= 0, '缺');
-    t('★ 含 js/backup.js（原缺失）', A.indexOf('./js/backup.js') >= 0, '缺');
-    t('含 js/notify.js', A.indexOf('./js/notify.js') >= 0, '缺');
+    t('★ 含 js/platform/camera.js（原缺失）', A.indexOf('./js/platform/camera.js') >= 0, '缺');
+    t('★ 含 js/platform/storage.js（原缺失）', A.indexOf('./js/platform/storage.js') >= 0, '缺');
+    t('含 js/platform/notifications.js', A.indexOf('./js/platform/notifications.js') >= 0, '缺');
     t('含 js/app.js', A.indexOf('./js/app.js') >= 0, '缺');
     t('含 css/app.css', A.indexOf('./css/app.css') >= 0, '缺');
 
@@ -201,12 +201,12 @@ function makeEnv(opts) {
     eq('没有告警', e.warns, []);
   }
   {
-    const e = makeEnv({ failAssets: ['./js/photo.js'] });
+    const e = makeEnv({ failAssets: ['./js/platform/camera.js'] });
     await e.fire('install', {});
     const m = e.stores.get(e.CACHE);
     t('★ 单个资源 404 不拖垮整批（其余照常写入）',
       !!m && m.size === e.ASSETS.length - 1, (m ? m.size : 0) + '/' + e.ASSETS.length);
-    t('★ 失败留下告警（不再静默）', e.warns.some(w => w.indexOf('./js/photo.js') >= 0),
+    t('★ 失败留下告警（不再静默）', e.warns.some(w => w.indexOf('./js/platform/camera.js') >= 0),
       e.warns.join(' | '));
   }
 
