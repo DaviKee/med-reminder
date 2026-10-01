@@ -5,12 +5,12 @@
 > 📁 **2026-10-01 起：活文档已收进仓库 `docs/`**（纳入版本控制）。**2026-09-24 结构优化**：历史文档与旧版 APK 移入**工作区根**的 `归档/`（说明见 `归档/README.md`）。
 > 文档间引用写的是「文件名」而非路径，故移动未影响任何引用。
 
-## 🆕 最新进展（2026-09-30）：**鸿蒙线 S-0 完成 → 定调「Capacitor 壳 + 渐进原生」**；Android 线 v1.4.11 可发布
+## 🆕 最新进展（2026-10-01）：**多平台架构「A-1 平台层收口」完成**；Android 线推进到 v1.4.16
 
 **一句话**：可行性 spike 跑完 —— 鸿蒙**能跑**（主项目 `www/` 已在鸿蒙模拟器里完整渲染）；
 也摸清了**唯一的生死线**（代理提醒必须 AGC 审批）；并明确**不全量重写 ArkTS**。
 
-### Android 线：版本推进到 v1.4.11（全绿可发布）
+### Android 线：版本推进到 v1.4.16（全绿可发布）
 
 | 版本 | 提交 | 日期 | 内容 |
 |---|---|---|---|
@@ -29,10 +29,15 @@
 | v1.4.10 | `80f1e30` | 09-29 | 修「拍完照又让再拍一次」—— 相机是独立 Activity，**App 被杀后恢复态丢失** |
 | **v1.4.11** | `d2da9c3` | 09-29 | 修：自动备份目录改 **DOCUMENTS 优先** —— 依据鸿蒙实测（`EXTERNAL` 静默落沙箱） |
 | **v1.4.12** | `df88433` | 10-01 | **平台适配层**：3 个平台脚本移入 `js/platform/`（纯搬迁、零行为变化，git 识别为 100% rename）—— 多平台前置 |
+| **v1.4.13** | `ec9f69c` | 10-01 | 抽 `platform/lifecycle.js` —— 平台生命周期离开业务层 → **业务层再无 `window.Capacitor`** |
+| **v1.4.14** | `0efd601` | 10-01 | **S-1** 剂量 / 单位 / 服用说明 —— 三个可空字段（旧数据天然兼容）+ 卡片展示 |
+| **v1.4.15** | `7fcd504` | 10-01 | **S-2** 库存管理 —— 剩余量 / 打卡自动扣减 / 预计用完日 + 低库存提醒 |
+| **v1.4.16** | `b8c40ce` | 10-01 | **修（真机）**：备注输入框文字与光标出框 —— 多行框不能复用 `height:54px` 的单行壳 |
 
-- 测试：**13 套 478 条 spec 全绿**；内容级验收 `tools/verify-apk.py` → **106/106 通过**
-- 最新 APK：`med-reminder/MedReminder-v1.4.11-2026-09-29.apk` · **6.21 MB** ·
-  MD5 `3E47468A2261D63778656E0F68283855`
+- 测试：**16 套 530 条 spec 全绿**；harness 18 关口 **17 通过 / 0 失败**
+- 最新 APK：`med-reminder/MedReminder-v1.4.16-2026-10-01.apk` · **6.22 MB** ·
+  MD5 `87B897F5885E3FC400565B5FE8E70772`
+- ✅ **真机确认「平台层搬迁」稳住了**（返回键 / 切后台 / 拍照恢复均正常）→「只收口、不抽象」策略成立
 - ✅ **验证 harness 已建成**（`harness/harness.py`）—— 16 关口一键跑、三态退出码（0 全过 / 1 有失败 / 2 环境问题），
   并**挂到 git pre-commit**（红了拦住提交）
 - ✅ **ES module 真机通路已验证** → 架构重构 A 路线坐实
@@ -92,20 +97,23 @@
 （`$R` 实体 56472 文件 / 7242.6 MB，实测**可还原**）。
 ⚠️ **回收站不释放空间** —— 删了不等于腾出 7 GB；而**清空回收站会永久抹掉这份唯一的备份包**。
 
-## 三、当前状态（实测，2026-09-30 19:50）
+## 三、当前状态（实测，2026-10-01 17:50）
 
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    9554bb0  DaviKee <davi.kee@outlook.com>  chore(spike): 加自动签名后的复测脚本
-工作区  clean（干净，无未提交改动）        ✅ 与远端同步（2026-10-01 推送 34 个提交）
+HEAD    b8c40ce  DaviKee <davi.kee@outlook.com>  fix(ui): 备注输入框文字与光标出框 · v1.4.16
+工作区  clean（干净）                    ✅ 与远端同步（待推/待拉 0/0）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.4.11   APP_BUILD = 2026-09-29
-结构    www/js/{core/{util,store,schedule},ui/overlay}.js 已独立为 ES module；app.js 2247 行
-        依赖方向：util ← store ← schedule ← app，util ← ui/overlay ← app（底层不许 import 上层）
-测试    harness/harness.py → 16 关口（13 套 478 条 spec + APK 验收 106 项）；已挂 git pre-commit
-APK     med-reminder/MedReminder-v1.4.11-2026-09-29.apk（6.21 MB）
+源码    APP_VERSION = 1.4.16   APP_BUILD = 2026-10-01
+结构    www/js/core/{util,store,schedule}.js · ui/overlay.js
+        · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
+        app.js 2595 行 ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/overlay ← app
+        ★ 平台差异（插件调用 / 生命周期 / 返回键 / 前后台）**全部收在 www/js/platform/**
+          —— 业务层已无 window.Capacitor，这是「多平台准备」的关键一条
+测试    harness/harness.py → 18 关口（16 套 530 条 spec + APK 验收）；已挂 git pre-commit
+APK     med-reminder/MedReminder-v1.4.16-2026-10-01.apk（6.22 MB · MD5 87B897F5…）
         旧版（v1.4.1 / v1.4.1-rebuild / v1.4.2 / v1.4.5 等）已归入 归档/apk/
 鸿蒙    spike/harmony-test/ 独立工程（不碰主项目）；devecocli 已装；代理提醒等 AGC 审批
 D 盘    仅剩回收站 + 无关目录；D:\WorkBuddy 与 D:\DevEnv 均已不存在
