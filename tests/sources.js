@@ -36,6 +36,7 @@ const MODULES = [
   'ui/toast.js',
   'ui/overlay.js',
   'ui/photo.js',
+  'ui/permission.js',
   'app.js'
 ];
 

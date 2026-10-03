@@ -69,7 +69,8 @@ def main():
     APP_MODULES = ['js/platform/lifecycle.js', 'js/core/util.js', 'js/core/store.js',
                    'js/core/schedule.js', 'js/ui/tabs.js', 'js/ui/render.js',
                    'js/ui/cards.js', 'js/ui/actions.js', 'js/ui/toast.js',
-                   'js/ui/overlay.js', 'js/ui/photo.js', 'js/app.js']
+                   'js/ui/overlay.js', 'js/ui/photo.js', 'js/ui/permission.js',
+                   'js/app.js']
     app = read_opt('assets/public/js/app.js')
     app_modules = [read_opt('assets/public/' + n) for n in APP_MODULES]
     notify = read('assets/public/js/platform/notifications.js')
@@ -152,7 +153,10 @@ def main():
         ('通知-doSync 等清场', 'bootPurge || Promise.resolve()' in NOTIFY),
         ('通知-启动清场已接线', 'window.MedNotify.purge()' in APP),
         ('通知-回前台清通知栏', 'clearDelivered()' in APP),
-        ('通知-DEBUG 有一键清理', 'id="btnPurgeNotif"' in app),
+        # ⚠️ 2026-10-04：原来查**单文件 app**。那个按钮的 HTML 随 diagHtml/plugLine
+        #    搬进了 ui/permission.js（app.js 只剩绑定），于是误报。
+        #    源码级检查一律查 **APP（模块图拼接文本）**，不查单个文件。
+        ('通知-DEBUG 有一键清理', 'id="btnPurgeNotif"' in APP),
         # 拍照（v1.1.3 / v1.2.0）
         ('拍照-落盘前建目录', 'function ensureDir()' in PHOTO and 'recursive: true' in PHOTO),
         ('拍照-两条路都带原因', "'copy: ' + (firstErr || '?')" in PHOTO),
