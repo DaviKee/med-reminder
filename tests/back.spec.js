@@ -86,8 +86,11 @@ console.log('=== C. 源码级接线（防改回去）===');
   t('提醒弹窗不在可关清单里',
     /closableDialogs\(\)[\s\S]{0,220}?dlgData' \|\| el\.id === 'dlgSkip' \|\| el\.id === 'dlgClean'/.test(APP)
     && APP.indexOf("el.id === 'dlgRemind'") < 0, '提醒弹窗被误列进可关清单');
-  t('关拍照弹窗时清掉待恢复标记',
-    /dlgPhoto'\) \{ pendingShot = null; clearPendingShot\(\); \}/.test(APP), '缺');
+  /* ⚠️ 2026-10-04：原本锁死 `pendingShot = null; clearPendingShot();` 这个**字面写法**，
+   * 拍照组搬进 ui/photo.js 后改走语义入口 `discardShotSession()`，于是假红（第 4 次了）。
+   * 现在锚定**行为**：关掉拍照浮层时"放弃这次会话"这件事还在做就行，怎么写都算过。 */
+  t('关拍照弹窗时放弃这次会话（清掉待恢复标记）',
+    /dlgPhoto'\)\s*(discardShotSession\(\)|\{\s*pendingShot = null;\s*clearPendingShot\(\);\s*\})/.test(APP), '缺');
   t('exitApp 有 App.exitApp 与 Cordova 兜底',
     /A\.exitApp/.test(APP) && /navigator\.app\.exitApp/.test(APP), '缺兜底');
 }

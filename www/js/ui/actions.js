@@ -88,3 +88,20 @@ export function rollDayIfNeeded() {
 export function markToday() {
   lastDay = todayKey();
 }
+
+/* ---------------- 存储安全（D-1） ----------------
+ * 原写法是 `try { setItem } catch (e) { /* ignore *\/ }` —— 配额满时一句话都不说。
+ * 对服药记录来说这比崩溃更糟：用户以为记录还在，其实最近的改动早已没了。
+ *
+ * 现在把失败做成**持续可见的状态**：只要写不进去，界面上就一直挂着，直到恢复。
+ * save() 与其失败语义见 core/store.js（2026-09-28 搬过去）——
+ * 本文件只保留**界面刷新**这一环；storageError 走 import 的活绑定读取，自动最新。 */
+export var storageRefreshQueued = false;
+
+/* save() 会在 render 过程中被调用，不能同步再 render（会递归）—— 排队到下一轮事件循环。
+ * first 判断（在 store 内）保证失败状态持续存在时不会反复排队，避免异步死循环。 */
+export function queueStorageRefresh() {
+  if (storageRefreshQueued) return;
+  storageRefreshQueued = true;
+  setTimeout(function () { storageRefreshQueued = false; render(); }, 0);
+}

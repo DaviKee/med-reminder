@@ -35,6 +35,7 @@ const MODULES = [
   'ui/actions.js',
   'ui/toast.js',
   'ui/overlay.js',
+  'ui/photo.js',
   'app.js'
 ];
 

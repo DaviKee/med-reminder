@@ -22,6 +22,11 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
+/* 拍照组已在 2026-10-04 搬进 ui/photo.js —— 有些契约要**直接查那个模块** */
+const PHOTO_SRC = fs.readFileSync(path.join(ROOT, 'www/js/ui/photo.js'), 'utf8');
+/* ⚠️ `sources.all()` 拼的是**全部模块** —— 不能用它断言"某个模块里没有 X"。
+ * 要查 app.js 自己的内容，得**单读这个文件**。（2026-10-04 当场踩了一次） */
+const APP_ONLY = fs.readFileSync(path.join(ROOT, 'www/js/app.js'), 'utf8');
 const APP_SRC = require('./sources').all();
 const stripJs = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const APP = stripJs(APP_SRC);
@@ -285,12 +290,25 @@ const setPhoto = o => Object.assign(sandbox.window.MedPhoto, o);
   console.log('');
   console.log('=== G. ★ boot 接线：重启时若有留痕 → 进恢复态 + 30 秒兜底 ===');
   {
-    t('★ boot 里检查 loadPendingShot() 并置 restoringShot',
-      /if \(loadPendingShot\(\)\) restoringShot = true;/.test(APP), '没接线');
+    /* ⚠️ 2026-10-04：这条原本锁死 `restoringShot = true` 这个**字面写法** ——
+     * 拍照组搬进 ui/photo.js 后改走语义入口 `enterRestore()`，于是假红。
+     * 改成**锚定行为**：只要"检测留痕 → 进恢复态"这件事还在做，怎么写都算过。
+     * （同一种病在平台层搬家时已经犯过两次。） */
+    t('★ boot 里检查留痕并进入恢复态',
+      /if \(loadPendingShot\(\)\)\s*(enterRestore\(\)|restoringShot = true)/.test(APP), '没接线');
     t('★ 有 30 秒兜底解锁（不让用户永久点不了打卡）',
       /restoringShot[\s\S]{0,400}setTimeout\(function \(\) \{[\s\S]{0,200}30000/.test(APP), '没兜底');
     t('★ 兜底里清了留痕（否则下次启动又进恢复态）',
-      /restoringShot = false;[\s\S]{0,120}clearPendingShot\(\);[\s\S]{0,120}\}, 30000\)/.test(APP), '没清留痕');
+      /(leaveRestore\(\)|restoringShot = false;[\s\S]{0,120}clearPendingShot\(\))[\s\S]{0,200}\}, 30000\)/.test(APP), '没清留痕');
+    /* ★ 新增：搬家后状态改由**语义入口**管理 —— 这是本轮的直接产物 */
+    t('★ photo.js 提供 enterRestore / leaveRestore 语义入口',
+      /export function enterRestore\(\)\s*\{\s*restoringShot = true;\s*\}/.test(PHOTO_SRC)
+      && /export function leaveRestore\(\)\s*\{[\s\S]{0,140}clearPendingShot\(\);/.test(PHOTO_SRC),
+      '没提供入口');
+    t('★ app.js 不再直接改 photo.js 的内部状态（走入口）',
+      !/restoringShot\s*=/.test(stripJs(APP_ONLY))
+      && /enterRestore\(\)/.test(APP) && /leaveRestore\(\)/.test(APP),
+      '还在直接赋值');
     t('★ renderToday 有「正在恢复上次拍照…」诚实态',
       /正在恢复上次拍照/.test(APP), '没有恢复态文案');
     t('★ 恢复态文案在「今天还没打卡」之前（优先显示）',

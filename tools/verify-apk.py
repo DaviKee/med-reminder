@@ -69,7 +69,7 @@ def main():
     APP_MODULES = ['js/platform/lifecycle.js', 'js/core/util.js', 'js/core/store.js',
                    'js/core/schedule.js', 'js/ui/tabs.js', 'js/ui/render.js',
                    'js/ui/cards.js', 'js/ui/actions.js', 'js/ui/toast.js',
-                   'js/ui/overlay.js', 'js/app.js']
+                   'js/ui/overlay.js', 'js/ui/photo.js', 'js/app.js']
     app = read_opt('assets/public/js/app.js')
     app_modules = [read_opt('assets/public/' + n) for n in APP_MODULES]
     notify = read('assets/public/js/platform/notifications.js')
@@ -260,8 +260,13 @@ def main():
          'if (restoringShot) { toast(' in APP),
         ('拍照恢复-已有会话时拒绝重入',
          'if (pendingShot) { toast(' in APP),
+        # ⚠️ 2026-10-04：原来锁死 `restoringShot = true` 这个**字面写法** ——
+        #    拍照组搬进 ui/photo.js 后改走语义入口 `enterRestore()`，于是误报。
+        #    （记忆里「搬家会把 verify-apk.py 打哑」那个坑的第 N 次。）
+        #    改成两种写法都认：只要"检测留痕 → 进恢复态"这件事还在做。
         ('拍照恢复-boot 检测未消费留痕',
-         'if (loadPendingShot()) restoringShot = true;' in APP),
+         ('if (loadPendingShot()) enterRestore();' in APP
+          or 'if (loadPendingShot()) restoringShot = true;' in APP)),
         ('拍照恢复-有 30 秒兜底解锁',
          'clearPendingShot();' in APP and re.search(r'\}, 30000\);', APP) is not None),
         ('拍照恢复-「正在恢复」诚实态',
