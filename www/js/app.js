@@ -44,7 +44,12 @@ import { setRenderers, markDirty, render } from './ui/render.js';
 import { toastTimer, toast } from './ui/toast.js';
 
 
-import { dismissFsHint, syncNotifications, deleteMed, takenToast } from './ui/actions.js';
+import { dismissFsHint, syncNotifications, deleteMed, takenToast,
+         rollDayIfNeeded, markToday } from './ui/actions.js';
+
+
+/* （搬运器分两批各插了一行 import，已合并到上面那条；
+ *   `lastDay` 不再 import —— 它只由 actions.js 内部读写，外部走 markToday()） */
 
 (function () {
   'use strict';
@@ -84,8 +89,8 @@ import { dismissFsHint, syncNotifications, deleteMed, takenToast } from './ui/ac
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.5';
-  var APP_BUILD = '2026-10-01';
+  var APP_VERSION = '1.5.6';
+  var APP_BUILD = '2026-10-04';
 
 
 
@@ -229,21 +234,6 @@ import { dismissFsHint, syncNotifications, deleteMed, takenToast } from './ui/ac
 
 
 
-  /* 跨天处理 —— **三个入口共用**：启动后、30 秒轮询、以及**从后台回到前台**。
-   * ⚠️ 最后一处最容易被漏掉：App 在后台时 JS 定时器被系统暂停，后台过夜就收不到轮询；
-   * 回到前台若不补这一下，今天一条剂量都不会生成 —— 用户此时点打卡，就会走进
-   * checkIn 的「从此刻起按间隔排」，表现为「固定时刻被顺延」（2026-09-28 真机反馈）。 */
-  var lastDay = null;
-  function rollDayIfNeeded() {
-    if (todayKey() === lastDay) return false;
-    lastDay = todayKey();
-    S.notified = {};
-    save();
-    ensureFixedDoses();      // 新的一天，固定时刻要重新排一遍
-    render();
-    syncNotifications();
-    return true;
-  }
 
 
 
@@ -2498,7 +2488,9 @@ import { dismissFsHint, syncNotifications, deleteMed, takenToast } from './ui/ac
     }
 
     // 跨天自动刷新（与「回到前台」共用同一套处理，见 rollDayIfNeeded）
-    lastDay = todayKey();
+    /* ⚠️ 原来是 `lastDay = todayKey();`。lastDay 搬进 ui/actions.js 之后
+     * import 绑定只读，直接赋值会 TypeError —— 改走语义化的 markToday()。 */
+    markToday();
     setInterval(rollDayIfNeeded, 30000);
 
     /* PWA。注册失败**不能静默** —— 静默的后果是"以为有离线缓存、其实没有"，
