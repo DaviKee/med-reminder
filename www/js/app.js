@@ -51,6 +51,9 @@ import { dismissFsHint, syncNotifications, deleteMed, takenToast,
 /* （搬运器分两批各插了一行 import，已合并到上面那条；
  *   `lastDay` 不再 import —— 它只由 actions.js 内部读写，外部走 markToday()） */
 
+
+import { setTab, currentTab } from './ui/tabs.js';
+
 (function () {
   'use strict';
 
@@ -89,7 +92,7 @@ import { dismissFsHint, syncNotifications, deleteMed, takenToast,
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.6';
+  var APP_VERSION = '1.5.7';
   var APP_BUILD = '2026-10-04';
 
 
@@ -2014,14 +2017,6 @@ import { dismissFsHint, syncNotifications, deleteMed, takenToast,
    * 本文件里 55 处 `render()` 调用照旧，只是现在从 import 来。
    * 语义：`render()` = 全量重绘；`markDirty('today')` = 只重绘今天页（新代码优先用后者）。 */
 
-  /* ---------------- tabs ---------------- */
-  function setTab(name) {
-    $$('.tab').forEach(function (t) { t.classList.toggle('active', t.getAttribute('data-tab') === name); });
-    $$('.view').forEach(function (v) { v.classList.toggle('active', v.getAttribute('data-view') === name); });
-    $('#main').scrollTop = 0;
-    currentTab = name;
-  }
-  var currentTab = 'today';
   /* ---------------- 左右滑动切换选项卡 ----------------
    * 判定抽成**纯函数**（与 backAction 同一套路）：DOM 事件在调用方拍好再传进来，
    * 所以判定矩阵可以直接单测，不必造触摸事件。
