@@ -38,6 +38,8 @@
 | **v1.5.2** | `1492d5f` | 10-01 | **A-2**：抽 `ui/toast.js`（**被所有块依赖的叶子先归位**）—— app.js → 2547 行 |
 | **v1.5.3** | `5f9f72d` | 10-01 | **A-2**：建 **`ui/render.js` 重绘调度（订阅式）** —— `render()` 收口，55 处调用点不动 |
 | **v1.5.4** | `307e653` | 10-01 | **A-2**：**`render()` 移入 `ui/render.js`** —— 视图模块调它不再算「引用上层」 |
+| **v1.5.5** | `300aee3` | 10-01 | **A-2**：抽 `ui/actions.js`（业务动作） |
+| **v1.5.6~9** | `d992b6c`…`3ee8d97` | 10-04 | **A-2 连做 4 块**：`actions` 补搬 / **`ui/tabs.js`** / **`ui/photo.js`** / **`ui/permission.js`** —— app.js 2520 → **2097 行** |
 
 - 测试：**18 套 579 条 spec 全绿**；harness 20 关口 **19 通过 / 0 失败**
 - 最新 APK：`med-reminder/MedReminder-v1.5.4-2026-10-01.apk` · **6.27 MB**
@@ -106,20 +108,20 @@
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    307e653  DaviKee <davi.kee@outlook.com>  refactor(arch): render() 移入 ui/render.js · v1.5.4
+HEAD    3ee8d97  DaviKee <davi.kee@outlook.com>  refactor(arch): 抽 ui/permission.js · v1.5.9
 工作区  clean（干净）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.5.4   APP_BUILD = 2026-10-01
+源码    APP_VERSION = 1.5.9   APP_BUILD = 2026-10-04
 结构    www/js/core/{util,store,schedule}.js · ui/{render,cards,toast,overlay}.js
         · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
-        app.js 2557 行 ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/* ← app
+        app.js **2097 行** ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/* ← app
         ★ 平台差异（插件调用 / 生命周期 / 返回键 / 前后台）**全部收在 www/js/platform/**
           —— 业务层已无 window.Capacitor，这是「多平台准备」的关键一条
         ★ **重绘调度**在 `ui/render.js`（`markDirty` / `render` / `setRenderers`）——
           拆视图的前置已就位（见计划 §33）
 测试    harness/harness.py → 20 关口（18 套 579 条 spec + APK 验收）；已挂 git pre-commit
-APK     med-reminder/MedReminder-v1.5.4-2026-10-01.apk（6.27 MB）
+APK     med-reminder/MedReminder-v1.5.9-2026-10-04.apk（6.28 MB）
         旧版（v1.4.1 / v1.4.1-rebuild / v1.4.2 / v1.4.5 等）已归入 归档/apk/
 鸿蒙    spike/harmony-test/ 独立工程（不碰主项目）；devecocli 已装；代理提醒等 AGC 审批
 D 盘    仅剩回收站 + 无关目录；D:\WorkBuddy 与 D:\DevEnv 均已不存在
