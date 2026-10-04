@@ -71,6 +71,7 @@ def main():
                    'js/ui/cards.js', 'js/ui/actions.js', 'js/ui/toast.js',
                    'js/ui/overlay.js', 'js/ui/photo.js', 'js/ui/permission.js',
                    'js/ui/fontsize.js', 'js/ui/sheet.js', 'js/ui/today.js',
+                   'js/ui/data.js',
                    'js/app.js']
     app = read_opt('assets/public/js/app.js')
     app_modules = [read_opt('assets/public/' + n) for n in APP_MODULES]

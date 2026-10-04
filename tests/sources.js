@@ -40,6 +40,7 @@ const MODULES = [
   'ui/fontsize.js',
   'ui/sheet.js',
   'ui/today.js',
+  'ui/data.js',
   'app.js'
 ];
 

@@ -18,6 +18,9 @@ const APP_SRC = require('./sources').all();
 /* ⚠️ `sources.all()` 会**剥掉 import / export**（为了能在 vm 里跑）。
  * 所以断言「有没有 export」「有没有 import 进来」必须读**原始文件**，
  * 拿 APP_SRC 查必然假红 —— 这个坑 2026-10-01 当场踩了一次。 */
+/* ⚠️ 注意：这是**只读 app.js 单文件**，不是全模块拼接（后者叫 `APP_SRC`）。
+ * 用它断言「某功能在不在」，一旦那个功能搬去别的模块就会假红
+ * —— 2026-10-04 报告那条就是这么被搬家打哑的。 */
 const APP_RAW = fs.readFileSync(path.join(ROOT, 'www/js/app.js'), 'utf8');
 const SCHEDULE_RAW = fs.readFileSync(path.join(ROOT, 'www/js/core/schedule.js'), 'utf8');
 const UTIL_SRC = fs.readFileSync(path.join(ROOT, 'www/js/core/util.js'), 'utf8');
@@ -191,8 +194,15 @@ console.log('=== G. 源码级接线（防改回去）===');
 {
   t('schedule.js 导出 adherenceReport',
     /export function adherenceReport\(days\)/.test(SCHEDULE_RAW), '缺导出');
-  t('★ 报告已接入 app.js（不是写完没人调）',
-    /adherenceReport\(/.test(APP) && /import[\s\S]{0,900}adherenceReport/.test(APP_RAW), '没接上');
+  /* ⚠️ 2026-10-04 连着两次踩坑，记下来：
+   *   ① 原来查 `APP_RAW`（**只读 app.js 单文件**）—— 报告代码搬进 `ui/data.js` 后假红；
+   *   ② 改成查 `APP_SRC` 里的 `import ... adherenceReport` —— **仍然假红** ——
+   *      `sources.all()` 是喂给 vm 跑源码用的聚合文本，import/export 不可依赖。
+   * 正解：查「**真的被调用**」这个事实本身。
+   *   判据一句话：**spec 断言"行为"，不要断言"实现写在哪一行"** ——
+   *   后者每搬一次家就要改一次，而搬家是 A-2 的日常。 */
+  t('★ 报告已接入（写完真的被调用，不是写完没人调）',
+    /=\s*adherenceReport\(/.test(APP), '没接上');
   t('index.html 有报告浮层', HTML_SRC.indexOf('id="dlgReport"') >= 0, '缺');
   t('★ 报告浮层已进 closableDialogs（否则返回键关不掉，且不报错）',
     /closableDialogs[\s\S]{0,400}dlgReport/.test(OVERLAY_SRC), '返回键会失效');
