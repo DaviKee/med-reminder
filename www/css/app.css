@@ -8,12 +8,59 @@
   --sub:#DADBDF;
   --muted:#7D8187;
   --accent:#FF7A17;
+
+  /* ---- S-5 明暗主题：新增**语义**变量 ----
+     这些颜色原先散在几十条规则里硬编码，亮色主题没法只改一处。
+     命名按「用途」而不是「颜色」—— 亮色下 --contrast-bg 会变成近黑。
+     下面这组是**暗色值**，与改造前逐像素一致（零视觉回归）。 */
+  --bg-outer:#000;           /* 机身之外的底色（比 --bg 更黑，形成"手机边缘"） */
+  --sheet:#0F1012;           /* 底部弹层 */
+  --pressed:#1D1D1D;         /* 列表 / 按钮按下态 */
+  --placeholder:#5F6368;     /* 输入占位符 */
+  --danger:#FF3B30;          /* 危险（删除 / 写失败告警） */
+  --contrast-bg:#fff;        /* 反色块底色（主按钮 / 白胶囊 / 选中 chip / 打卡实心点） */
+  --contrast-text:#0A0A0A;   /* 反色块上的文字 */
+  --on-accent:#0A0A0A;       /* accent 块上的文字（accent 是亮橙 → 恒用深色） */
+  --scrim:rgba(0,0,0,.72);   /* 遮罩 */
+  --miss-wash:rgba(255,122,23,.16);   /* 「标记漏服」按下态 */
+  --cal-filter:invert(1);    /* 日期选择器图标：暗色下原生图标是黑的，需反色 */
   --font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
   --font-mono:"Geist Mono","JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;
   --font-num:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;
   /* 字号缩放因子：只影响文字大小，不动 padding/margin，所以布局骨架不变。
      默认 1 = 与改造前逐像素一致（零视觉回归）。档位在「记录 → 显示」里设置。 */
   --fs:1;
+  /* 告诉浏览器用哪套调色板 —— 影响滚动条、日期选择器等原生控件的渲染。 */
+  color-scheme:dark;
+}
+
+/* ---- S-5 亮色主题 ----
+   用 **属性选择器**（html[data-theme="light"]）而不是 @media (prefers-color-scheme: light)：
+   ① 用户手动选的要能覆盖系统；② 判断逻辑集中在 ui/theme.js 一处，可被 spec 测到；
+   ③ CSS 不参与「跟随系统」的判断，避免两处逻辑打架。
+   对比度按 WCAG AA 校过 —— 浅色主题的 --muted / --accent 是**重新取值**，不是把暗色值提亮。 */
+html[data-theme="light"]{
+  color-scheme:light;
+  --bg:#F2F3F5;
+  --card:#FFFFFF;
+  --inner:#ECEDEF;
+  --line:#E3E4E8;
+  --line-2:#C4C6CB;
+  --text:#0A0A0A;
+  --sub:#3A3D42;
+  --muted:#646A70;           /* 4.84:1 on --bg → AA 过 */
+  --accent:#C2410C;          /* 5.18:1 on white；原 #FF7A17 在浅底上只有 2.5:1，不能直接用 */
+  --bg-outer:#E4E5E8;
+  --sheet:#FFFFFF;
+  --pressed:#E8E9EC;
+  --placeholder:#9AA0A6;
+  --danger:#D92D20;          /* 4.83:1 on white */
+  --contrast-bg:#0A0A0A;     /* 反色块翻过来：浅色主题下是**深色**块 */
+  --contrast-text:#FFFFFF;
+  --on-accent:#FFFFFF;       /* 浅色主题的 accent 是深橙 → 上面的字用白 */
+  --scrim:rgba(0,0,0,.45);
+  --miss-wash:rgba(194,65,12,.12);
+  --cal-filter:none;         /* 原生图标本来就是深的，别再反色 */
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -22,7 +69,7 @@ html,body{margin:0;padding:0;height:100%}
    两套缩放叠加会让"标准档"在不同设备上大小不一、布局不可预期。 */
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
-  background:#000;color:var(--text);font-family:var(--font-sans);
+  background:var(--bg-outer);color:var(--text);font-family:var(--font-sans);
   display:flex;justify-content:center;overscroll-behavior-y:none;
   -webkit-font-smoothing:antialiased;
   overflow:hidden;   /* 禁止整页滚动 —— 滚动交给 main，底部导航才能常驻 */
@@ -97,15 +144,15 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 
 /* 漏服可见化：已错过的行 + 补记按钮。触摸目标按 44×44 最小值给足 */
 .dose-miss{position:relative}
-.dose-miss .dose-t{color:#FF7A17}
+.dose-miss .dose-t{color:var(--accent)}
 .btn-miss{
   flex:0 0 auto;min-height:44px;padding:0 12px;border-radius:9999px;
-  border:1px solid #FF7A17;background:transparent;color:#FF7A17;
+  border:1px solid var(--accent);background:transparent;color:var(--accent);
   font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));cursor:pointer;-webkit-tap-highlight-color:transparent;
 }
-.btn-miss:active{background:rgba(255,122,23,.16)}
-.card-miss{border-color:#FF7A17;text-align:left}
-.card-miss:active{background:#1D1D1D}
+.btn-miss:active{background:var(--miss-wash)}
+.card-miss{border-color:var(--accent);text-align:left}
+.card-miss:active{background:var(--pressed)}
 
 /* med list item */
 .meditem{
@@ -113,7 +160,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
   background:var(--card);border:1px solid var(--line);border-radius:8px;
   padding:16px;cursor:pointer;color:inherit;
 }
-.meditem:active{background:#1D1D1D}
+.meditem:active{background:var(--pressed)}
 .badge{display:flex;align-items:center;justify-content:center;border-radius:9999px;background:var(--inner);flex:0 0 auto}
 .badge-36{width:36px;height:36px}
 .badge-56{width:56px;height:56px}
@@ -129,7 +176,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 /* 周视图圆点：用**形状**区分状态，不只靠颜色 —— 色盲 / 灰度屏 / 强光下都要能分辨。
    无记录 = 空心细圈；已服 = 实心；今天 = 粗环 + 中心点（三者在形状上互不相同）。 */
 .dot{width:12px;height:12px;border-radius:9999px;background:transparent;border:1.5px solid var(--line-2);box-sizing:border-box}
-.dot.fill{background:#fff;border:1.5px solid #fff}
+.dot.fill{background:var(--contrast-bg);border:1.5px solid var(--contrast-bg)}
 .dot.today{background:transparent;border:2px solid var(--accent);position:relative}
 .dot.today::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:4px;height:4px;border-radius:9999px;background:var(--accent)}
 .statrow{display:flex;gap:12px}
@@ -139,7 +186,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .stat .v .u{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted)}
 
 .medcard.tappable{width:100%;cursor:pointer;display:flex}
-.medcard.tappable:active{background:#1D1D1D}
+.medcard.tappable:active{background:var(--pressed)}
 
 /* ---------- buttons ---------- */
 .btn{
@@ -148,9 +195,9 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
   font-size:calc(15px * var(--fs));font-weight:500;line-height:calc(20px * var(--fs));
 }
 .btn:active{opacity:.82}
-.btn-primary{background:#fff;color:#0A0A0A}
-.btn-ghost{background:transparent;color:#fff;border:1px solid var(--line)}
-.btn-accent{background:var(--accent);color:#0A0A0A}
+.btn-primary{background:var(--contrast-bg);color:var(--contrast-text)}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn-accent{background:var(--accent);color:var(--on-accent)}
 .btn-text{background:transparent;color:var(--accent);height:44px;font-size:calc(14px * var(--fs))}
 .btnrow{display:flex;gap:10px}
 /* 固定时刻：每行一个时刻输入。44px 高满足触摸目标要求 */
@@ -158,7 +205,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .time-input{flex:1 1 auto;min-width:0;height:44px;padding:0 12px;background:var(--inner);
   border:1px solid var(--line);border-radius:8px;color:var(--text);font-family:inherit;
   font-size:calc(16px * var(--fs))}
-.time-input::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.75}
+.time-input::-webkit-calendar-picker-indicator{filter:var(--cal-filter);opacity:.75}
 .time-input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .icon-btn{width:36px;height:36px;border-radius:9999px;border:1px solid var(--line);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
 .hidden{display:none !important}
@@ -174,7 +221,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 }
 .tab svg{width:18px;height:18px}
 .tab span{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));font-weight:500}
-.tab.active{color:#0A0A0A}
+.tab.active{color:var(--contrast-text)}
 /* 白色胶囊改成**独立的一层**，切换时平滑滑到目标页签（原来是 background 瞬切，
    和页面滑动放在一起会很割裂）。
    位移公式 `var(--i) * (100% + 4px)`：transform 里的 100% 解析为**指示器自身宽度**
@@ -183,18 +230,18 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
       tests/tabs.spec.js 有一条断言盯着它（数量对不上会直接报红）。 */
 .tab-ind{
   position:absolute;top:4px;bottom:4px;left:4px;pointer-events:none;
-  width:calc((100% - 16px) / 3);border-radius:26px;background:#fff;
+  width:calc((100% - 16px) / 3);border-radius:26px;background:var(--contrast-bg);
   transform:translateX(calc(var(--i, 0) * (100% + 4px)));
   transition:transform .26s cubic-bezier(.22,.61,.36,1);
 }
 
 /* ---------- overlays ---------- */
-.scrim{position:absolute;inset:0;background:rgba(0,0,0,.72);opacity:0;pointer-events:none;transition:opacity .22s;z-index:40}
+.scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .22s;z-index:40}
 .scrim.show{opacity:1;pointer-events:auto}
 
 .sheet{
   position:absolute;left:0;right:0;bottom:0;z-index:50;
-  background:#0F1012;border-top:1px solid var(--line);border-radius:16px 16px 0 0;
+  background:var(--sheet);border-top:1px solid var(--line);border-radius:16px 16px 0 0;
   padding:8px 20px calc(20px + env(safe-area-inset-bottom));
   transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);
   max-height:90%;overflow-y:auto;
@@ -211,10 +258,10 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
   background:var(--inner);border:1px solid var(--line);padding:0 16px;
 }
 .input-wrap input{
-  flex:1 1 auto;background:transparent;border:0;outline:0;color:#fff;
+  flex:1 1 auto;background:transparent;border:0;outline:0;color:var(--text);
   font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs));font-family:var(--font-sans);min-width:0;
 }
-.input-wrap input::placeholder{color:#5F6368}
+.input-wrap input::placeholder{color:var(--placeholder)}
 .input-wrap:focus-within{border-color:var(--accent)}
 
 /* 多行输入（备注）：与单行 input「同壳不同骨」—— 壳高自适应、内边距交给 textarea 自己。
@@ -223,11 +270,11 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .input-wrap.multi{height:auto;align-items:stretch;padding:0}
 .input-wrap.multi textarea{
   flex:1 1 auto;width:100%;min-width:0;
-  background:transparent;border:0;outline:0;color:#fff;
+  background:transparent;border:0;outline:0;color:var(--text);
   font-size:calc(16px * var(--fs));line-height:calc(24px * var(--fs));
   font-family:var(--font-sans);padding:14px 16px;resize:none;
 }
-.input-wrap.multi textarea::placeholder{color:#5F6368}
+.input-wrap.multi textarea::placeholder{color:var(--placeholder)}
 
 /* ---- S-7 报告浮层 ----
    正文是「当场给医生看」的，所以是可滚动的排版内容，**不是文本框**。
@@ -240,12 +287,12 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .rpt-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .rpt-chip{border:1px solid var(--line-2);border-radius:9999px;padding:3px 10px;font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--text);white-space:nowrap}
 /* 只有「漏服」用警示色 —— 项目里 #FF7A17 就是「漏服」的既定语义（见 .btn-miss / .dose-miss） */
-.rpt-chip.bad{border-color:#FF7A17;color:#FF7A17}
+.rpt-chip.bad{border-color:var(--accent);color:var(--accent)}
 .rpt-tb{width:100%;border-collapse:collapse;font-size:calc(13px * var(--fs))}
 .rpt-tb th{text-align:left;font-weight:400;color:var(--muted);font-size:calc(12px * var(--fs));padding:6px 0;border-bottom:1px solid var(--line)}
 .rpt-tb td{padding:7px 0;border-bottom:1px solid var(--line);color:var(--sub);font-variant-numeric:tabular-nums}
 .rpt-tb td:first-child{color:var(--text);font-family:var(--font-num)}
-.rpt-tb b.bad{color:#FF7A17;font-weight:500}
+.rpt-tb b.bad{color:var(--accent);font-weight:500}
 .rpt-tb tr:last-child td{border-bottom:0}
 
 
@@ -256,20 +303,20 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
   padding:18px 16px;
 }
 .step-btn{width:44px;height:44px;border-radius:9999px;border:1px solid var(--line);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
-.step-plus{background:#fff;border-color:#fff}
+.step-plus{background:var(--contrast-bg);border-color:var(--contrast-bg)}
 .step-val{display:flex;flex-direction:column;align-items:center;gap:2px}
-.step-num{font-size:calc(36px * var(--fs));line-height:calc(40px * var(--fs));letter-spacing:-1px;color:#fff}
+.step-num{font-size:calc(36px * var(--fs));line-height:calc(40px * var(--fs));letter-spacing:-1px;color:var(--text)}
 .step-unit{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
 .chip-row{display:flex;gap:8px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);border-radius:9999px;padding:7px 12px;font-family:var(--font-num);font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--sub)}
 /* 字号档位按钮：触摸目标按 44×44 给足；选中态用实心，不只用颜色区分（色盲可辨） */
 .fs-chip{min-height:44px;padding:7px 16px;cursor:pointer;background:transparent}
-.fs-chip.on{background:#fff;border-color:#fff;color:#0A0A0A;font-weight:600}
+.fs-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
 .sheet-actions{display:flex;flex-direction:column;gap:4px}
 
 .dlg-wrap{
   position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:0 20px;
-  background:rgba(0,0,0,.72);opacity:0;pointer-events:none;transition:opacity .2s;
+  background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .2s;
 }
 .dlg-wrap.show{opacity:1;pointer-events:auto}
 .dlg{
@@ -279,8 +326,8 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 }
 .dlg-wrap.show .dlg{transform:scale(1)}
 .dlg-text{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
-.dlg-title{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));font-weight:500;color:#fff;text-align:center}
-.dlg-title-lg{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.6px;color:#fff;text-align:center}
+.dlg-title{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));font-weight:500;color:var(--text);text-align:center}
+.dlg-title-lg{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.6px;color:var(--text);text-align:center}
 .dlg-body{font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted);text-align:center}
 .strip{
   width:100%;display:flex;align-items:center;justify-content:space-between;
@@ -311,7 +358,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .toast{
   position:absolute;left:50%;bottom:130px;z-index:80;
   transform:translate(-50%,12px);opacity:0;pointer-events:none;
-  background:#fff;color:#0A0A0A;font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));font-weight:500;
+  background:var(--contrast-bg);color:var(--contrast-text);font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));font-weight:500;
   padding:10px 18px;border-radius:18px;max-width:calc(100% - 40px);text-align:center;transition:.22s;
 }
 .toast.show{opacity:1;transform:translate(-50%,0)}
@@ -322,12 +369,12 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 /* 写失败告警卡：红描边、左对齐、可点。跨今日页与记录页显示。 */
 .card-alert{
   display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
-  cursor:pointer;border-color:#FF3B30;-webkit-tap-highlight-color:transparent;
+  cursor:pointer;border-color:var(--danger);-webkit-tap-highlight-color:transparent;
 }
-.card-alert .alert-title{font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF3B30}
+.card-alert .alert-title{font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:var(--danger)}
 .card-alert .alert-cta{
   font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));
-  color:#FF3B30;font-weight:600;margin-top:2px;
+  color:var(--danger);font-weight:600;margin-top:2px;
 }
 /* 存储占用条 */
 .bar{height:6px;border-radius:9999px;background:var(--inner);overflow:hidden}
@@ -346,7 +393,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 }
 .cam-btn:active{opacity:.65}
 /* 「未拍照」用橙色标出来 —— 留痕是方案 B 的核心，不能让它看起来和正常打卡一样 */
-.no-shot{color:#FF7A17}
+.no-shot{color:var(--accent)}
 
 /* 已延后的剂量标记。计划时刻保持原样，这里只说明「响铃被推到几点」 */
 .snooze-tag{font-size:calc(11px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted);white-space:nowrap}

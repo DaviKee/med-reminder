@@ -39,6 +39,7 @@ const MODULES = [
   'ui/photo.js',
   'ui/permission.js',
   'ui/fontsize.js',
+  'ui/theme.js',
   'ui/sheet.js',
   'ui/today.js',
   'ui/data.js',

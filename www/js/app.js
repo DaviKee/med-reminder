@@ -63,6 +63,7 @@ import { refreshPerm, invalidatePermProbe, initBrowserPerm } from './ui/permissi
 
 
 import { loadFontScale, applyFontScale } from './ui/fontsize.js';
+import { initTheme } from './ui/theme.js';
 
 
 import { openSheet, closeSheet, bindSheet } from './ui/sheet.js';
@@ -119,7 +120,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.17';
+  var APP_VERSION = '1.5.18';
   var APP_BUILD = '2026-10-04';
 
 
@@ -470,6 +471,8 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
   function boot() {
     // 字号必须最先应用：晚于首次 render 会先按默认字号画一遍再跳变，肉眼可见闪一下
     applyFontScale(loadFontScale(), false);
+    // 主题同理（首屏已由 index.html 的内联脚本设好，这里同步 JS 状态并挂上系统监听）
+    initTheme();
 
     // 不再预置任何示例药品：服药场景里「看起来像真药」的假数据会造成误导，
     // 用户可能以为自己在吃阿莫西林。空态改为引导（见 renderToday 的 HOW IT WORKS）。

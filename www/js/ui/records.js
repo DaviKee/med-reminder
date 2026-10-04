@@ -12,6 +12,7 @@ import { toast } from './toast.js';
 import { ICON, storageAlertHtml } from './cards.js';
 import { diagHtml, invalidatePermProbe, refreshPerm } from './permission.js';
 import { FS_LEVELS, applyFontScale, fontScale, fsLabel } from './fontsize.js';
+import { THEME_MODES, applyTheme, themeMode, themeLabel } from './theme.js';
 import { openPhoto, photoTally } from './photo.js';
 import { autoBackupCardHtml, openCleanDlg, openDataDlg, openReportDlg, storageCardHtml } from './data.js';
 
@@ -79,21 +80,41 @@ export function renderRecords() {
       + '</p>';
   }
 
-  /* 字号：只放大文字，不动布局。老年人看不清小字是真实痛点，而整页缩放会带来左右拖动。
-   * 放在这里而不是做成双指手势 —— 手势缩放文字是非标准交互，且会与列表滚动抢事件；
-   * 档位按钮可发现、可预期，也符合「文字可放大到 200% 而不丢内容」的无障碍要求。 */
+  /* 显示设置：主题 + 字号。
+   *
+   * 主题放这里而不是做成"跟随系统就完事"：老人手机设置多为浅色，
+   * 若只跟随系统，等于**替他们做了决定**且无从更改 —— 给三个明确的档位更可控。
+   * 默认仍「深色」，与改造前一致（见 ui/theme.js 的注释）。 */
   html += '<div class="card" style="display:flex;flex-direction:column;gap:12px">'
     + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
+    + '<span class="eyebrow">显示 · 主题</span>'
+    + '<span class="meta" id="thNow">' + esc(themeLabel()) + '</span></div>'
+    + '<div class="chip-row" id="thRow">'
+    + THEME_MODES.map(function (m) {
+        var on = m.id === themeMode;
+        /* ⚠️ 属性名用 data-theme-mode，**不能**用 data-theme ——
+         * 那个已被 <html> 占用做主题标记（见 ui/theme.js）。 */
+        return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-theme-mode="' + m.id + '"'
+          + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + m.label + '</button>';
+      }).join('')
+    + '</div>'
+    + '<p class="body" style="margin:0">「跟随系统」需要手机已开启深色模式。</p>'
+
+    /* 字号：只放大文字，不动布局。老年人看不清小字是真实痛点，而整页缩放会带来左右拖动。
+     * 放在这里而不是做成双指手势 —— 手势缩放文字是非标准交互，且会与列表滚动抢事件；
+     * 档位按钮可发现、可预期，也符合「文字可放大到 200% 而不丢内容」的无障碍要求。 */
+    + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:6px;border-top:1px solid var(--line);padding-top:14px">'
     + '<span class="eyebrow">显示 · 字号</span>'
     + '<span class="meta" id="fsNow">' + esc(fsLabel()) + '</span></div>'
-    + '<p class="body" style="margin:0">只放大文字，页面布局不变。</p>'
     + '<div class="chip-row" id="fsRow">'
     + FS_LEVELS.map(function (lv) {
         var on = lv.v === fontScale;
         return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-fs="' + lv.v + '"'
           + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + lv.label + '</button>';
       }).join('')
-    + '</div></div>';
+    + '</div>'
+    + '<p class="body" style="margin:0">只放大文字，页面布局不变。</p>'
+    + '</div>';
 
   /* 存储状态卡放在备份卡之前：先知道「还剩多少空间」，再决定要不要导出/清理 */
   html += storageCardHtml();
@@ -140,6 +161,16 @@ export function renderRecords() {
         else toast('已清除全部已登记的提醒');
       });
   };
+
+  $$('[data-theme-mode]').forEach(function (el) {
+    el.onclick = function () {
+      var m = el.getAttribute('data-theme-mode');
+      if (m === themeMode) return;
+      applyTheme(m, true);
+      render();                       // 重建本页 → 按钮选中态跟着更新
+      toast('主题已设为「' + themeLabel() + '」');
+    };
+  });
 
   $$('[data-fs]').forEach(function (el) {
     el.onclick = function () {
