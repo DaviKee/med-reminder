@@ -15,6 +15,7 @@ import { FS_LEVELS, applyFontScale, fontScale, fsLabel } from './fontsize.js';
 import { THEME_MODES, applyTheme, themeMode, themeLabel } from './theme.js';
 import { openPhoto, photoTally } from './photo.js';
 import { autoBackupCardHtml, openCleanDlg, openDataDlg, openReportDlg, storageCardHtml } from './data.js';
+import { statsRange, vizHtml } from './viz.js';
 
 /* ---------------- render: RECORDS ---------------- */
 export function renderRecords() {
@@ -61,6 +62,9 @@ export function renderRecords() {
       + (ads.makeup ? '（依从率只算真实打卡，补记不计入）' : '') + '</p>';
   }
   html += '<p class="hint" style="margin-top:-8px">每次服药后打卡，记录会自动更新。</p>';
+
+  /* ★ S-6：月历 + 月度统计 + 漏服时段 + 计划 vs 实际偏差（口径同上，见 ui/viz.js）。 */
+  html += vizHtml();
 
   /* ---- 历史记录：页面只放摘要，完整列表进二级菜单 ----
    * 之前这里把「近 14 天」的每一天都铺成卡片 —— 用得越久越长，翻不到底
@@ -244,23 +248,9 @@ export function hasTaken(k) {
 export function adherenceStats(medId) {
   var d = new Date();
   var prefix = d.getFullYear() + '-' + pad(d.getMonth() + 1);
-  var tk = todayKey(), now = nowMin();
-  var st = { real: 0, makeup: 0, skipped: 0, missed: 0, total: 0, rate: null };
-  Object.keys(S.doses).forEach(function (k) {
-    if (k.indexOf(prefix) !== 0) return;
-    var isToday = k === tk;
-    (S.doses[k] || []).forEach(function (x) {
-      if (medId && x.medId !== medId) return;
-      if (x.status === 'taken') { if (x.makeup) st.makeup++; else st.real++; return; }
-      if (x.status === 'skipped') { st.skipped++; return; }
-      /* 只把「已过宽限期」的 pending 算作漏服：未来的剂量不能算漏；
-       * 历史日期上的 pending 一律算漏。 */
-      if (x.status === 'pending' && (!isToday || now - dueAt(x) > MISS_GRACE_MIN)) st.missed++;
-    });
-  });
-  st.total = st.real + st.makeup + st.skipped + st.missed;
-  st.rate = st.total ? Math.round(st.real / st.total * 100) : null;
-  return st;
+  /* ★ S-6：计数逻辑**下沉到 viz.statsRange**（口径唯一实现，月历/偏差同源）。
+   * 本函数只保留旧签名做兼容 —— 调用方（renderRecords / calcAdherence）不用动。 */
+  return statsRange(prefix, medId);
 }
 
 /* 旧的百分比入口（按药筛选时由调用方直接传 medId） */

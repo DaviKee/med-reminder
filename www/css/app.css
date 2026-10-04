@@ -24,6 +24,8 @@
   --scrim:rgba(0,0,0,.72);   /* 遮罩 */
   --miss-wash:rgba(255,122,23,.16);   /* 「标记漏服」按下态 */
   --cal-filter:invert(1);    /* 日期选择器图标：暗色下原生图标是黑的，需反色 */
+  --ok:#2E9E5B;              /* 月历「全服」格（S-6）：绿 = 按计划完成 */
+  --on-ok:#FFFFFF;           /* --ok 块上的文字（两套主题都白，绿色底够深） */
   --font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
   --font-mono:"Geist Mono","JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;
   --font-num:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -61,6 +63,8 @@ html[data-theme="light"]{
   --scrim:rgba(0,0,0,.45);
   --miss-wash:rgba(194,65,12,.12);
   --cal-filter:none;         /* 原生图标本来就是深的，别再反色 */
+  --ok:#1E7A43;              /* 浅底上加深到 4.6:1（#2E9E5B 只有 2.6:1） */
+  --on-ok:#FFFFFF;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -294,6 +298,33 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .rpt-tb td:first-child{color:var(--text);font-family:var(--font-num)}
 .rpt-tb b.bad{color:var(--accent);font-weight:500}
 .rpt-tb tr:last-child td{border-bottom:0}
+/* ---- S-6 月历与统计（ui/viz.js） ----
+   格子只靠底色区分状态，日期数字照常显示 —— 图例就放在图下面，
+   颜色语义不当场说清，用户只能靠猜。全部颜色走变量（S-5 约束）。 */
+.cal{display:flex;flex-direction:column;gap:4px}
+.cal-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-w{text-align:center;font-size:calc(11px * var(--fs));color:var(--muted)}
+.cal-cell{display:flex;align-items:center;justify-content:center;
+  aspect-ratio:1/1;border-radius:9px;font-size:calc(12px * var(--fs));
+  font-variant-numeric:tabular-nums;color:var(--sub)}
+.cal-cell.empty{background:transparent}
+.cal-cell.good{background:var(--ok);color:var(--on-ok)}
+.cal-cell.partial{background:var(--accent);color:var(--on-accent)}
+.cal-cell.bad{background:var(--danger);color:var(--on-accent)}
+/* 进行中：同 good 的绿但半透明 —— 「今天还有没吃的」，不该和已完成长得一样 */
+.cal-cell.part{background:var(--ok);opacity:.45;color:var(--on-ok)}
+.cal-cell.future{opacity:.35}
+.cal-cell.today{box-shadow:inset 0 0 0 2px var(--contrast-bg)}
+.cal-legend{display:flex;flex-wrap:wrap;gap:10px}
+.cal-legend .lg{display:flex;align-items:center;gap:5px;font-size:calc(11px * var(--fs));color:var(--muted)}
+.cal-legend .cal-cell{width:16px;height:16px;aspect-ratio:auto;flex:none}
+.cal-stats{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:calc(12px * var(--fs));color:var(--sub)}
+.cal-stats b{color:var(--text);font-variant-numeric:tabular-nums}
+.bar-row{display:flex;align-items:center;gap:8px;font-size:calc(12px * var(--fs))}
+.bar-lb{flex:0 0 8.5em;color:var(--sub)}
+.bar{flex:1 1 auto;height:14px;border-radius:7px;background:var(--inner);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:7px}
+.bar-n{flex:0 0 2em;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}
 
 
 
