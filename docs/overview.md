@@ -45,12 +45,13 @@
 | **v1.5.17** | `016de22` | 10-04 | **S-9 web 侧**：`core/cardSummary.js`（桌面卡片摘要落沙箱）+ 27 条 spec |
 | **v1.5.18** | `3cabbe5` | 10-04 | **S-5 明暗主题**：颜色全量变量化 + 亮色主题 + 三档切换（深色/浅色/跟随系统）+ 58 条 spec |
 | **v1.5.19** | `403e247` | 10-04 | **S-3 服用周期**（每周指定星期 / 每隔 N 天）+ 修 S-5 遗漏（4 处 JS 内联 SVG 未变量化）+ 79 条 spec |
+| **v1.5.20** | `b9524a9` | 10-04 | **S-4 疗程管理**（起止日期 + 到期自动停用）+ 消因（asDay 内联）+ 58 条 spec |
 | **v1.5.13~16** | `6b57092`…`1d35626` | 10-04 | **A-2 拆模块全部完成**：`today` / `data` / `records` / `meds` —— app.js 1795 → **698 行**。**✅ v1.5.12 真机验证全部通过** |
 | **v1.5.12** | `1e9869f` | 10-04 | **A-2**：抽 `ui/sheet.js`（药品编辑浮层）—— app.js → **1795 行**；**顺带修掉 v1.5.8 起的真 bug**（`pendingShot` 漏 import，拍照重试会崩） |
 
-- 测试：**21 套 760 条 spec 全绿**；harness 24 关口 **24 通过 / 0 失败 / 0 咨询**
-- 最新 APK：`med-reminder/MedReminder-v1.5.19-2026-10-04.apk` · **6.33 MB** ·
-  MD5 `5BC2E2A549F12C6DBADFE07D22ED82A1`
+- 测试：**22 套 818 条 spec 全绿**；harness 25 关口 **25 通过 / 0 失败 / 0 咨询**
+- 最新 APK：`med-reminder/MedReminder-v1.5.20-2026-10-04.apk` · **6.26 MB** ·
+  MD5 `78912ACF1F56AC054A11C8F6615B7A88`
 - ✅ **真机确认「平台层搬迁」稳住了**（返回键 / 切后台 / 拍照恢复均正常）→「只收口、不抽象」策略成立
 - ✅ **验证 harness 已建成**（`harness/harness.py`）—— 16 关口一键跑、三态退出码（0 全过 / 1 有失败 / 2 环境问题），
   并**挂到 git pre-commit**（红了拦住提交）
@@ -116,11 +117,11 @@
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    403e247  DaviKee <davi.kee@outlook.com>  feat(S-3): 服用周期 · v1.5.19
+HEAD    b9524a9  DaviKee <davi.kee@outlook.com>  feat(S-4): 疗程管理 · v1.5.20
 工作区  clean（干净）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.5.19  APP_BUILD = 2026-10-04
+源码    APP_VERSION = 1.5.20  APP_BUILD = 2026-10-04
 结构    www/js/core/{util,store,schedule}.js · ui/{render,cards,toast,overlay}.js
         · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
         app.js **698 行**（A-2 完成：2673 → 698，降 74%）｜ 21 个模块、零循环依赖
