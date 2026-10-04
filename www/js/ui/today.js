@@ -5,7 +5,7 @@
  */
 import { $, $$, esc, minToStr, nowMin } from '../core/util.js';
 import { S, save } from '../core/store.js';
-import { ackDropped, anyScheduledToday, checkIn, checkInAll, dueAt, isMissed, markTaken, medById, missedDoses, nextPending, progress, sortedDoses, todayDoses } from '../core/schedule.js';
+import { ackDropped, anyScheduledToday, checkIn, checkInAll, courseState, dueAt, isMissed, markTaken, medById, missedDoses, nextPending, progress, sortedDoses, todayDoses } from '../core/schedule.js';
 import { closeDlg, openDlg } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
@@ -61,10 +61,17 @@ export function renderToday() {
      * 老人看到「今天还没打卡」会以为漏了，其实今天本来就什么都不用吃。
      * 仍然把药品列表亮出来，让他能确认"药还在，只是今天不吃"。 */
     if (S.meds.length && !anyScheduledToday()) {
+      /* ★ S-4：区分"疗程结束"与"周期休息日" —— 前者是**永久性**的，
+       * 只写"今天不用吃药"会让人以为明天就恢复了，于是一直等。
+       * （个别药用完只是短暂休息，这才是那句轻描淡写的正确场景。） */
+      var allEnded = S.meds.every(function (m) { return courseState(m) === 'ended'; });
       html += '<div class="sect" style="gap:10px">'
         + '<span class="eyebrow">TODAY</span>'
         + '<h1 class="h1">今天不用吃药</h1>'
-        + '<p class="body">按你设的服用周期，今天没有要服的药。到了该吃的日子会自动出现在这里。</p>'
+        + '<p class="body">' + (allEnded
+            ? '所有药的疗程都已结束，不会再提醒了。要接着吃，就点下面的药把结束日期往后改。'
+            : '按你设的服用周期，今天没有要服的药。到了该吃的日子会自动出现在这里。')
+        + '</p>'
         + '</div>'
         + '<div class="sect">'
         + '<span class="eyebrow">MY MEDS</span>'

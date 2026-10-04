@@ -3,7 +3,7 @@
  * 架构重构：从 app.js 抽出。
  * 函数体一字未改，只去掉一层缩进并加 export。
  */
-import { $, $$, minToStr, uid, todayKey } from '../core/util.js';
+import { $, $$, dayDiff, minToStr, uid, todayKey } from '../core/util.js';
 import { S, save } from '../core/store.js';
 import { MAX_TIMES, ensureFixedDoses, medById, medMode, needRebuildDoses, normTimes,
          rebuildTodayDoses, schedLabel, normSched, timeInputToMin, todayDoses } from '../core/schedule.js';
@@ -40,6 +40,10 @@ export function openSheet(medId) {
   schedModeDraft = sc0.mode;
   weekDraft = sc0.weekdays.slice();
   cycleDraft = sc0.everyDays >= 2 ? sc0.everyDays : 2;
+  /* ★ S-4：疗程起止也要预填（空字符串 = 未填，与 input[type=date] 一致） */
+  if ($('#courseFrom')) $('#courseFrom').value = sc0.from || '';
+  if ($('#courseTo')) $('#courseTo').value = sc0.to || '';
+  renderCourseHint();
   $('#deleteMed').classList.toggle('hidden', !med);
   renderPreview();
   /* 浮层打开时把焦点带进去（键盘用户不用满屏找输入框）。
@@ -173,16 +177,43 @@ export function renderSched() {
   }
 }
 
-/* 草稿 → 要写进数据的 sched 对象。返回 null 表示「每天」（**不写字段**）。 */
+/* 草稿 → 要写进数据的 sched 对象。返回 null 表示「全默认」（**不写字段**）。
+ *
+ * ⚠️ S-4 之后「返 null」的条件变严了：**只有「每天 + 无疗程」才能不写字段**。
+ *    只设了疗程（每天吃、但只吃 7 天）时 sched 不能是 null，否则疗程丢了。 */
 function schedFromDraft(prevMed) {
-  if (schedModeDraft === 'weekly') return { mode: 'weekly', weekdays: weekDraft.slice() };
-  if (schedModeDraft === 'cycle') {
+  var from = $('#courseFrom') ? $('#courseFrom').value : '';
+  var to = $('#courseTo') ? $('#courseTo').value : '';
+  var out;
+  if (schedModeDraft === 'weekly') out = { mode: 'weekly', weekdays: weekDraft.slice() };
+  else if (schedModeDraft === 'cycle') {
     /* ⚠️ anchor 必须**沿用原值**：否则改一次剂量就把周期相位重置成"从今天重新数"，
      * 用户刚调好的「隔 2 天」会错位。新建 / 从别的档位切过来时才用今天。 */
     var old = normSched(prevMed);
-    return { mode: 'cycle', everyDays: cycleDraft, anchor: old.anchor || todayKey() };
+    out = { mode: 'cycle', everyDays: cycleDraft, anchor: old.anchor || todayKey() };
+  } else {
+    out = { mode: 'daily' };
   }
-  return null;
+  /* from / to 空串 = 未填 → **不写这个字段**（而不是写 null），备份更干净 */
+  if (from) out.from = from;
+  if (to) out.to = to;
+  if (out.mode === 'daily' && !out.from && !out.to) return null;
+  return out;
+}
+
+/* S-4 疗程的即时反馈：输入后就能看到共多少天，不用等保存。 */
+export function renderCourseHint() {
+  var h = $('#courseHint');
+  if (!h) return;
+  var f = $('#courseFrom') ? $('#courseFrom').value : '';
+  var t = $('#courseTo') ? $('#courseTo').value : '';
+  if (f && t && f > t) { h.textContent = '开始日期不能晚于结束日期。'; return; }
+  if (!f && !t) { h.textContent = '不填 = 长期服用。填了结束日，当天之后自动停提醒。'; return; }
+  /* 'YYYY-MM-DD' 的字典序就是日期序 —— 比大小不用转日期。 */
+  var n = (f && t) ? (dayDiff(f, t) + 1) : null;
+  h.textContent = (f ? f + ' 开始' : '从今天起')
+    + (t ? '，到 ' + t + ' 结束' : '，长期服用')
+    + (n != null ? '（共 ' + n + ' 天）' : '');
 }
 
 export function clampStep() {
@@ -229,6 +260,13 @@ export function bindSheet() {
       toast('剩余量请填数字（如 28 或 28.5）；不填也可以');
       $('#medStock').focus(); return;
     }
+
+    /* ★ S-4：起止日期要成序 —— 反了的话 isScheduledDay 会变成“永远不吃”，
+     * 而界面上看不出问题（卡片只会说“疗程已结束”）。
+     * 'YYYY-MM-DD' 的字典序就是日期序 → 直接比字符串。 */
+    var cfrom = $('#courseFrom') ? $('#courseFrom').value : '';
+    var cto = $('#courseTo') ? $('#courseTo').value : '';
+    if (cfrom && cto && cfrom > cto) { toast('开始日期不能晚于结束日期'); return; }
 
     /* 校验必须放在改数据**之前** —— 否则会「改一半」再报错，
      * 留下一个模式变了、时刻却没存上的坏状态。 */
@@ -331,6 +369,13 @@ export function bindSheet() {
   var cm = $('#cycMinus'), cp = $('#cycPlus');
   if (cm) cm.onclick = function () { cycleDraft = Math.max(2, cycleDraft - 1); renderSched(); };
   if (cp) cp.onclick = function () { cycleDraft = Math.min(30, cycleDraft + 1); renderSched(); };
+
+  /* ★ S-4：起止日期输入 → 即时刷提示（用 change 而不是 input：
+     日期选择器每选一次都会触发 change，而 input 在部分 WebView 里不稳定）。 */
+  ['#courseFrom', '#courseTo'].forEach(function (sel) {
+    var el = $(sel);
+    if (el) el.onchange = renderCourseHint;
+  });
 
   $$('#modeRow [data-mode]').forEach(function (el) {
     el.onclick = function () {

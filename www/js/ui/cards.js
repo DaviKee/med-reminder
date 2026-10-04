@@ -13,7 +13,8 @@
 import { esc, minToStr, minOfDay } from '../core/util.js';
 import { storageError } from '../core/store.js';
 import { intervalLabel, medMode, normTimes, todayDoseCount, stockInfo,
-         droppedToday, droppedAcked, schedLabel, scheduledToday } from '../core/schedule.js';
+         droppedToday, droppedAcked, schedLabel, scheduledToday,
+         courseState, courseLabel } from '../core/schedule.js';
 
 /* 服药方式的统一文案（药品卡 / 药品列表 / 提醒弹窗共用） */
 export function medScheduleLabel(m) {
@@ -35,6 +36,11 @@ export function medScheduleLabel(m) {
 export function medMetaText(m) {
   var n = todayDoseCount(m.id);
   if (n) return '今日 ' + n + ' 次 · 已排程';
+  /* ★ S-4：疗程状态**优先于**周期 —— "疗程已结束"比"今天不用吃"信息量大得多，
+   * 而且它是**永久性**的（不处理就永远不提醒），必须让用户一眼看见。 */
+  var st = courseState(m);
+  if (st === 'ended') return courseLabel(m) + ' · 疗程已结束，不再提醒';
+  if (st === 'before') return courseLabel(m) + ' · 还没到开始日';
   /* S-3：今天不该吃 —— 必须**明说**。否则用户看到"没排程"会以为坏了，
    * 或者干等着一个永远不会来的提醒。 */
   if (!scheduledToday(m)) return schedLabel(m) + ' · 今天不用吃';

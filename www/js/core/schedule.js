@@ -41,10 +41,25 @@ export function medMode(m) { return (m && m.mode === 'fixed') ? 'fixed' : 'inter
 export var WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 export function normSched(m) {
+  /* '年-月-日' 形式的合法性校验。非法一律返回 null。
+   * ⚠️ 不能用 `Number(v)` 判 —— `'2026-10-05'` 转出来是 NaN、但 `null` 转出来是 **0**。
+   *
+   * ★ **故意定义在函数内部**：spec 用 `cut()` 只抽被点名的函数，模块级私有小函数会成为
+   *   **隐式依赖** —— 一改就把 4 个 spec 全弄崩（这个坑已经踩过四次）。
+   *   它只在这里用，内联反而更内聚，也顺带把这类脆弱性从根上去掉。 */
+  function asDay(v) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v) : null;
+  }
+
   var s = (m && m.sched) || {};
   var mode = s.mode;
   if (mode !== 'weekly' && mode !== 'cycle') mode = 'daily';
-  var out = { mode: mode, weekdays: [], everyDays: 0, anchor: null };
+  var out = { mode: mode, weekdays: [], everyDays: 0, anchor: null, from: null, to: null };
+
+  /* ★ S-4 疗程：起止范围（含两端）。两个都空 = 长期服用。
+   * 它与 mode 相互独立 —— 「每周一三五、吃到 10 月 14 号」是常见医嘱。 */
+  out.from = asDay(s.from);
+  out.to = asDay(s.to);
 
   if (mode === 'weekly') {
     var seen = {}, w = [];
@@ -67,7 +82,7 @@ export function normSched(m) {
     if (!isFinite(n) || n < 2) n = 2;         // 「每 1 天」就是每天，无意义；下限 2
     if (n > 90) n = 90;                       // 上限：再长就不像"周期用药"了
     out.everyDays = n;
-    out.anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(s.anchor)) ? String(s.anchor) : null;
+    out.anchor = asDay(s.anchor);
   }
   return out;
 }
@@ -78,6 +93,12 @@ export function normSched(m) {
  *    那会让异常数据/老数据变成"药无声无息地停了"，用户毫不知情。宁可多提醒。 */
 export function isScheduledDay(m, dateKey) {
   var s = normSched(m);
+  /* ★ S-4 疗程：起止范围是**最外层**的过滤 —— 先看这一天在不在疗程内，
+   * 再谈「周期上该不该吃」。注意顺序不能反：先算 weekly/cycle 再截范围也结果相同，
+   * 但放在前面意图更清楚 —— 「疗程外一律不吃」是无条件的。
+   * ⚠️ dayDiff 对非法日期返回 NaN，`NaN < 0` 为 false → 不会误拦（安全失败方向是"多提醒"）。 */
+  if (s.from && dayDiff(s.from, dateKey) < 0) return false;   // 疗程还没开始
+  if (s.to && dayDiff(s.to, dateKey) > 0) return false;       // 疗程已结束
   if (s.mode === 'daily') return true;
   if (s.mode === 'weekly') return s.weekdays.indexOf(dowOf(dateKey)) >= 0;
   if (!s.anchor) return true;
@@ -85,6 +106,29 @@ export function isScheduledDay(m, dateKey) {
   if (!isFinite(diff)) return true;
   if (diff < 0) return false;                 // 锚点之前：不吃
   return (diff % s.everyDays) === 0;
+}
+
+/* 疗程状态：'none'（长期）| 'before'（还没开始）| 'active' | 'ended'（已结束）。
+ *
+ * ⚠️ 这是 **UI 判断**，不要拿它去替代 isScheduledDay —— 后者还要叠加周期规则。
+ *    两者分工：`isScheduledDay` 答“今天该不该吃”；
+ *    `courseState` 答“为什么不吃”（这决定了界面上该说什么）。 */
+export function courseState(m, dateKey) {
+  var s = normSched(m);
+  if (!s.from && !s.to) return 'none';
+  var d = dateKey || todayKey();
+  if (s.from && dayDiff(s.from, d) < 0) return 'before';
+  if (s.to && dayDiff(s.to, d) > 0) return 'ended';
+  return 'active';
+}
+
+/* 疗程的中文描述（卡片 / 编辑页'用）。没设疗程返回空串。 */
+export function courseLabel(m) {
+  var s = normSched(m);
+  if (!s.from && !s.to) return '';
+  if (s.from && s.to) return s.from + ' 至 ' + s.to;
+  if (s.from) return s.from + ' 开始';
+  return '至 ' + s.to;
 }
 
 /* 今天该不该吃（便利函数，只有它读当前时间） */

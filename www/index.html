@@ -163,6 +163,22 @@
       <p class="hint" id="schedHint">每天</p>
     </div>
 
+    <!-- S-4 疗程：起止日期（含两端）。不填 = 长期服用 —— 与改造前一致。
+         抗生素疗程最典型：医生开了 7 天，不该让用户自己记着到点删药。 -->
+    <div class="field">
+      <label class="field-label">疗程（可选）</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="input-wrap date-wrap" style="flex:1 1 0">
+          <input type="date" id="courseFrom" aria-label="疗程开始日期">
+        </div>
+        <span class="meta">至</span>
+        <div class="input-wrap date-wrap" style="flex:1 1 0">
+          <input type="date" id="courseTo" aria-label="疗程结束日期">
+        </div>
+      </div>
+      <p class="hint" id="courseHint">不填 = 长期服用。填了结束日，当天之后自动停提醒。</p>
+    </div>
+
     <div class="field" id="fieldInterval">
       <label class="field-label">服药间隔</label>
       <div class="stepper">

@@ -319,6 +319,12 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .week-chip{flex:1 1 0;min-width:0;min-height:44px;padding:0;display:flex;align-items:center;
   justify-content:center;cursor:pointer;background:transparent}
 .week-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
+/* S-4 疗程的日期输入：原生 `input[type=date]` 在不同 WebView 里**高度不一**
+（各自带日历图标、内边距也不同）。
+所以容器用 min-height 而不是固定 height —— 固定高度会把它裁掉
+（与「多行框不能塞进单行壳」同源，见 MEMORY-数据与交互 §4）。 */
+.input-wrap.date-wrap{height:auto;min-height:54px}
+.input-wrap.date-wrap input{font-family:var(--font-num);min-width:0}
 .sheet-actions{display:flex;flex-direction:column;gap:4px}
 
 .dlg-wrap{
