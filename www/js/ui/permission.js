@@ -11,6 +11,7 @@
  * 末尾另有三个对外的「写入口」—— 本模块的状态只由本模块写。
  */
 import { esc } from '../core/util.js';
+import { readJSON, writeJSON } from '../core/store.js';
 import { isOverlayOpen } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
@@ -292,4 +293,23 @@ export function invalidatePermProbe() {
  * 启动时调一次，让首屏的权限卡就有正确状态。 */
 export function initBrowserPerm() {
   notifyPerm = browserPerm();
+}
+
+/* ---------------- 首次添加药品时引导授权（F-3） ----------------
+ * 原来只有"打卡时"才引导，于是"设完药、还没到打卡点"这段空窗期里，
+ * 用户并不知道自己收不到提醒 —— 对提醒类 App 这是最要命的静默失效。
+ * 只引导一次：已 granted 不必、已 denied 交给权限卡（反复弹窗只会招人烦）。 */
+export var GUIDE_KEY = 'medreminder.notifyGuide.v1';
+
+export function guideNotified() { return readJSON(GUIDE_KEY) === '1'; }
+
+export function markGuided() { writeJSON(GUIDE_KEY, '1'); }
+
+export function guideNotifyOnce() {
+  if (guideNotified()) return;
+  if (notifyPerm === 'granted') return;      // 已经能收到，别打扰
+  if (notifyPerm === 'denied') return;       // 已明确收不到 → 用权限卡引导（那里还能跳系统设置）
+  markGuided();
+  askNotify();
+  toast('顺手把通知权限开一下，锁屏时才能收到提醒');
 }
