@@ -128,13 +128,15 @@ export var storageError = null;        // null | { kind:'quota'|'other', msg, at
 export var saveHooks = {
   refresh: function () {},
   notify: function () {},
-  backup: function () {}
+  backup: function () {},
+  card: function () {}      // S-9：桌面卡片的数据摘要（每次都重写沙箱里的小文件）
 };
 export function setSaveHooks(h) {
   if (!h) return;
   if (h.refresh) saveHooks.refresh = h.refresh;
   if (h.notify) saveHooks.notify = h.notify;
   if (h.backup) saveHooks.backup = h.backup;
+  if (h.card) saveHooks.card = h.card;
 }
 
 /* 每次改动都落盘。写入失败**不抛给调用方**（那会让用户的操作半途中断），
@@ -156,4 +158,6 @@ export function save() {
   /* 每次改动都往本地存一份（防抖 3 秒，写失败也不影响任何功能）。
    * 传出去的是与手动导出**完全一致**的格式 —— 现有恢复流程能直接读回来。 */
   saveHooks.backup();
+  /* S-9 桌面卡片：摘要重算并写进沙箱文件（卡片是锦上添花，失败静默 —— 见 cardSummary.js）。 */
+  saveHooks.card();
 }

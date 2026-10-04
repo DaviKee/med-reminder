@@ -67,7 +67,7 @@ def main():
     # **所有源码级检查都在模块图的拼接文本上做**（与 tests/sources.js 同一套思路）——
     # 否则函数一搬家，检查就会因为「不在 app.js 里」而误报，而那些检查本来是对的。
     APP_MODULES = ['js/platform/lifecycle.js', 'js/core/util.js', 'js/core/store.js',
-                   'js/core/schedule.js', 'js/ui/tabs.js', 'js/ui/render.js',
+                   'js/core/schedule.js', 'js/core/cardSummary.js', 'js/ui/tabs.js', 'js/ui/render.js',
                    'js/ui/cards.js', 'js/ui/actions.js', 'js/ui/toast.js',
                    'js/ui/overlay.js', 'js/ui/photo.js', 'js/ui/permission.js',
                    'js/ui/fontsize.js', 'js/ui/sheet.js', 'js/ui/today.js',

@@ -9,6 +9,7 @@ import { $, $$, esc, nowMin, minToStr, todayKey } from './core/util.js';
 
 
 import { load, S, storageStats, gcNotified, cleanTargets, save, setSaveHooks } from './core/store.js';
+import { writeCardFile } from './core/cardSummary.js';
 
 
 import { todayDoses, medById, dueAt, nextPending, silenceOverdue, markTaken, ensureFixedDoses, snoozeDose, snoozeToast } from './core/schedule.js';
@@ -95,6 +96,8 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
   setSaveHooks({
     refresh: queueStorageRefresh,
     notify: syncNotifications,
+    /* S-9：每次落盘顺手刷新桌面卡片的摘要文件（实现见 core/cardSummary.js）。 */
+    card: writeCardFile,
     backup: function () {
       if (window.MedAutoBackup) {
         window.MedAutoBackup.schedule(function () { return JSON.stringify(buildBackup()); });
@@ -116,7 +119,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.16';
+  var APP_VERSION = '1.5.17';
   var APP_BUILD = '2026-10-04';
 
 
