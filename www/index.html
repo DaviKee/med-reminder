@@ -27,6 +27,9 @@
   <!-- Tab bar -->
   <nav class="tabbar">
     <div class="tabpill">
+      <!-- 白色胶囊（纯装饰层，pointer-events:none）—— 切换时由 setTab 改它的 --i 平滑滑动。
+           放最前当背景层；初始 --i 默认 0 = 第一个页签，与 HTML 里 today 的 active 一致。 -->
+      <div class="tab-ind" aria-hidden="true"></div>
       <button class="tab active" data-tab="today">
         <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5.4l3.4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>今日</span>

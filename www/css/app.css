@@ -47,9 +47,20 @@ button{font-family:inherit}
    `anywhere` 只在放不下时才在词内断（不像 `break-all` 见缝就断），对普通文本无害；
    它还会影响 min-content 宽度 —— flex 子项里正需要这一点。
    放在 main 上靠**继承**覆盖全部正文；`.dose-n` 那种刻意 nowrap+ellipsis 截断的不受影响。 */
-main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;overflow-wrap:anywhere}
+main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:8px;overflow-wrap:anywhere}
 .view{display:none}
 .view.active{display:block}
+/* 切页时新页沿切换方向滑入 —— 原来是 display 从 none 跳 block，真机反馈"太硬"。
+   ⚠️ 为什么不做「新旧两页对滑」：.view 是流式布局、#main 是唯一滚动容器，
+   两页同时可见就必须临时绝对定位，而 absolute **不撑父容器** →
+   动画期间内容高度塌成 0，滚动位置与右侧进度条都会跳。
+   为 0.26s 的观感换这个风险不划算（这个 App 的用户是老人，动效更该克制）。
+   class 由 setTab 加、也在 setTab 里摘 —— 不摘的话同一页再次成为目标时不会重播
+   （class 没变化，浏览器就认为动画没变）。 */
+@keyframes viewInRight{from{transform:translateX(36px);opacity:0}to{transform:none;opacity:1}}
+@keyframes viewInLeft{from{transform:translateX(-36px);opacity:0}to{transform:none;opacity:1}}
+.view.enter-from-right{animation:viewInRight .26s cubic-bezier(.22,.61,.36,1) both}
+.view.enter-from-left{animation:viewInLeft .26s cubic-bezier(.22,.61,.36,1) both}
 .stack{display:flex;flex-direction:column;gap:28px;padding:8px 20px 24px}
 .pad{padding:0 20px}
 
@@ -154,14 +165,28 @@ main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bott
 
 /* ---------- tabbar ---------- */
 .tabbar{flex:0 0 auto;padding:12px 21px calc(21px + env(safe-area-inset-bottom))}
-.tabpill{display:flex;height:62px;border-radius:36px;background:var(--inner);border:1px solid var(--line);padding:4px;gap:4px}
+.tabpill{position:relative;display:flex;height:62px;border-radius:36px;background:var(--inner);border:1px solid var(--line);padding:4px;gap:4px}
 .tab{
+  position:relative;z-index:1;   /* 抬到 .tab-ind 之上，否则白底会盖住图标文字 */
   flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
   border:0;background:transparent;color:var(--muted);border-radius:26px;cursor:pointer;padding:0;
+  transition:color .26s cubic-bezier(.22,.61,.36,1);
 }
 .tab svg{width:18px;height:18px}
 .tab span{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));font-weight:500}
-.tab.active{background:#fff;color:#0A0A0A}
+.tab.active{color:#0A0A0A}
+/* 白色胶囊改成**独立的一层**，切换时平滑滑到目标页签（原来是 background 瞬切，
+   和页面滑动放在一起会很割裂）。
+   位移公式 `var(--i) * (100% + 4px)`：transform 里的 100% 解析为**指示器自身宽度**
+   （= 一个 tab 宽），加上 gap 正好是一格步长。`--i` 由 setTab 写，这里不碰。
+   ⚠️ 宽度的除数 3 是页签个数 —— 加第 4 个页签时这里要一起改，
+      tests/tabs.spec.js 有一条断言盯着它（数量对不上会直接报红）。 */
+.tab-ind{
+  position:absolute;top:4px;bottom:4px;left:4px;pointer-events:none;
+  width:calc((100% - 16px) / 3);border-radius:26px;background:#fff;
+  transform:translateX(calc(var(--i, 0) * (100% + 4px)));
+  transition:transform .26s cubic-bezier(.22,.61,.36,1);
+}
 
 /* ---------- overlays ---------- */
 .scrim{position:absolute;inset:0;background:rgba(0,0,0,.72);opacity:0;pointer-events:none;transition:opacity .22s;z-index:40}
