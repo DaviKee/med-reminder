@@ -4,8 +4,10 @@
  * 函数体一字未改，只去掉一层缩进并加 export。
  *
  * ⚠️ **这批能整体搬走，是因为它们只读底层状态（core/*），不碰 app.js 的可变状态。**
- *    `fsLabel`（读 fontScale）与 `permCardHtml`（读 notifyPerm）就没搬 —— 那两个变量
+ *    当初 `fsLabel`（读 fontScale）与 `permCardHtml`（读 notifyPerm）就没搬 —— 那两个变量
  *    在 app.js 里被**整体赋值**，import 绑定只读，搬走就 TypeError。
+ *    ✅ 两者后来各自随状态归位了：`fsLabel` → `ui/fontsize.js`（v1.5.11）、
+ *       `permCardHtml` → `ui/permission.js`（v1.5.9）。
  *    以后往这里加片段，守着同一条：**只依赖 core，绝不反向依赖 app.js**。
  */
 import { esc, minToStr, minOfDay } from '../core/util.js';

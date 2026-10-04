@@ -37,6 +37,7 @@ const MODULES = [
   'ui/overlay.js',
   'ui/photo.js',
   'ui/permission.js',
+  'ui/fontsize.js',
   'app.js'
 ];
 
