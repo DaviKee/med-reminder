@@ -42,6 +42,7 @@ const MODULES = [
   'ui/today.js',
   'ui/data.js',
   'ui/records.js',
+  'ui/meds.js',
   'app.js'
 ];
 
