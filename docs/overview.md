@@ -42,12 +42,14 @@
 | **v1.5.6~9** | `d992b6c`…`3ee8d97` | 10-04 | **A-2 连做 4 块**：`actions` 补搬 / **`ui/tabs.js`** / **`ui/photo.js`** / **`ui/permission.js`** —— app.js 2520 → **2097 行** |
 | **v1.5.10** | `8d6b62e` | 10-04 | **切页动效**：新页方向感知滑入 + 底部白胶囊滑动，替掉 `display` 硬切 |
 | **v1.5.11** | `975ab1d` | 10-04 | **A-2**：抽 `ui/fontsize.js`（字号档位）—— app.js 2097 → 2070 行 |
+| **v1.5.17** | `016de22` | 10-04 | **S-9 web 侧**：`core/cardSummary.js`（桌面卡片摘要落沙箱）+ 27 条 spec |
+| **v1.5.18** | `3cabbe5` | 10-04 | **S-5 明暗主题**：颜色全量变量化 + 亮色主题 + 三档切换（深色/浅色/跟随系统）+ 58 条 spec |
 | **v1.5.13~16** | `6b57092`…`1d35626` | 10-04 | **A-2 拆模块全部完成**：`today` / `data` / `records` / `meds` —— app.js 1795 → **698 行**。**✅ v1.5.12 真机验证全部通过** |
 | **v1.5.12** | `1e9869f` | 10-04 | **A-2**：抽 `ui/sheet.js`（药品编辑浮层）—— app.js → **1795 行**；**顺带修掉 v1.5.8 起的真 bug**（`pendingShot` 漏 import，拍照重试会崩） |
 
-- 测试：**18 套 620 条 spec 全绿**；harness 21 关口 **21 通过 / 0 失败 / 0 咨询**
-- 最新 APK：`med-reminder/MedReminder-v1.5.12-2026-10-04.apk` · **6.29 MB** ·
-  MD5 `DA87EBDC31539FD9482CA231D40F20AE`
+- 测试：**20 套 678 条 spec 全绿**；harness 23 关口 **23 通过 / 0 失败 / 0 咨询**
+- 最新 APK：`med-reminder/MedReminder-v1.5.18-2026-10-04.apk` · **6.25 MB** ·
+  MD5 `A8C8D49FDBC856BD330EBA4CA658903C`
 - ✅ **真机确认「平台层搬迁」稳住了**（返回键 / 切后台 / 拍照恢复均正常）→「只收口、不抽象」策略成立
 - ✅ **验证 harness 已建成**（`harness/harness.py`）—— 16 关口一键跑、三态退出码（0 全过 / 1 有失败 / 2 环境问题），
   并**挂到 git pre-commit**（红了拦住提交）
@@ -113,19 +115,20 @@
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    1d35626  DaviKee <davi.kee@outlook.com>  refactor(arch): 抽 ui/meds.js · v1.5.16
+HEAD    3cabbe5  DaviKee <davi.kee@outlook.com>  feat(S-5): 明暗主题 · v1.5.18
 工作区  clean（干净）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.5.16  APP_BUILD = 2026-10-04
+源码    APP_VERSION = 1.5.18  APP_BUILD = 2026-10-04
 结构    www/js/core/{util,store,schedule}.js · ui/{render,cards,toast,overlay}.js
         · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
         app.js **698 行**（A-2 完成：2673 → 698，降 74%）｜ 21 个模块、零循环依赖
         依赖方向：util ← store ← schedule ← app，util ← ui/* ← app
         ★ 平台差异（插件调用 / 生命周期 / 返回键 / 前后台）**全部收在 www/js/platform/**
           —— 业务层已无 window.Capacitor，这是「多平台准备」的关键一条
-        ★ **重绘调度**在 `ui/render.js`（`markDirty` / `render` / `setRenderers`）——
-          拆视图的前置已就位（见计划 §33）
+        ★ **重绘调度**在 `ui/render.js`（`markDirty` / `render` / `setRenderers`）
+        ★ **明暗主题**在 `ui/theme.js`：只改 `<html>` 的 `data-theme`，颜色全走 CSS 变量
+          —— **CSS 里已无裸色值**（新增约束：加颜色必须先定义变量，见计划 §41.3）
 测试    harness/harness.py → 20 关口（18 套 579 条 spec + APK 验收）；已挂 git pre-commit
 APK     med-reminder/MedReminder-v1.5.16-2026-10-04.apk（6.29 MB · MD5 697D7E8C…）
         旧版（v1.4.1 / v1.4.1-rebuild / v1.4.2 / v1.4.5 等）已归入 归档/apk/
