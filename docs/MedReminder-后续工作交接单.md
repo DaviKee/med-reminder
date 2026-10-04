@@ -10,11 +10,11 @@
 
 | 项 | 状态 |
 |---|---|
-| 仓库 | `https://github.com/DaviKee/med-reminder`（私有）｜**✅ 与远端同步**（HEAD `3ee8d97`） |
+| 仓库 | `https://github.com/DaviKee/med-reminder`（私有）｜**✅ 与远端同步**（HEAD `8d6b62e`） |
 | 工作区 | `C:\WorkBuddy\med-reminder`（**仓库在子目录 `med-reminder/`**；**活文档在仓库的 `docs/`**） |
 | 技术栈 | Capacitor 6.2.2 + 纯 `<script>`/ES module（**无打包器**） |
-| 最新版本 | **v1.5.9**（2026-10-04）：A-1 平台层 + S-1/S-2/S-7 + **A-2 重构（app.js 2673→2097 行，13 个模块）** |
-| 测试 | **harness 一键跑 19 关口**：17 套 559 条 spec + APK 验收；**已挂 git pre-commit** |
+| 最新版本 | **v1.5.10**（2026-10-04）：A-1 平台层 + S-1/S-2/S-7 + **A-2 重构（app.js 2673→2097 行，14 个模块）** + **切页动效** |
+| 测试 | **harness 一键跑 21 关口**：18 套 620 条 spec + APK 验收；**已挂 git pre-commit** |
 | 记忆 | 入口 `MEMORY.md` **~14.8 KB**（守住 16 KB 注入阈值）+ 7 份专题 |
 | 当前阶段 | **阶段 C ✅ 完成** → **A-2 架构重构进行中**（剩 **订阅式重绘 → 拆视图**，见计划 §32.3）；代理提醒等 AGC 审批 |
 | **下一步** | ⭐ **A-2 第 19 步：抽 `ui/sheet.js`（药品编辑浮层）+ 处理 `fontScale`** —— 之后 `ui/today.js` / `records.js` 才是纯搬运（A-2 终点） |
@@ -24,7 +24,7 @@
 ## 1. 当前状态（2026-10-01 收尾）
 
 **主项目（Android 线）**：干净、可发布、全绿。
-- HEAD `3ee8d97`（DaviKee），**工作区 clean**
+- HEAD `8d6b62e`（DaviKee），**工作区 clean**
 - **v1.4.12 → v1.5.2**（2026-10-01）连续九个版本出包：
   - **v1.4.12** 平台适配层落地 —— 3 个平台脚本移入 `js/platform/`（**纯搬迁**，git 100% rename 佐证）
   - **v1.4.13** 抽 `platform/lifecycle.js` → **业务层再无 `window.Capacitor`**（多平台关键一步）
