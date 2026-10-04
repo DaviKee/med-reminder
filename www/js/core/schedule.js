@@ -8,7 +8,7 @@
  * ⚠️ window.MedNotify 属于**插件层**（notify.js 的独立 IIFE），不是 UI 层，可直接用。
  */
 
-import { uid, nowMin, minToStr, minOfDay, todayKey, fmtDate, pad } from './util.js';
+import { uid, nowMin, minToStr, minOfDay, todayKey, fmtDate, pad, dowOf, dayDiff } from './util.js';
 import { S, save, readJSON, writeJSON } from './store.js';
 
 /* 间隔的显示（F-1）。
@@ -26,6 +26,85 @@ export function intervalLabel(v) {
  * 'fixed'：每天固定几个时刻，**到点就提醒，不随打卡顺延**。
  * 旧数据没有 mode 字段 —— 一律视为 interval，完全兼容，备份格式也不用变。 */
 export function medMode(m) { return (m && m.mode === 'fixed') ? 'fixed' : 'interval'; }
+
+/* ---------------- 服用周期（S-3） ----------------
+ * 医嘱里「隔天一次」「每周一三五」很常见，而原来只有"每天"一种。
+ *
+ * 模型：单个对象 `m.sched`（不往 med 上撒一堆散字段）。
+ *   { mode:'daily' | 'weekly' | 'cycle',
+ *     weekdays:[0..6],       // weekly：0=周一（与 dowOf 同一约定）
+ *     everyDays:N,           // cycle：每 N 天一次（N≥2）
+ *     anchor:'YYYY-MM-DD' }  // cycle：起算日（默认用药卡创建日）
+ *
+ * **字段缺省 = 每天** —— 旧数据完全没有 sched，天然兼容，备份格式也不用动。 */
+
+export var WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+
+export function normSched(m) {
+  var s = (m && m.sched) || {};
+  var mode = s.mode;
+  if (mode !== 'weekly' && mode !== 'cycle') mode = 'daily';
+  var out = { mode: mode, weekdays: [], everyDays: 0, anchor: null };
+
+  if (mode === 'weekly') {
+    var seen = {}, w = [];
+    (Array.isArray(s.weekdays) ? s.weekdays : []).forEach(function (v) {
+      /* ⚠️ 先挡 null / undefined / 空串：`Number(null) === 0` → 会被静默当成
+       *    **周一**。这跟 normTimes 里那个「Number(null) 变成 0 点」是同一个坑，
+       *    而且更隐蔽 —— 用户少选一天，界面却显示选了周一，还不报错。
+       *    （这条是 tests/cycle.spec.js 抓出来的。） */
+      if (v == null || v === '') return;
+      var n = Math.round(Number(v));
+      if (!isFinite(n) || n < 0 || n > 6 || seen[n]) return;
+      seen[n] = 1; w.push(n);
+    });
+    w.sort(function (a, b) { return a - b; });
+    /* ⚠️ 选了「每周」但一天都没选 = **一次都不吃**，不是"退回每天"。
+     *    静默退回每天会让用户以为设置没生效（而实际每天都在催他吃药）。 */
+    out.weekdays = w;
+  } else if (mode === 'cycle') {
+    var n = Math.round(Number(s.everyDays));
+    if (!isFinite(n) || n < 2) n = 2;         // 「每 1 天」就是每天，无意义；下限 2
+    if (n > 90) n = 90;                       // 上限：再长就不像"周期用药"了
+    out.everyDays = n;
+    out.anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(s.anchor)) ? String(s.anchor) : null;
+  }
+  return out;
+}
+
+/* 这一天该不该吃。**纯函数**（日期显式传入，不读当前时间）→ spec 直接跑矩阵。
+ *
+ * ⚠️ cycle 模式**没有合法 anchor 时视为「该吃」** —— 不能因为字段缺失就整天不吃：
+ *    那会让异常数据/老数据变成"药无声无息地停了"，用户毫不知情。宁可多提醒。 */
+export function isScheduledDay(m, dateKey) {
+  var s = normSched(m);
+  if (s.mode === 'daily') return true;
+  if (s.mode === 'weekly') return s.weekdays.indexOf(dowOf(dateKey)) >= 0;
+  if (!s.anchor) return true;
+  var diff = dayDiff(s.anchor, dateKey);
+  if (!isFinite(diff)) return true;
+  if (diff < 0) return false;                 // 锚点之前：不吃
+  return (diff % s.everyDays) === 0;
+}
+
+/* 今天该不该吃（便利函数，只有它读当前时间） */
+export function scheduledToday(m) { return isScheduledDay(m, todayKey()); }
+
+/* 有没有任何一种药今天该吃 —— 今日页用来区分「今天还没打卡」与「今天不用吃药」 */
+export function anyScheduledToday() {
+  return S.meds.some(function (m) { return scheduledToday(m); });
+}
+
+/* 周期描述（药品卡 / 编辑页）。 */
+export function schedLabel(m) {
+  var s = normSched(m);
+  if (s.mode === 'daily') return '每天';
+  if (s.mode === 'weekly') {
+    if (!s.weekdays.length) return '未选星期';
+    return '每周' + s.weekdays.map(function (i) { return WEEK_LABELS[i]; }).join('');
+  }
+  return '每 ' + s.everyDays + ' 天';
+}
 
 export var MAX_TIMES = 12;
 
@@ -65,6 +144,10 @@ export function sameTimes(a, b) {
  * prev / next 均形如 { mode, times, interval }，其中 times 必须是 normTimes 归一化过的。 */
 export function needRebuildDoses(prev, next) {
   if (prev.mode !== next.mode) return true;                              // 模式换了
+  /* ★ S-3：**周期变了也要重排** —— 否则「改成今天不吃」不会撒掉今天已排的剂量，
+   * 与 H-1「只改时刻被忽略」是同一类静默失效（界面与通知都还是旧的）。
+   * 用 JSON 比较：sched 是嵌套对象，逐字段比不划算，而且加字段时容易漏。 */
+  if (JSON.stringify(prev.sched || null) !== JSON.stringify(next.sched || null)) return true;
   if (next.mode === 'fixed') return !sameTimes(prev.times, next.times);  // 固定模式：时刻变了吗
   return prev.interval !== next.interval;                                // 间隔模式：间隔变了吗
 }
@@ -125,16 +208,26 @@ export function todayDoseCount(medId) {
  * 取 3 天 —— 大致够一次「发现→买药→拿到」的往返，再少就来不及了。 */
 export var LOW_STOCK_DAYS = 3;
 
-/* 每天服几次。
+/* 每天服几次（**平均值**，可能是小数）。
  * fixed 模式 = 时刻表长度（确定值）；
  * interval 模式 = 24 / 间隔（**近似** —— 实际是打卡后滚动排程，
- *   一天可能只有 2 次而不是 3 次，所以下面算天数时会向下取整兜底）。 */
+ *   一天可能只有 2 次而不是 3 次，所以下面算天数时会向下取整兜底）。
+ * ⚠️ S-3：周期模式必须按占比折算 —— 否则「隔天吃」被当成每天吃，
+ *    库存的「预计用完日」直接**砍半**，人会照着一个错的日子去囤药。 */
 export function dailyDoseCount(m) {
   if (!m) return 0;
-  if (medMode(m) === 'fixed') return normTimes(m.times).length;
-  var h = Number(m.interval);
-  if (!isFinite(h) || h <= 0) return 0;
-  return Math.max(1, Math.round(24 / h));
+  var base;
+  if (medMode(m) === 'fixed') {
+    base = normTimes(m.times).length;
+  } else {
+    var h = Number(m.interval);
+    if (!isFinite(h) || h <= 0) return 0;
+    base = Math.max(1, Math.round(24 / h));
+  }
+  var s = normSched(m);
+  if (s.mode === 'weekly') return base * s.weekdays.length / 7;
+  if (s.mode === 'cycle') return base / s.everyDays;
+  return base;
 }
 
 /* 库存快照。`med` 没有 stock 字段 → 返回 **null**（上层据此完全不显示库存 UI，
@@ -318,6 +411,7 @@ export function ensureFixedDoses() {
   var list = todayDoses(), changed = false;
   S.meds.forEach(function (m) {
     if (medMode(m) !== 'fixed') return;
+    if (!scheduledToday(m)) return;               // S-3：今天不该吃 → 不排
     var times = normTimes(m.times);
     if (!times.length) return;                    // 没设时刻 → 不排（药品卡会提示去设置）
     if (list.some(function (d) { return d.medId === m.id; })) { reindexMed(m.id); return; }
@@ -347,6 +441,14 @@ export function rebuildTodayDoses(m) {
   var keep = todayDoses().filter(function (d) { return d.medId !== m.id; });
 
   pending.forEach(function (d) { if (window.MedNotify) window.MedNotify.cancelOne(d.id); });
+
+  /* S-3：今天不该吃 → 撤掉全部**未服**的（已服的保留 —— 那是发生过的事实）。
+   * 典型场景：编辑药品时把周期改成"今天不吃"，已排的剂量必须跟着消失。 */
+  if (!scheduledToday(m)) {
+    done.forEach(function (d, i) { d.idx = i; d.total = done.length; });
+    S.doses[todayKey()] = keep.concat(done);
+    return done.length;
+  }
 
   var arr = [];
   if (medMode(m) === 'fixed') {

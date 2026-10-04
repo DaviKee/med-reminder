@@ -256,6 +256,34 @@ t('★ 没有用 @media (prefers-color-scheme) 判主题（判断只在 JS 一�
   !/prefers-color-scheme/.test(CSS), 'CSS 里混进了系统判断');
 
 console.log('');
+console.log('=== 6b. ⭐ JS 里也不许有硬编码的 SVG 颜色 ===');
+{
+  /* ⚠️ 2026-10-04 补：第一版只查了 `index.html` 与 CSS，**漏掉 JS 字符串里动态生成的 SVG**
+   * —— sheet.js 的时刻删除图标、meds.js 的「+」、cards.js 的 check/chev 都写死了颜色。
+   * 亮色主题下 `stroke="#fff"` 的图标在浅底上**直接看不见**（实际渲染时才发现）。
+   * 这条断言就是为此加的：**颜色不分住在哪个文件，一律走变量或 currentColor。** */
+  const jsFiles = [];
+  (function walk(dir) {
+    fs.readdirSync(dir).forEach(function (f) {
+      const p = path.join(dir, f);
+      if (fs.statSync(p).isDirectory()) return walk(p);
+      if (f.endsWith('.js')) jsFiles.push(p);
+    });
+  })(path.join(ROOT, 'www/js'));
+  const bad = [];
+  jsFiles.forEach(function (p) {
+    const src = strip(fs.readFileSync(p, 'utf8'));      // 剥注释：注释里提到色值不算违规
+    const m = src.match(/(?:stroke|fill)\s*=\s*"(#[0-9a-f]{3,8}|rgba?\()/gi);
+    if (m) bad.push(path.basename(p) + ': ' + m.join(' '));
+  });
+  t('★ JS 里没有硬编码的 stroke/fill 颜色（扫描 ' + jsFiles.length + ' 个文件）',
+    bad.length === 0, bad.slice(0, 3).join(' | '));
+  t('index.html 里也没有硬编码的 stroke/fill',
+    !/(?:stroke|fill)="#[0-9a-f]{3,8}"/i.test(HTML_SRC), 'HTML 里有');
+  t('扫描确实覆盖到文件了（防"空集通过"）', jsFiles.length >= 20, String(jsFiles.length));
+}
+
+console.log('');
 console.log('=== 7. 首屏防闪内联脚本与 theme.js 一致 ===');
 {
   const m = HTML_SRC.match(/localStorage\.getItem\('([^']+)'\)/);

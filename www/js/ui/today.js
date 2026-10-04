@@ -5,7 +5,7 @@
  */
 import { $, $$, esc, minToStr, nowMin } from '../core/util.js';
 import { S, save } from '../core/store.js';
-import { ackDropped, checkIn, checkInAll, dueAt, isMissed, markTaken, medById, missedDoses, nextPending, progress, sortedDoses, todayDoses } from '../core/schedule.js';
+import { ackDropped, anyScheduledToday, checkIn, checkInAll, dueAt, isMissed, markTaken, medById, missedDoses, nextPending, progress, sortedDoses, todayDoses } from '../core/schedule.js';
 import { closeDlg, openDlg } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
@@ -56,12 +56,31 @@ export function renderToday() {
       bindToday();
       return;
     }
+
+    /* S-3：今天没有任何一种药该吃（周期规则下的休息日）—— **别催打卡**。
+     * 老人看到「今天还没打卡」会以为漏了，其实今天本来就什么都不用吃。
+     * 仍然把药品列表亮出来，让他能确认"药还在，只是今天不吃"。 */
+    if (S.meds.length && !anyScheduledToday()) {
+      html += '<div class="sect" style="gap:10px">'
+        + '<span class="eyebrow">TODAY</span>'
+        + '<h1 class="h1">今天不用吃药</h1>'
+        + '<p class="body">按你设的服用周期，今天没有要服的药。到了该吃的日子会自动出现在这里。</p>'
+        + '</div>'
+        + '<div class="sect">'
+        + '<span class="eyebrow">MY MEDS</span>'
+        + '<div class="list">';
+      S.meds.forEach(function (m) { html += medCardHtml(m, true); });
+      html += '</div></div>';
+      host.innerHTML = html;
+      bindToday();
+      return;
+    }
+
     html += '<div class="sect" style="gap:10px">'
       + '<span class="eyebrow">TODAY</span>'
       + '<h1 class="h1">今天还没打卡</h1>'
       + '<p class="body">每天第一次服药后点下方按钮打卡，我们会按你设定的间隔，依次提醒今天的每一次。</p>'
       + '</div>';
-
     if (!S.meds.length) {
       // ---- 首次使用：空态引导（此处过去会预置两条示例药品，已移除）----
       html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'

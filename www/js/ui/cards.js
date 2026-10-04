@@ -13,21 +13,31 @@
 import { esc, minToStr, minOfDay } from '../core/util.js';
 import { storageError } from '../core/store.js';
 import { intervalLabel, medMode, normTimes, todayDoseCount, stockInfo,
-         droppedToday, droppedAcked } from '../core/schedule.js';
+         droppedToday, droppedAcked, schedLabel, scheduledToday } from '../core/schedule.js';
 
 /* 服药方式的统一文案（药品卡 / 药品列表 / 提醒弹窗共用） */
 export function medScheduleLabel(m) {
+  var cyc = schedLabel(m);                       // '每天' / '每周一三五' / '每 2 天'
   if (medMode(m) === 'fixed') {
     var ts = normTimes(m && m.times);
-    return ts.length ? ('每天 ' + ts.map(minToStr).join(' / ')) : '未设时刻';
+    /* 一个时刻都没设 → 它还**不算一个排程**，连「每天」都不说 */
+    if (!ts.length) return '未设时刻';
+    var t = ts.map(minToStr).join(' / ');
+    /* 每天时不加周期前缀（那是常态），但**「每天」两个字要留着** ——
+     * 否则描述退化成光秃秃的 "08:00 / 20:00"，看不出是每日重复。 */
+    return cyc === '每天' ? ('每天 ' + t) : (cyc + ' · ' + t);
   }
-  return '每 ' + intervalLabel(m && m.interval);
+  var iv = '每 ' + intervalLabel(m && m.interval);   // 自带「每」，daily 时不再加前缀
+  return cyc === '每天' ? iv : (cyc + ' · ' + iv);
 }
 
 /* 药品卡下面那行说明 */
 export function medMetaText(m) {
   var n = todayDoseCount(m.id);
   if (n) return '今日 ' + n + ' 次 · 已排程';
+  /* S-3：今天不该吃 —— 必须**明说**。否则用户看到"没排程"会以为坏了，
+   * 或者干等着一个永远不会来的提醒。 */
+  if (!scheduledToday(m)) return schedLabel(m) + ' · 今天不用吃';
   if (medMode(m) === 'fixed') {
     return normTimes(m.times).length ? '今天还没排程 · 回「今天」页刷新' : '还没设时刻，去编辑里加一个';
   }
@@ -75,9 +85,9 @@ export function snoozeTag(ds) {
 
 /* ---------------- icons ---------------- */
 export var ICON = {
-  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 9.5 17.5 19.5 7" stroke="#7D8187" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 9.5 17.5 19.5 7" style="stroke:var(--muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   pill: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)" stroke="currentColor" stroke-width="1.8"/><path d="M9 9l6 6" stroke="currentColor" stroke-width="1.8"/></svg>',
-  chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9.5 5.5 16 12l-6.5 6.5" stroke="#7D8187" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9.5 5.5 16 12l-6.5 6.5" style="stroke:var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   cam: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5c0-1.1.9-2 2-2h1.6c.6 0 1.1-.3 1.4-.8l.5-.9c.3-.5.8-.8 1.4-.8h4.2c.6 0 1.1.3 1.4.8l.5.9c.3.5.8.8 1.4.8h1.6c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H5.5c-1.1 0-2-.9-2-2v-8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="currentColor" stroke-width="1.7"/></svg>'
 };
 

@@ -52,6 +52,8 @@ function makeEnv() {
   vm.runInContext(cut(UTIL_SRC, 'function fmtDate(d)'), sb);
   vm.runInContext(cut(APP_SRC, 'function normTimes(arr)'), sb);
   vm.runInContext(cut(APP_SRC, 'function medMode(m)'), sb);
+  /* ⚠️ S-3：dailyDoseCount 现在按周期折算，依赖 normSched —— 不抽进来会崩。 */
+  vm.runInContext(cut(APP_SRC, 'function normSched(m)'), sb);
   vm.runInContext(cut(APP_SRC, 'function dailyDoseCount(m)'), sb);
   vm.runInContext(cut(APP_SRC, 'function stockInfo(m)'), sb);
   vm.runInContext(cut(APP_SRC, 'function deductStock(m)'), sb);

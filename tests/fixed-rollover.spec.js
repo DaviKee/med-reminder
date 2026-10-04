@@ -78,7 +78,17 @@ const BLOCKS = [
   cut(APP_SRC, 'function todayDoses()'),
   cut(APP_SRC, 'function reindexMed(medId)'),
   cut(APP_SRC, 'function ensureFixedDoses()'),
-  cut(APP_SRC, 'function checkIn(medId)')
+  cut(APP_SRC, 'function checkIn(medId)'),
+  /* ⚠️ S-3（2026-10-04）：ensureFixedDoses / rebuildTodayDoses 现在会调 `scheduledToday()`
+   * 判断「今天该不该吃」—— 依赖链是 normSched → isScheduledDay → dowOf / dayDiff。
+   * 不抽进来，整个 spec 会 ReferenceError 直接崩（表现与 S-2 那次一样）。
+   * ⚠️ **手工清单抽函数的代价**：被测函数的依赖一变，就得同步这份清单 ——
+   *    否则崩的不是被测代码，而是套件自己。 */
+  cut(APP_SRC, 'function dowOf(key)'),
+  cut(APP_SRC, 'function dayDiff(a, b)'),
+  cut(APP_SRC, 'function normSched(m)'),
+  cut(APP_SRC, 'function isScheduledDay(m, dateKey)'),
+  cut(APP_SRC, 'function scheduledToday(m)')
 ].join('\n\n');
 
 const TODAY = '2026-09-28';

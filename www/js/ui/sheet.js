@@ -3,9 +3,10 @@
  * 架构重构：从 app.js 抽出。
  * 函数体一字未改，只去掉一层缩进并加 export。
  */
-import { $, $$, minToStr, uid } from '../core/util.js';
+import { $, $$, minToStr, uid, todayKey } from '../core/util.js';
 import { S, save } from '../core/store.js';
-import { MAX_TIMES, ensureFixedDoses, medById, medMode, needRebuildDoses, normTimes, rebuildTodayDoses, timeInputToMin, todayDoses } from '../core/schedule.js';
+import { MAX_TIMES, ensureFixedDoses, medById, medMode, needRebuildDoses, normTimes,
+         rebuildTodayDoses, schedLabel, normSched, timeInputToMin, todayDoses } from '../core/schedule.js';
 import { askConfirm, enterOverlay, leaveOverlay, rememberFocus, restoreFocus, setScrim, sheetSaveBegin, sheetSaveReset } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
@@ -33,6 +34,12 @@ export function openSheet(medId) {
   /* 编辑态的临时值：改完点「保存」才写进数据，中途关掉不影响原有设置 */
   medModeDraft = med ? medMode(med) : 'interval';
   fixedTimes = med ? normTimes(med.times) : [];
+  /* ★ S-3：周期也要预填 —— 否则「编辑」一次就把周期重置成每天。
+   *   旧数据没有 sched → normSched 返回 daily ✓ */
+  var sc0 = normSched(med);
+  schedModeDraft = sc0.mode;
+  weekDraft = sc0.weekdays.slice();
+  cycleDraft = sc0.everyDays >= 2 ? sc0.everyDays : 2;
   $('#deleteMed').classList.toggle('hidden', !med);
   renderPreview();
   /* 浮层打开时把焦点带进去（键盘用户不用满屏找输入框）。
@@ -57,6 +64,11 @@ export var editingId = null;
 /* 药品编辑浮层里的临时状态：模式与时刻表。点「保存」才写进数据。 */
 export var medModeDraft = 'interval';
 
+/* ★ S-3：周期草稿。同样只在点「保存」时才写进数据 —— 中途关掉不影响原有设置。 */
+export var schedModeDraft = 'daily';
+export var weekDraft = [];        // [0..6]，0 = 周一（与 dowOf 同一约定）
+export var cycleDraft = 2;
+
 export var fixedTimes = [];
 
 export function renderPreview() {
@@ -71,6 +83,9 @@ export function renderPreview() {
     el.classList.toggle('on', on);
     el.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+  /* S-3：周期与「服药方式」是**正交**的两件事（隔天吃也可以固定时刻），
+     所以必须在 isFixed 早退**之前**渲染。 */
+  renderSched();
   if (isFixed) { renderTimes(); renderFixedHint(); return; }
 
   var box = $('#previewChips');
@@ -111,7 +126,7 @@ export function renderTimes() {
       + '<input type="time" class="time-input" data-ti="' + i + '" value="' + minToStr(t) + '"'
       + ' aria-label="第 ' + (i + 1) + ' 个服药时刻">'
       + '<button class="icon-btn" data-tdel="' + i + '" aria-label="删掉第 ' + (i + 1) + ' 个时刻">'
-      + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>'
+      + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" style="stroke:var(--text)" stroke-width="1.8" stroke-linecap="round"/></svg>'
       + '</button></div>';
   }).join('');
 }
@@ -123,6 +138,51 @@ export function renderFixedHint() {
   if (!ts.length) { hint.textContent = '至少要设一个时刻，否则它不会提醒。'; return; }
   hint.textContent = '每天 ' + ts.length + ' 次：' + ts.map(minToStr).join('、') + '。'
     + (ts.length > 8 ? '次数较多，确认一下是否与医嘱一致。' : '');
+}
+
+/* ⚠️ 从**草稿**构造一个临时 med，只为喂给 schedLabel 生成描述文字 ——
+ * 不写进数据，也不碰真实 med。 */
+function draftMed() {
+  if (schedModeDraft === 'weekly') return { sched: { mode: 'weekly', weekdays: weekDraft } };
+  if (schedModeDraft === 'cycle') return { sched: { mode: 'cycle', everyDays: cycleDraft } };
+  return {};
+}
+
+/* S-3 周期区块：切档位、刷 chips、更新描述。 */
+export function renderSched() {
+  $$('#schedRow [data-sched]').forEach(function (el) {
+    var on = el.getAttribute('data-sched') === schedModeDraft;
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  var wk = $('#weekRow'), cy = $('#cycleRow'), num = $('#cycNum'), hint = $('#schedHint');
+  if (wk) wk.classList.toggle('hidden', schedModeDraft !== 'weekly');
+  if (cy) cy.classList.toggle('hidden', schedModeDraft !== 'cycle');
+  if (num) num.textContent = String(cycleDraft);
+  $$('#weekRow [data-week]').forEach(function (el) {
+    var on = weekDraft.indexOf(parseInt(el.getAttribute('data-week'), 10)) >= 0;
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  if (hint) {
+    /* 选了「每周」却一天没选 = 一次都不吃 —— 必须**当面警告**，
+     * 否则用户以为设置好了，实际再也不会提醒。 */
+    hint.textContent = (schedModeDraft === 'weekly' && !weekDraft.length)
+      ? '一天都没选 —— 这样它不会提醒，至少选一天。'
+      : schedLabel(draftMed());
+  }
+}
+
+/* 草稿 → 要写进数据的 sched 对象。返回 null 表示「每天」（**不写字段**）。 */
+function schedFromDraft(prevMed) {
+  if (schedModeDraft === 'weekly') return { mode: 'weekly', weekdays: weekDraft.slice() };
+  if (schedModeDraft === 'cycle') {
+    /* ⚠️ anchor 必须**沿用原值**：否则改一次剂量就把周期相位重置成"从今天重新数"，
+     * 用户刚调好的「隔 2 天」会错位。新建 / 从别的档位切过来时才用今天。 */
+    var old = normSched(prevMed);
+    return { mode: 'cycle', everyDays: cycleDraft, anchor: old.anchor || todayKey() };
+  }
+  return null;
 }
 
 export function clampStep() {
@@ -181,8 +241,12 @@ export function bindSheet() {
       if (m) {
         /* 先把"改动前"的样子拍下来再落值 —— 判断必须在赋值之前，
          * 否则拿新旧一比永远是"没变"。 */
-        var prev = { mode: medMode(m), times: normTimes(m.times), interval: m.interval };
-        var next = { mode: medModeDraft, times: ts, interval: stepVal };
+        var nextSched = schedFromDraft(m);
+        var prev = { mode: medMode(m), times: normTimes(m.times), interval: m.interval, sched: m.sched || null };
+        var next = { mode: medModeDraft, times: ts, interval: stepVal, sched: nextSched };
+        /* ★ S-3：daily 时 setOrDel 会**删掉**这个字段（不留 null / 空对象），
+           备份格式保持干净，与旧数据形态一致。 */
+        setOrDel(m, 'sched', nextSched);
         m.name = name;
         m.mode = medModeDraft;
         if (isFixed) m.times = ts;
@@ -206,6 +270,8 @@ export function bindSheet() {
     } else {
       var nm = { id: uid(), name: name, interval: stepVal };
       if (isFixed) { nm.mode = 'fixed'; nm.times = ts; }
+      /* ★ S-3：新建时周期从草稿来（cycle 的 anchor 取今天） */
+      setOrDel(nm, 'sched', schedFromDraft(null));
       /* ★ S-1：三个新字段 */
       setOrDel(nm, 'dose', doseRaw);
       setOrDel(nm, 'unit', unitRaw);
@@ -244,6 +310,28 @@ export function bindSheet() {
   };
 
   /* ---- 服药方式切换（F-4） ---- */
+  /* ★ S-3：周期档位 / 星期 / 隔天数 —— 写点全在这里（状态与绑定同住）。 */
+  $$('#schedRow [data-sched]').forEach(function (el) {
+    el.onclick = function () {
+      var v = el.getAttribute('data-sched');
+      if (v === schedModeDraft) return;
+      schedModeDraft = v;
+      renderSched();
+    };
+  });
+  $$('#weekRow [data-week]').forEach(function (el) {
+    el.onclick = function () {
+      var d = parseInt(el.getAttribute('data-week'), 10);
+      var i = weekDraft.indexOf(d);
+      if (i >= 0) weekDraft.splice(i, 1); else weekDraft.push(d);
+      weekDraft.sort(function (a, b) { return a - b; });
+      renderSched();
+    };
+  });
+  var cm = $('#cycMinus'), cp = $('#cycPlus');
+  if (cm) cm.onclick = function () { cycleDraft = Math.max(2, cycleDraft - 1); renderSched(); };
+  if (cp) cp.onclick = function () { cycleDraft = Math.min(30, cycleDraft + 1); renderSched(); };
+
   $$('#modeRow [data-mode]').forEach(function (el) {
     el.onclick = function () {
       var v = el.getAttribute('data-mode');

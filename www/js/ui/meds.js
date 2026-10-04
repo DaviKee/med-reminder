@@ -41,7 +41,7 @@ export function renderMeds() {
     + '<div class="card-row" style="padding:0 0 4px">'
     + '<h1 class="h1">我的药品</h1>'
     + '<button class="icon-btn" id="btnAdd" aria-label="添加药品">'
-    + '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>'
+    + '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" style="stroke:var(--text)" stroke-width="1.8" stroke-linecap="round"/></svg>'
     + '</button></div>';
 
   if (!S.meds.length) {

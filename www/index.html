@@ -130,6 +130,39 @@
         按固定时刻：每天到点就提醒（如早 8 点、晚 8 点），不顺延。</p>
     </div>
 
+    <!-- S-3 服用周期：医嘱里「隔天一次」「每周一三五」很常见。
+         默认「每天」——与改造前一致，不动它就等于没这个功能。 -->
+    <div class="field">
+      <label class="field-label">服用周期</label>
+      <div class="chip-row" id="schedRow">
+        <button class="chip fs-chip on" data-sched="daily" aria-pressed="true">每天</button>
+        <button class="chip fs-chip" data-sched="weekly" aria-pressed="false">每周</button>
+        <button class="chip fs-chip" data-sched="cycle" aria-pressed="false">隔几天</button>
+      </div>
+      <div class="week-row hidden" id="weekRow" style="margin-top:10px">
+        <button class="chip week-chip" data-week="0" aria-pressed="false">一</button>
+        <button class="chip week-chip" data-week="1" aria-pressed="false">二</button>
+        <button class="chip week-chip" data-week="2" aria-pressed="false">三</button>
+        <button class="chip week-chip" data-week="3" aria-pressed="false">四</button>
+        <button class="chip week-chip" data-week="4" aria-pressed="false">五</button>
+        <button class="chip week-chip" data-week="5" aria-pressed="false">六</button>
+        <button class="chip week-chip" data-week="6" aria-pressed="false">日</button>
+      </div>
+      <div class="stepper hidden" id="cycleRow" style="margin-top:10px">
+        <button class="step-btn" id="cycMinus" aria-label="减少">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14" style="stroke:var(--text)" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <div class="step-val">
+          <span class="step-num" id="cycNum">2</span>
+          <span class="step-unit">天一次</span>
+        </div>
+        <button class="step-btn step-plus" id="cycPlus" aria-label="增加">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" style="stroke:var(--contrast-text)" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <p class="hint" id="schedHint">每天</p>
+    </div>
+
     <div class="field" id="fieldInterval">
       <label class="field-label">服药间隔</label>
       <div class="stepper">

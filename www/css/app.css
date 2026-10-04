@@ -312,6 +312,13 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 /* 字号档位按钮：触摸目标按 44×44 给足；选中态用实心，不只用颜色区分（色盲可辨） */
 .fs-chip{min-height:44px;padding:7px 16px;cursor:pointer;background:transparent}
 .fs-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
+/* S-3 服用周期：7 个星期按钮等宽平分一行。
+   触摸目标仍按 44px 给足（适老化），所以不能用固定宽度的 .chip。
+   选中态沿用反色块语义 —— 亮色主题下自动翻转（见 §0.3）。 */
+.week-row{display:flex;gap:6px}
+.week-chip{flex:1 1 0;min-width:0;min-height:44px;padding:0;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;background:transparent}
+.week-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
 .sheet-actions{display:flex;flex-direction:column;gap:4px}
 
 .dlg-wrap{
