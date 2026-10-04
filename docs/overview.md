@@ -34,24 +34,20 @@
 | **v1.4.15** | `7fcd504` | 10-01 | **S-2** 库存管理 —— 剩余量 / 打卡自动扣减 / 预计用完日 + 低库存提醒 |
 | **v1.4.16** | `b8c40ce` | 10-01 | **修（真机）**：备注输入框文字与光标出框 —— 多行框不能复用 `height:54px` 的单行壳 |
 | **v1.5.0** | `4284df9` | 10-01 | **S-7 服药报告**（近 7 天给医生 / 家属）—— `adherenceReport()` + 报告浮层，**未引 PDF 库**；**阶段 C 完成** |
-| **v1.5.1** | `192378c` | 10-01 | **A-2**：抽 `ui/cards.js`（共享渲染片段）—— app.js 2673 → 2553 行 |
-| **v1.5.2** | `1492d5f` | 10-01 | **A-2**：抽 `ui/toast.js`（**被所有块依赖的叶子先归位**）—— app.js → 2547 行 |
-| **v1.5.3** | `5f9f72d` | 10-01 | **A-2**：建 **`ui/render.js` 重绘调度（订阅式）** —— `render()` 收口，55 处调用点不动 |
-| **v1.5.4** | `307e653` | 10-01 | **A-2**：**`render()` 移入 `ui/render.js`** —— 视图模块调它不再算「引用上层」 |
-| **v1.5.5** | `300aee3` | 10-01 | **A-2**：抽 `ui/actions.js`（业务动作） |
-| **v1.5.6~9** | `d992b6c`…`3ee8d97` | 10-04 | **A-2 连做 4 块**：`actions` 补搬 / **`ui/tabs.js`** / **`ui/photo.js`** / **`ui/permission.js`** —— app.js 2520 → **2097 行** |
-| **v1.5.10** | `8d6b62e` | 10-04 | **切页动效**：新页方向感知滑入 + 底部白胶囊滑动，替掉 `display` 硬切 |
+| **v1.5.1~9** | `192378c`…`3ee8d97` | 10-01 | **A-2 中枢与叶子**：`cards` / `toast` / **`render.js` 重绘调度** / `actions` / `tabs` / `photo` / `permission` —— app.js 2673 → 2097 行（§32~35） |
+| **v1.5.10** | `8d6b62e` | 10-04 | **切页动效**：新页方向感知滑入 + 底部白胶囊滑动，替掉 `display` 硬切（§36） |
 | **v1.5.11** | `975ab1d` | 10-04 | **A-2**：抽 `ui/fontsize.js`（字号档位）—— app.js 2097 → 2070 行 |
-| **v1.5.17** | `016de22` | 10-04 | **S-9 web 侧**：`core/cardSummary.js`（桌面卡片摘要落沙箱）+ 27 条 spec |
-| **v1.5.18** | `3cabbe5` | 10-04 | **S-5 明暗主题**：颜色全量变量化 + 亮色主题 + 三档切换（深色/浅色/跟随系统）+ 58 条 spec |
-| **v1.5.19** | `403e247` | 10-04 | **S-3 服用周期**（每周指定星期 / 每隔 N 天）+ 修 S-5 遗漏（4 处 JS 内联 SVG 未变量化）+ 79 条 spec |
-| **v1.5.20** | `b9524a9` | 10-04 | **S-4 疗程管理**（起止日期 + 到期自动停用）+ 消因（asDay 内联）+ 58 条 spec |
-| **v1.5.13~16** | `6b57092`…`1d35626` | 10-04 | **A-2 拆模块全部完成**：`today` / `data` / `records` / `meds` —— app.js 1795 → **698 行**。**✅ v1.5.12 真机验证全部通过** |
-| **v1.5.12** | `1e9869f` | 10-04 | **A-2**：抽 `ui/sheet.js`（药品编辑浮层）—— app.js → **1795 行**；**顺带修掉 v1.5.8 起的真 bug**（`pendingShot` 漏 import，拍照重试会崩） |
+| **v1.5.12** | `1e9869f` | 10-04 | **A-2**：抽 `ui/sheet.js`（药品编辑浮层）—— app.js → **1795 行**；**顺带修掉 v1.5.8 起的真 bug**（`pendingShot` 漏 import，拍照重试会崩）（§37） |
+| **v1.5.13~16** | `6b57092`…`1d35626` | 10-04 | **A-2 拆模块全部完成**：`today` / `data` / `records` / `meds` —— app.js 1795 → **698 行**。**✅ v1.5.12 真机验证全部通过**（§38~39） |
+| **v1.5.17** | `016de22` | 10-04 | **S-9 web 侧**：`core/cardSummary.js`（桌面卡片摘要落沙箱）+ 27 条 spec（§40） |
+| **v1.5.18** | `3cabbe5` | 10-04 | **S-5 明暗主题**：颜色全量变量化 + 亮色主题 + 三档切换 + 58 条 spec（§41） |
+| **v1.5.19** | `403e247` | 10-04 | **S-3 服用周期**（每周指定星期 / 每隔 N 天）+ 修 S-5 遗漏（4 处 JS 内联 SVG 未变量化）+ 79 条 spec（§42） |
+| **v1.5.20** | `b9524a9` | 10-04 | **S-4 疗程管理**（起止日期 + 到期自动停用）+ 消因（asDay 内联）+ 58 条 spec（§43） |
+| **v1.5.21** | `2be51ae` | 10-04 | **S-6 数据可视化**：月历 / 月度统计 / 漏服时段 / 计划 vs 实际偏差 + 45 条 spec —— **阶段 D 完成**（§44） |
 
-- 测试：**22 套 818 条 spec 全绿**；harness 25 关口 **25 通过 / 0 失败 / 0 咨询**
-- 最新 APK：`med-reminder/MedReminder-v1.5.20-2026-10-04.apk` · **6.26 MB** ·
-  MD5 `78912ACF1F56AC054A11C8F6615B7A88`
+- 测试：**23 套 863 条 spec 全绿**；harness 26 关口 **26 通过 / 0 失败 / 0 咨询**
+- 最新 APK：`med-reminder/MedReminder-v1.5.21-2026-10-04.apk` · **6.27 MB** ·
+  MD5 `C05E40BA0EE0EE7C52F88095F9110050`
 - ✅ **真机确认「平台层搬迁」稳住了**（返回键 / 切后台 / 拍照恢复均正常）→「只收口、不抽象」策略成立
 - ✅ **验证 harness 已建成**（`harness/harness.py`）—— 16 关口一键跑、三态退出码（0 全过 / 1 有失败 / 2 环境问题），
   并**挂到 git pre-commit**（红了拦住提交）
@@ -117,11 +113,11 @@
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    b9524a9  DaviKee <davi.kee@outlook.com>  feat(S-4): 疗程管理 · v1.5.20
+HEAD    2be51ae  DaviKee <davi.kee@outlook.com>  feat(S-6): 数据可视化 · v1.5.21
 工作区  clean（干净）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.5.20  APP_BUILD = 2026-10-04
+源码    APP_VERSION = 1.5.21  APP_BUILD = 2026-10-04
 结构    www/js/core/{util,store,schedule}.js · ui/{render,cards,toast,overlay}.js
         · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
         app.js **698 行**（A-2 完成：2673 → 698，降 74%）｜ 21 个模块、零循环依赖
