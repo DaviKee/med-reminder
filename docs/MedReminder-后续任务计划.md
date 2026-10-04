@@ -42,7 +42,7 @@
 | ⚪ **P3**  | **S-5**     | 明暗主题（CSS 变量化）—— **建议移植前做**，否则两套工程重复改 CSS                                                                                                                                                                                                                         | 体验    | 中   | —      |
 | ⚪ **P4**  | **S-6**     | 数据可视化（月历 / 月度 / 漏服时段 / **计划 vs 实际偏差**）                                                                                                                                                                                                                           | 新功能   | 中   | S-1    |
 | ✅ **P4**  | ~~S-7~~     | ~~报告导出（近 7 天给医生 / 家属）~~ —— **✅ 已完成（v1.5.0，见 §31）**：`adherenceReport()` 纯函数 + 报告浮层（依从率 / 逐日表 / 可复制文字）。**未引 PDF 库**，纯 web、双端通用                                                                                                                                     | 新功能   | 中   | S-2 ✅  |
-| 🆕 **P2** | **S-9**     | **桌面卡片（widget）** —— 不打开 App 就能看到「下次吃药时间 + 今日进度」。**竞品标配**（药管家 / 爸妈的药盒 / 系统健康三叶草都有），**适老化硬需求**。✅ **数据共享架构已调研**（2026-09-30，特性研究 §9）：web 层摘要落盘 card_state.json → FormExtensionAbility 读 → FormBindingData 推送；MVP 不依赖受控权限；工作量 ~100 行 JS（双端通用）+ ~200 行 ArkTS           | 新功能   | 中   | S-0 ✅  |
+| 🆕 **P2** | **S-9**     | **桌面卡片（widget）** —— 不打开 App 就能看到「下次吃药时间 + 今日进度」。**竞品标配**（药管家 / 爸妈的药盒 / 系统健康三叶草都有），**适老化硬需求**。✅ **web 侧已完成**（v1.5.17 · `core/cardSummary.js` + 27 条 spec）；✅ 数据共享架构已调研（特性研究 §9）：web 层摘要落盘 card_state.json → FormExtensionAbility 读 → FormBindingData 推送；MVP 不依赖受控权限；工作量 ~100 行 JS（双端通用）+ ~200 行 ArkTS           | 新功能   | 中   | S-0 ✅  |
 | 🆕 **P2** | **S-10**    | **语音播报药名（TTS）** —— 到点念出"该吃降压药了"。**老人看不清屏幕也能知道吃哪种药**，比提醒本身更关键。爸妈的药盒已做（1.2）。⚠️ 依赖原生 TTS，须随 S-0 验证                                                                                                                                                                  | 新功能   | 低   | S-0    |
 | 🆕 **P2** | **S-11**    | **手表端提醒** —— 手表振动是**最不容易被忽略**的提醒方式。药管家 / 叮当快药 / 华为系统都已支持。**我们完全没有**。⚠️ 依赖鸿蒙穿戴侧能力，**spike 必须验证"通知能否在手表上振动"**                                                                                                                                                      | 新功能   | 高   | 鸿蒙适配落地 |
 | 🆕 **P1** | **A-1**     | **平台适配层收口（多平台前置）** —— 平台代码从业务层收进 `www/js/platform/`，**业务层再无 `window.Capacitor`**。**0.1–0.4 已完成（v1.4.12 · 见 §28）**；剩 **0.6 平台生命周期**（返回键/恢复事件，**多平台的真正障碍**）与 0.7 真机验证                                                                                              | 重构    | 中   | —      |
@@ -3048,3 +3048,52 @@ app.js 698 行：只剩 入口 boot / 提醒流程 / 滑动手势 / 遗留数据
 
 > ⚠️ 仍未做：① **S-9 的 cardSummary** ② 代理提醒二申（秦老师）
 > ③ **真机验证 v1.5.13~v1.5.16**（纯搬运，但今天已证明"纯搬运也可能带出 bug"）
+
+---
+
+## 40. 2026-10-04（午前末）：S-9 的 web 侧落地 —— `core/cardSummary.js`（v1.5.17）
+
+### 40.1 背景
+
+S-9 桌面卡片是**适老化硬需求**（竞品标配），但它**不是纯 web 层能做的** ——
+必须 ArkTS。**能先做的是"web 侧算好摘要、落盘给卡片读"**，这部分双端通用。
+
+方案在 `§26` 与《OpenHarmony7 特性研究》§9 早就定稿（2026-09-30），S-1 那半当天就做了，
+**cardSummary 这半一直挂着**。本轮补上。
+
+### 40.2 为什么摘要必须由 web 层算好
+
+| 约束 | 含义 |
+|---|---|
+| 卡片读不到 WebView 的 `localStorage` | 必须经文件中转 |
+| `onAddForm` 10 秒限制 | 卡片侧不该现算排程 |
+| 定时刷新 ≥30 分钟 | 卡片只负责**展示**，到点提醒归通知（等 AGC） |
+
+### 40.3 实现
+
+| 文件 | 改动 |
+|---|---|
+| **新** `www/js/core/cardSummary.js` | `computeSummary()`（装配 + **全字段字符串化**）· `writeCardFile()`（**先 mkdir 再 writeFile**、失败静默、无插件跳过） |
+| `www/js/core/store.js` | `saveHooks` 加 `card` 槽 + `save()` 末尾调用（沿 backup 同款模式） |
+| `www/js/app.js` | `setSaveHooks({ card: writeCardFile })` 注册 |
+| 四件套 | index.html modulepreload · sw.js ASSETS+CACHE · sources.js · verify-apk.py |
+| **新** `tests/card-summary.spec.js` | **27 条** |
+
+**几个刻意的选择**：
+
+- `nextTime` 用 `dueAt()` 而不是 `d.time` —— 延后过的按**延后时刻**显示（与 `nextPending` 同口径）。
+- **空串表示"没有"**，且 **`00:00` 不能被当成空**（spec 专门钉了这条）。
+- **失败一律静默** —— 它挂在每次 `save()` 上，抛了会中断用户操作。
+- **只写同应用沙箱**（`Directory.Data`），不碰公共目录、不申请权限 —— MVP 能立刻落地的关键。
+
+### 40.4 ⏭ 下一步
+
+**ArkTS 卡片侧（~200 行）** —— 项目的第一份 ArkTS 代码：
+
+```
+FormExtensionAbility.onUpdateForm / onAddForm
+  读 Directory.Data/card/card_state.json → createFormBindingData → formProvider.updateForm
+  formId 在 onAddForm 时存 preferences
+```
+
+> ⚠️ 仍未做：① 代理提醒二申（秦老师）② **真机验证 v1.5.13~v1.5.17**
