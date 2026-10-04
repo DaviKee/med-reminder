@@ -61,26 +61,32 @@ def gates(ctx):
     # 「用到了却没声明、也没 import」→ 运行到那行才 ReferenceError，
     # 而抽函数块的测试很可能碰不到那行 → 静默漏过。
     #
-    # ⚠️ 这是一个 **advisory（咨询性）** 关口，不是硬闸门 —— 它会把真问题
-    #    报出来，但它自己有**已知的假阳性**（正则字面量与注释里的词）：
-    #      · schedule.js 的 `$`  ← 来自 /^(\d{1,2}):(\d{2})$/
-    #      · app.js 的 `Android` ← 来自注释里的「Android 13」
-    #      · backup.js 的 `backup`、photo.js 的 vendor 压缩码（A/Za/z0…）
-    #    把它当硬闸门 = 每天假报红，红久了就没人看了（"狼来了"）。
-    #    所以：**永远执行、输出保留给人看、但不影响退出码。**
-    app_modules = [
-        'www/js/core/util.js', 'www/js/core/store.js', 'www/js/core/schedule.js',
-        'www/js/ui/overlay.js', 'www/js/app.js',
-        'www/js/platform/notifications.js', 'www/js/platform/camera.js', 'www/js/platform/storage.js',
-        'www/js/platform/lifecycle.js',
-    ]
+    # ★ 2026-10-04 两处改动 —— 原来这个关口**形同虚设**：
+    #
+    #  ① 文件清单改成**自动扫描**。原来是手写的 9 个路径（写于还没拆模块的年代），
+    #     于是 ui/ 下十几个模块**根本没被检查** —— `pendingShot` 漏 import 这种真问题
+    #     就藏在里面，从 v1.5.8 一直藏到 v1.5.12，还是靠手工跑工具才抓到。
+    #     **手写清单必然过时；过时的清单 = 假装在检查。**
+    #
+    #  ② 从「咨询性」升为**硬闸门**。原来不敢当闸门，是因为工具有已知假阳性
+    #     （正则字面量被剥成标识符），怕"每天假报红、红久了没人看"。
+    #     现在假阳性逐条核实后登记进工具的 KNOWN_FP 白名单，用 --strict 跑 ——
+    #     **白名单外的才算真漏 import → 退出码 1**。
+    #     代价是白名单要维护；但比"永远红的检查"强得多。
+    jsroot = os.path.join(repo, 'www', 'js')
+    app_modules = sorted(
+        os.path.join(dp, f)
+        for dp, _, fs in os.walk(jsroot)
+        for f in fs if f.endswith('.js')
+    )
     G.append({
         'id': 'imports',
-        'name': 'ES module 漏 import 诊断（咨询性：有已知假阳性，不阻断）',
-        'kind': 'advisory',
-        'why': '搬运/新增模块时容易漏 import；但该工具对正则字面量会假报，故只看不当闸',
-        'cmd': [py, os.path.join(ws, '.workbuddy', 'tools', 'check-module-imports.py')]
-               + [os.path.join(repo, m) for m in app_modules],
+        'name': 'ES module 漏 import 诊断（硬闸门：白名单外的未声明名字会报红）',
+        'kind': 'script',
+        'why': '搬运/新增模块时漏一个 import 不会报语法错，只在执行到那一行才 ReferenceError；'
+               'spec 跑的是聚合源码文本，发现不了。假阳性由工具的 KNOWN_FP 白名单兜住。',
+        'cmd': [py, os.path.join(ws, '.workbuddy', 'tools', 'check-module-imports.py'), '--strict']
+               + app_modules,
         'cwd': repo,
         'soft': False,
     })
