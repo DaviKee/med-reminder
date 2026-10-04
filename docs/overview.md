@@ -42,7 +42,7 @@
 | **v1.5.6~9** | `d992b6c`…`3ee8d97` | 10-04 | **A-2 连做 4 块**：`actions` 补搬 / **`ui/tabs.js`** / **`ui/photo.js`** / **`ui/permission.js`** —— app.js 2520 → **2097 行** |
 | **v1.5.10** | `8d6b62e` | 10-04 | **切页动效**：新页方向感知滑入 + 底部白胶囊滑动，替掉 `display` 硬切 |
 | **v1.5.11** | `975ab1d` | 10-04 | **A-2**：抽 `ui/fontsize.js`（字号档位）—— app.js 2097 → 2070 行 |
-| **v1.5.13/14** | `6b57092` / `3ea5b1a` | 10-04 | **A-2 终点推进**：抽 `ui/today.js` + `ui/data.js` —— app.js 1795 → **1116 行**（累计降 58%）。**✅ v1.5.12 真机验证全部通过** |
+| **v1.5.13~16** | `6b57092`…`1d35626` | 10-04 | **A-2 拆模块全部完成**：`today` / `data` / `records` / `meds` —— app.js 1795 → **698 行**。**✅ v1.5.12 真机验证全部通过** |
 | **v1.5.12** | `1e9869f` | 10-04 | **A-2**：抽 `ui/sheet.js`（药品编辑浮层）—— app.js → **1795 行**；**顺带修掉 v1.5.8 起的真 bug**（`pendingShot` 漏 import，拍照重试会崩） |
 
 - 测试：**18 套 620 条 spec 全绿**；harness 21 关口 **21 通过 / 0 失败 / 0 咨询**
@@ -113,20 +113,21 @@
 ```
 仓库    C:\WorkBuddy\med-reminder\med-reminder
 文档    C:\WorkBuddy\med-reminder\med-reminder\docs（16 份，2026-10-01 纳入 git）
-HEAD    3ea5b1a  DaviKee <davi.kee@outlook.com>  refactor(arch): 抽 ui/data.js · v1.5.14
+HEAD    1d35626  DaviKee <davi.kee@outlook.com>  refactor(arch): 抽 ui/meds.js · v1.5.16
 工作区  clean（干净）
 
 工具链  C:\DevEnv\{jdk-17,node,git} + SDK @C:\Users\Qinn\AppData\Local\Android\Sdk
-源码    APP_VERSION = 1.5.14  APP_BUILD = 2026-10-04
+源码    APP_VERSION = 1.5.16  APP_BUILD = 2026-10-04
 结构    www/js/core/{util,store,schedule}.js · ui/{render,cards,toast,overlay}.js
         · platform/{notifications,camera,storage,lifecycle}.js   —— 均已独立为 ES module
-        app.js **1116 行** ｜ 依赖方向：util ← store ← schedule ← app，util ← ui/* ← app
+        app.js **698 行**（A-2 完成：2673 → 698，降 74%）｜ 21 个模块、零循环依赖
+        依赖方向：util ← store ← schedule ← app，util ← ui/* ← app
         ★ 平台差异（插件调用 / 生命周期 / 返回键 / 前后台）**全部收在 www/js/platform/**
           —— 业务层已无 window.Capacitor，这是「多平台准备」的关键一条
         ★ **重绘调度**在 `ui/render.js`（`markDirty` / `render` / `setRenderers`）——
           拆视图的前置已就位（见计划 §33）
 测试    harness/harness.py → 20 关口（18 套 579 条 spec + APK 验收）；已挂 git pre-commit
-APK     med-reminder/MedReminder-v1.5.14-2026-10-04.apk（6.29 MB · MD5 33A76290…）
+APK     med-reminder/MedReminder-v1.5.16-2026-10-04.apk（6.29 MB · MD5 697D7E8C…）
         旧版（v1.4.1 / v1.4.1-rebuild / v1.4.2 / v1.4.5 等）已归入 归档/apk/
 鸿蒙    spike/harmony-test/ 独立工程（不碰主项目）；devecocli 已装；代理提醒等 AGC 审批
 D 盘    仅剩回收站 + 无关目录；D:\WorkBuddy 与 D:\DevEnv 均已不存在
