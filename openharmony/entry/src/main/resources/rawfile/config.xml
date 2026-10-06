@@ -1,0 +1,54 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+  Copyright (c) 2026 Huawei Device Co., Ltd and iSoftStone Information Technology(Group)Co.,Ltd.
+ 
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+ 
+      http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<widget id="com.medreminder.app" version="0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>定时服药提醒</name>
+    <description>Sample Apache Cordova App</description>
+    <author email="dev@cordova.apache.org" href="https://cordova.apache.org">
+        Apache Cordova Team
+    </author>
+    <content src="index.html" />
+    <access origin="http://ceshi.tongecn.com/*" />
+    <access origin="*" />
+
+    <preference name="ShowSplashScreenSpinner" value="true" />
+    <preference name="AutoHideSplashScreen" value="false" />
+    <preference name="SplashScreenDelay" value="0" />
+    <preference name="FadeSplashScreenDuration" value="1000" />
+    <preference name="BackupWebStorage" value="none" />
+    <preference name="SplashScreen" value="splash" />
+    <cordova-protocol-force value="www.tongecn.com" />
+    <!--cordova静态资源缓存时长,单位秒钟-->
+    <cordova-cache-duration value="0" />
+    <preference name="accessBackgroundLocation" value="true" />
+    <!--配置是否沉浸式布局,系统模式是非沉浸式布局 -->
+    <preference name="StatusBarOverlaysWebView" value="false" />
+    <!--配置状态栏颜色 -->
+    <preference name="StatusBarBackgroundColor" value="#F90707" />
+    <!--配置状态栏文字颜色,在OpenHarmony中新增加的属性，安卓和ios不具备 -->
+    <preference name="StatusBarTextColor" value="#ffffff" />
+    <!--配置状态栏是否高亮度显示,在OpenHarmony中，默认是非高亮度的，所以不是高亮度的不要配置 -->
+    <preference name="StatusBarStyle" value="lightcontent" />
+    <!--cordova内部系统导航条背景色 -->
+    <preference name="NavigationBarBackgroundColor" value="#F90707" />
+    <!--cordova内部系统导航条文字颜色 -->
+    <preference name="NavigationBarFontColor" value="#ffffff" />
+    <!--cordova内部系统导航条title位置left|center|right -->
+    <preference name="NavigationBarFontAlign" value="center" />
+    <!--导航条高亮显示，在OpenHarmony中，默认是非高亮度的，所以不是高亮度的不要配置-->
+    <preference name="NavigationBarLight" value="true" />
+    <preference name="Hostname" value="app.com" />
+</widget>

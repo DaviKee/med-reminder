@@ -1,0 +1,6 @@
+{
+  "src": [
+    "components/InAppBrowser/InAppBrowser",
+    "components/MainPage"
+  ]
+}

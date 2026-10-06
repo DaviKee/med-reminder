@@ -9,9 +9,15 @@
     "verify:list": "python harness/harness.py --list",
     "verify:selftest": "python harness/harness.py --selftest && python harness/harness.py --selftest-e2e",
     "sync": "cap sync",
-    "android": "cap open android"
+    "android": "cap open android",
+    "build": "node -e \"console.log('[skip] 纯静态 web，无构建步骤 —— hionic sync 需要 build 脚本存在')\""
   },
   "dependencies": {
+    "@capacitor-ohos/app": "^8.0.2",
+    "@capacitor-ohos/camera": "^8.0.2",
+    "@capacitor-ohos/filesystem": "^8.0.2",
+    "@capacitor-ohos/local-notifications": "^8.0.1",
+    "@capacitor-ohos/ohos": "^8.0.2",
     "@capacitor/app": "^8.1.2",
     "@capacitor/camera": "^8.2.5",
     "@capacitor/core": "^8.5.2",
@@ -20,6 +26,7 @@
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.2",
-    "@capacitor/cli": "^8.5.2"
+    "@capacitor/cli": "^8.5.2",
+    "hionic": "^2.1.16"
   }
 }

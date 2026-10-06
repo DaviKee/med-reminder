@@ -1,0 +1,20 @@
+{
+  "routerMap": [
+    {
+      "name": "InAppBrowser",
+      "pageSourceFile": "src/main/ets/components/InAppBrowser/InAppBrowser.ets",
+      "buildFunction": "PageBrowser",
+      "data": {
+        "description" : "this is InAppBrowser"
+      }
+    },
+    {
+      "name": "AppBrowserPage",
+      "pageSourceFile": "src/main/ets/components/InAppBrowser/AppBrowserPage.ets",
+      "buildFunction": "PageBrowser",
+      "data": {
+        "description" : "this is InAppBrowserPage"
+      }
+    }
+  ]
+}

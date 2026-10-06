@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>定时服药提醒</title>
+<meta name="description" content="自定义药品与服药间隔，每天首次打卡后自动排程当天提醒。">
+<meta name="theme-color" content="#0A0A0A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<script>
+/* 首屏主题：必须在首次渲染前跑完，否则浅色用户会看到「暗色闪一下 → 才变亮」。
+   ⚠️ 这里**故意**与 ui/theme.js 重复了一份最小判断 —— 模块要等加载，等它就一定会闪。
+      **权威实现在 ui/theme.js**；改规则时两处一起改（tests/theme.spec.js 有断言盯着
+      key、档位名与判定结果一致）。 */
+(function () { try {
+  var m = localStorage.getItem('medreminder.theme.v1') || 'dark';
+  var eff = (m === 'light') ? 'light'
+          : (m === 'sys') ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+          : 'dark';
+  if (eff === 'light') document.documentElement.setAttribute('data-theme', 'light');
+} catch (e) { /* ignore */ } })();
+</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <!-- Views -->
+  <main id="main">
+    <section class="view active" data-view="today"><div class="stack" id="todayView"></div></section>
+    <section class="view" data-view="meds"><div class="stack" id="medsView"></div></section>
+    <section class="view" data-view="records"><div class="stack" id="recordsView"></div></section>
+  </main>
+
+  <!-- Tab bar -->
+  <nav class="tabbar">
+    <div class="tabpill">
+      <!-- 白色胶囊（纯装饰层，pointer-events:none）—— 切换时由 setTab 改它的 --i 平滑滑动。
+           放最前当背景层；初始 --i 默认 0 = 第一个页签，与 HTML 里 today 的 active 一致。 -->
+      <div class="tab-ind" aria-hidden="true"></div>
+      <button class="tab active" data-tab="today">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5.4l3.4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>今日</span>
+      </button>
+      <button class="tab" data-tab="meds">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)" stroke="currentColor" stroke-width="1.8"/><path d="M9 9l6 6" stroke="currentColor" stroke-width="1.8"/></svg>
+        <span>药品</span>
+      </button>
+      <button class="tab" data-tab="records">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M2 20h20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>记录</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Scrim -->
+  <div class="scrim" id="scrim"></div>
+
+  <!-- Add / Edit med sheet -->
+  <div class="sheet" id="sheetMed" role="dialog" aria-modal="true" aria-label="添加或编辑药品">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <span class="sheet-title" id="sheetTitle">添加药品</span>
+      <button class="icon-btn" id="sheetClose" aria-label="关闭">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" style="stroke:var(--text)" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="medName">药品名称</label>
+      <div class="input-wrap">
+        <input id="medName" type="text" placeholder="例如 维生素 D3" maxlength="20" autocomplete="off">
+      </div>
+    </div>
+
+    <!-- ★ S-1（2026-10-01）：剂量与单位。
+         适老化设计 —— 只多两行，不引入更多弹层；两项都可留空。
+         旧数据没有这三个字段 → 视为空，**天然向后兼容**（备份 JSON 自动携带）。 -->
+    <div class="field">
+      <label class="field-label" for="medDose">每次剂量与单位（可不填）</label>
+      <div style="display:flex;gap:10px">
+        <div class="input-wrap" style="flex:1">
+          <input id="medDose" type="text" inputmode="decimal" placeholder="1" maxlength="8" autocomplete="off">
+        </div>
+        <div class="input-wrap" style="flex:1">
+          <input id="medUnit" type="text" list="unitList" placeholder="片" maxlength="6" autocomplete="off">
+        </div>
+      </div>
+      <datalist id="unitList">
+        <option value="片"></option><option value="粒"></option><option value="袋"></option>
+        <option value="支"></option><option value="喷"></option><option value="滴"></option>
+        <option value="丸"></option><option value="毫升(ml)"></option><option value="毫克(mg)"></option>
+      </datalist>
+      <p class="hint">例如「1 片」「0.5 片」。留空就只显示药名。</p>
+    </div>
+
+    <!-- ★ S-2（2026-10-01）：剩余量。单位沿用上面的「单位」字段，不重复问一遍。
+         填了才会算「还够几天」并做低库存提醒；留空则完全不显示库存 UI。 -->
+    <div class="field">
+      <label class="field-label" for="medStock">目前还剩（可不填）</label>
+      <div class="input-wrap">
+        <input id="medStock" type="text" inputmode="decimal" placeholder="例如 28" maxlength="8" autocomplete="off">
+      </div>
+      <p class="hint">用上面的单位（如「片」）。填了会自动算还够几天、快吃完时提醒，且每次打卡自动扣减。</p>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="medNote">服用说明 / 备注（可不填）</label>
+      <!-- ⚠️ 多行输入用 .multi 变体：.input-wrap 是给**单行 input** 的固定 54px 壳，
+           直接把 rows=2 的 textarea 塞进去，内容会垂直溢出、文字与光标跑到框外
+           （2026-10-01 真机反馈）。样式统一交给 CSS，不再写 inline —— 这样字号才会
+           跟随「显示」里的缩放档位（--fs），和其它输入框一致。 -->
+      <div class="input-wrap multi">
+        <textarea id="medNote" rows="2" maxlength="60" placeholder="例如 饭后服用、不可与某药同服"></textarea>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">服药方式</label>
+      <div class="chip-row" id="modeRow">
+        <button class="chip fs-chip on" data-mode="interval" aria-pressed="true">按间隔</button>
+        <button class="chip fs-chip" data-mode="fixed" aria-pressed="false">按固定时刻</button>
+      </div>
+      <p class="hint">按间隔：打卡后从这次开始计时，会跟着你的实际时间顺延。
+        按固定时刻：每天到点就提醒（如早 8 点、晚 8 点），不顺延。</p>
+    </div>
+
+    <!-- S-3 服用周期：医嘱里「隔天一次」「每周一三五」很常见。
+         默认「每天」——与改造前一致，不动它就等于没这个功能。 -->
+    <div class="field">
+      <label class="field-label">服用周期</label>
+      <div class="chip-row" id="schedRow">
+        <button class="chip fs-chip on" data-sched="daily" aria-pressed="true">每天</button>
+        <button class="chip fs-chip" data-sched="weekly" aria-pressed="false">每周</button>
+        <button class="chip fs-chip" data-sched="cycle" aria-pressed="false">隔几天</button>
+      </div>
+      <div class="week-row hidden" id="weekRow" style="margin-top:10px">
+        <button class="chip week-chip" data-week="0" aria-pressed="false">一</button>
+        <button class="chip week-chip" data-week="1" aria-pressed="false">二</button>
+        <button class="chip week-chip" data-week="2" aria-pressed="false">三</button>
+        <button class="chip week-chip" data-week="3" aria-pressed="false">四</button>
+        <button class="chip week-chip" data-week="4" aria-pressed="false">五</button>
+        <button class="chip week-chip" data-week="5" aria-pressed="false">六</button>
+        <button class="chip week-chip" data-week="6" aria-pressed="false">日</button>
+      </div>
+      <div class="stepper hidden" id="cycleRow" style="margin-top:10px">
+        <button class="step-btn" id="cycMinus" aria-label="减少">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14" style="stroke:var(--text)" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <div class="step-val">
+          <span class="step-num" id="cycNum">2</span>
+          <span class="step-unit">天一次</span>
+        </div>
+        <button class="step-btn step-plus" id="cycPlus" aria-label="增加">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" style="stroke:var(--contrast-text)" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <p class="hint" id="schedHint">每天</p>
+    </div>
+
+    <!-- S-4 疗程：起止日期（含两端）。不填 = 长期服用 —— 与改造前一致。
+         抗生素疗程最典型：医生开了 7 天，不该让用户自己记着到点删药。 -->
+    <div class="field">
+      <label class="field-label">疗程（可选）</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="input-wrap date-wrap" style="flex:1 1 0">
+          <input type="date" id="courseFrom" aria-label="疗程开始日期">
+        </div>
+        <span class="meta">至</span>
+        <div class="input-wrap date-wrap" style="flex:1 1 0">
+          <input type="date" id="courseTo" aria-label="疗程结束日期">
+        </div>
+      </div>
+      <p class="hint" id="courseHint">不填 = 长期服用。填了结束日，当天之后自动停提醒。</p>
+    </div>
+
+    <div class="field" id="fieldInterval">
+      <label class="field-label">服药间隔</label>
+      <div class="stepper">
+        <button class="step-btn" id="stepMinus" aria-label="减少">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14" style="stroke:var(--text)" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <div class="step-val">
+          <span class="step-num num" id="stepNum">8</span>
+          <span class="step-unit">小时 / 次</span>
+        </div>
+        <button class="step-btn step-plus" id="stepPlus" aria-label="增加">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" style="stroke:var(--contrast-text)" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <p class="hint">每天第一次服药打卡后，将按此间隔依次生成今天的提醒时间。</p>
+      <p class="hint" id="stepHint"></p>
+    </div>
+
+    <div class="field hidden" id="fieldFixed">
+      <label class="field-label">每天服药时刻</label>
+      <div id="timeList" style="display:flex;flex-direction:column;gap:10px"></div>
+      <button class="btn btn-ghost" id="addTime" style="height:44px;font-size:calc(14px * var(--fs));margin-top:10px">+ 添加一个时刻</button>
+      <p class="hint">到点提醒，**不随打卡时间顺延** —— 适合「早 8 点、晚 8 点」这类医嘱。</p>
+      <p class="hint" id="fixedHint"></p>
+    </div>
+
+    <div class="field" id="fieldPreview">
+      <span class="eyebrow">AUTO SCHEDULE · 以 06:00 为例</span>
+      <div class="chip-row" id="previewChips"></div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn btn-primary" id="saveMed">保存药品</button>
+      <button class="btn btn-text hidden" id="deleteMed">删除药品</button>
+    </div>
+  </div>
+
+  <!-- Skip confirm dialog -->
+  <div class="dlg-wrap" id="dlgSkip">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="skipTitle">
+      <div class="badge badge-56">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 5.5 12 12l-7 6.5M13 5.5 20 12l-7 6.5" style="stroke:var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="dlg-text">
+        <div class="dlg-title" id="skipTitle">跳过本次服药？</div>
+        <div class="dlg-body" id="skipBody">这次将记为未服用，会影响今日依从率。</div>
+      </div>
+      <div class="strip">
+        <span class="eyebrow">NEXT REMINDER</span>
+        <span class="strip-val" id="skipNext">22:00 · 不变</span>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="skipCancel">取消</button>
+        <button class="btn btn-accent" id="skipConfirm">确认跳过</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic confirm dialog（破坏性操作用，避免误触即生效） -->
+  <div class="dlg-wrap" id="dlgConfirm">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="badge badge-56">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5h15M9.5 6.5V4.8c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3v1.7M6.5 6.5l.9 12.1c.05.7.65 1.2 1.35 1.2h6.5c.7 0 1.3-.5 1.35-1.2l.9-12.1" style="stroke:var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 10.5v6M13.5 10.5v6" style="stroke:var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <div class="dlg-text">
+        <div class="dlg-title" id="confirmTitle">确认删除？</div>
+        <div class="dlg-body" id="confirmBody"></div>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="confirmCancel">取消</button>
+        <button class="btn btn-accent" id="confirmOk">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reminder dialog -->
+  <div class="dlg-wrap" id="dlgRemind">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="remindName">
+      <div class="badge badge-56">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6.4 10.2a5.6 5.6 0 0 1 11.2 0c0 3.9 1.4 5.4 1.4 5.4H5s1.4-1.5 1.4-5.4Z" style="stroke:var(--accent)" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.9 18.6a2.3 2.3 0 0 0 4.2 0" style="stroke:var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <div class="dlg-text">
+        <span class="eyebrow accent">TIME TO TAKE</span>
+        <div class="dlg-title-lg" id="remindName">维生素 D3</div>
+        <div class="dlg-body" id="remindMeta">14:00 · 第 2 / 3 次 · 每 8 小时</div>
+      </div>
+      <div class="dlg-actions-vert">
+        <button class="btn btn-primary" id="remindDone">已服用</button>
+        <button class="btn btn-ghost" id="remindSnooze">10 分钟后提醒</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data backup / export / restore dialog -->
+  <div class="dlg-wrap" id="dlgData">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent" id="dataEyebrow">BACKUP</span>
+        <div class="dlg-title" id="dataTitle">导出备份</div>
+        <div class="dlg-body" id="dataHint"></div>
+      </div>
+      <textarea class="data-area" id="dataArea" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      <input type="file" id="pickBackup" class="hidden" accept="application/json,.json,text/plain">
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="dataClose">关闭</button>
+        <button class="btn btn-accent" id="dataCopy">复制</button>
+      </div>
+      <button class="btn btn-ghost" id="dataDownload">下载 .json 文件</button>
+      <button class="btn btn-ghost hidden" id="dataPick">从文件选择</button>
+      <button class="btn btn-primary hidden" id="dataApply">恢复</button>
+    </div>
+  </div>
+
+  <!-- S-7 报告（近 7 天）—— 回答医生唯一关心的那个问题：**按时没按时**。
+       主场景是当场拿给医生看，所以正文排版好、不塞进文本框；「复制」只作次要出口。 -->
+  <div class="dlg-wrap" id="dlgReport">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="rptTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent">REPORT</span>
+        <div class="dlg-title" id="rptTitle">服药情况报告</div>
+        <div class="dlg-body" id="rptHint"></div>
+      </div>
+      <div class="rpt-area" id="rptArea"></div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="rptClose">关闭</button>
+        <button class="btn btn-accent" id="rptCopy">复制文字</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全部历史（二级菜单）—— 记录页只放摘要，长列表收进来 -->
+  <div class="dlg-wrap" id="dlgHistory">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="histTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent">HISTORY</span>
+        <div class="dlg-title" id="histTitle">全部服药记录</div>
+        <div class="dlg-body" id="histHint"></div>
+      </div>
+      <div class="chip-row" id="histFilter"></div>
+      <div class="dlg-scroll" id="histBody"></div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="histClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Storage cleanup dialog -->
+  <div class="dlg-wrap" id="dlgClean">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cleanTitle">
+      <div class="badge badge-56">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5h15M9.5 6.5V4.8c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3v1.7M6.5 6.5l.9 12.1c.05.7.65 1.2 1.35 1.2h6.5c.7 0 1.3-.5 1.35-1.2l.9-12.1" style="stroke:var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 10.5v6M13.5 10.5v6" style="stroke:var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <div class="dlg-text">
+        <div class="dlg-title" id="cleanTitle">清理旧记录</div>
+        <div class="dlg-body">选择要保留的范围。清理后无法撤销，建议先导出备份。今天的记录不会被清理。</div>
+      </div>
+      <div class="chip-row" id="cleanRow" style="justify-content:center"></div>
+      <div class="strip">
+        <span class="eyebrow">KEEP</span>
+        <span class="strip-val" id="cleanPreview">—</span>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="cleanCancel">取消</button>
+        <button class="btn btn-accent" id="cleanConfirm">确认清理</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo check-in dialog -->
+  <div class="dlg-wrap" id="dlgPhoto">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="photoTitle">
+      <div class="badge badge-56">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5c0-1.1.9-2 2-2h1.6c.6 0 1.1-.3 1.4-.8l.5-.9c.3-.5.8-.8 1.4-.8h4.2c.6 0 1.1.3 1.4.8l.5.9c.3.5.8.8 1.4.8h1.6c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H5.5c-1.1 0-2-.9-2-2v-8Z" style="stroke:var(--accent)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.5" style="stroke:var(--accent)" stroke-width="1.6"/></svg>
+      </div>
+      <div class="dlg-text">
+        <span class="eyebrow accent">PHOTO CHECK-IN</span>
+        <div class="dlg-title" id="photoTitle">拍张照片再打卡</div>
+        <div class="dlg-body" id="photoBody">拍下这次的药，之后能回看确认。实在拍不了可以跳过，但记录里会标出来。</div>
+      </div>
+      <div class="dlg-actions-vert">
+        <button class="btn btn-primary" id="photoTake">拍照打卡</button>
+        <button class="btn btn-ghost" id="photoSkip">拍不了 · 直接打卡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo viewer -->
+  <div class="dlg-wrap" id="dlgView">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="viewTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent" id="viewMeta">PHOTO</span>
+        <div class="dlg-title" id="viewTitle">服药照片</div>
+      </div>
+      <img id="viewImg" alt="服药照片" style="width:100%;border-radius:8px;display:block;background:var(--inner);min-height:120px">
+      <p class="hint" id="viewHint"></p>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" id="viewClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- Capacitor 插件 JS —— 顺序不能乱：
+     先 core（它的 IIFE 结果挂在全局 capacitorExports 上），再各插件的 UMD 包
+     （尾部形如 `})({}, capacitorExports)`，内部调用 core.registerPlugin('Camera', ...)）。
+     这一段缺了，Capacitor.Plugins 就是空对象 —— 所有插件调用会静默降级成 web 实现，
+     表现就是「功能没反应」而没有任何报错。 -->
+<script src="vendor/capacitor.js"></script>
+<script src="vendor/plugin-app.js"></script>
+<script src="vendor/plugin-local-notifications.js"></script>
+<script src="vendor/plugin-camera.js"></script>
+<script src="vendor/plugin-filesystem.js"></script>
+<script src="js/platform/notifications.js"></script>
+<script src="js/platform/storage.js"></script>
+<script src="js/platform/camera.js"></script>
+<!-- ⚠️ app.js 是 ES module（2026-09-24 架构重构起）：它 import 的模块要在下面显式声明 ——
+     Service Worker 的预缓存清单是「从 index.html 解析所有本地 src/href」得到的，
+     而 import 是隐式的、解析不到。不声明的话离线会加载失败。
+     用 modulepreload 而不是 script：它只预加载不执行，且是标准做法。 -->
+<link rel="modulepreload" href="js/core/util.js">
+<link rel="modulepreload" href="js/core/store.js">
+<link rel="modulepreload" href="js/core/schedule.js">
+<link rel="modulepreload" href="js/core/cardSummary.js">
+<link rel="modulepreload" href="js/ui/permission.js">
+<link rel="modulepreload" href="js/ui/fontsize.js">
+<link rel="modulepreload" href="js/ui/theme.js">
+<link rel="modulepreload" href="js/ui/sheet.js">
+<link rel="modulepreload" href="js/ui/today.js">
+<link rel="modulepreload" href="js/ui/data.js">
+<link rel="modulepreload" href="js/ui/records.js">
+<link rel="modulepreload" href="js/ui/viz.js">
+<link rel="modulepreload" href="js/ui/meds.js">
+<link rel="modulepreload" href="js/ui/photo.js">
+<link rel="modulepreload" href="js/ui/tabs.js">
+<link rel="modulepreload" href="js/ui/render.js">
+<link rel="modulepreload" href="js/ui/cards.js">
+<link rel="modulepreload" href="js/ui/actions.js">
+<link rel="modulepreload" href="js/ui/toast.js">
+<link rel="modulepreload" href="js/ui/overlay.js">
+<link rel="modulepreload" href="js/platform/lifecycle.js">
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

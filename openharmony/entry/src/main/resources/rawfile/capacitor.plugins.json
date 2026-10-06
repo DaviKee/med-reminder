@@ -1,0 +1,22 @@
+[
+	{
+		"pkg": "@capacitor/CapacitorPlugin",
+		"classpath": "CapacitorPlugin"
+	},
+{
+  "pkg": "@capacitor/app",
+  "classpath": "App"
+},
+{
+  "pkg": "@capacitor/camera",
+  "classpath": "Camera"
+},
+{
+  "pkg": "@capacitor/filesystem",
+  "classpath": "Filesystem"
+},
+{
+  "pkg": "@capacitor/local-notifications",
+  "classpath": "LocalNotifications"
+}
+]

@@ -69,3 +69,15 @@ __pycache__/
 /spike/harmony-test/oh_modules/
 # oh-plugins/ 是 hionic 从 @capacitor-ohos/* 复制的**第三方（华为）源码**，
 # 不该进我们的版本库 —— 用 `hionic plugin add` 随时能重建。
+/oh-plugins/
+
+# ===== 鸿蒙原生工程（harmony 分支）：源码入库（对齐 android/），产物排除 =====
+# capacitor/ 框架虽是 hionic 从 @capacitor-ohos/ohos 复制的第三方源码，
+# 但 openssl 集成（libs/ + cpp/openssl/）等手动改动使它无法纯自动重建，
+# 按 2026-10 计划定调整体入库；产物与依赖照常排除。
+/openharmony/oh_modules/
+/openharmony/**/oh_modules/
+/openharmony/**/build/
+/openharmony/**/.hvigor/
+/openharmony/**/.cxx/
+/openharmony/local.properties

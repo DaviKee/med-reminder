@@ -1,0 +1,65 @@
+{
+  apiType: "stageMode",
+  buildOption: {
+    externalNativeOptions: {
+      path: "./src/main/cpp/CMakeLists.txt",
+      arguments: "",
+      cppFlags: "",
+      abiFilters: [
+        "arm64-v8a",
+        "x86_64",
+      ],
+    },
+    arkOptions: {
+      runtimeOnly: {
+        sources: [
+          "./src/main/ets/components/Permission/PermissionAction.ets",
+          "./src/main/ets/components/AlertDialog/NotificationAlert.ets",
+          "./src/main/ets/components/PluginAction/ReStartApp.ets",
+          "./src/main/ets/components/PluginAction/Test.ets",
+          "./src/main/ets/components/App/App.ets",
+          "./src/main/ets/components/ImageCompress/ImageCompressEx.ets",
+          "./src/main/ets/components/ImageCompress/ErrorCode.ets",
+          "./src/main/ets/components/ImageCompress/ExifInfo.ets",
+          "./src/main/ets/components/ImageCompress/CameraAction.ets",
+          "./src/main/ets/components/ImageCompress/ImageInfo.ets",
+          "./src/main/ets/components/MediaAction/CameraDefine.ets",
+          "./src/main/ets/components/MediaAction/CameraSelectDialog.ets",
+          "./src/main/ets/components/MediaAction/MediaAction.ets",
+          "./src/main/ets/components/MediaAction/CheckCameraPermission.ets",
+          "./src/main/ets/components/Filesystem/FilesystemAction.ets",
+          "./src/main/ets/components/LocalNotifications/LocalNotifications.ets",
+          "./src/main/ets/components/LocalNotifications/NotificationAction.ets",
+          "./src/main/ets/components/LocalNotifications/LocalNotificationModel.ets",
+          "./src/main/ets/components/LocalNotifications/NotificationStorage.ets",
+        ],
+      },
+    },
+  },
+  buildOptionSet: [
+    {
+      name: "release",
+      arkOptions: {
+        obfuscation: {
+          ruleOptions: {
+            enable: false,
+            files: [
+              "./obfuscation-rules.txt",
+            ],
+          },
+          consumerFiles: [
+            "./consumer-rules.txt",
+          ],
+        },
+      },
+    },
+  ],
+  targets: [
+    {
+      name: "default",
+    },
+    {
+      name: "ohosTest",
+    },
+  ],
+}

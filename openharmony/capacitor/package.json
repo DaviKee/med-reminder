@@ -1,0 +1,18 @@
+{
+  "name": "@capacitor-ohos/ohos",
+  "version": "8.0.2",
+  "description": "Capacitor: Cross-platform apps with JavaScript and the web",
+  "homepage": "https://gitcode.com/CPF-Ionic/openHarmony-capacitor",
+  "author": "Huawei Device Co., Ltd and iSoftStone Information Technology(Group)Co.,Ltd.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitcode.com/CPF-Ionic/openHarmony-capacitor.git"
+  },
+  "bugs": {
+    "url": "https://gitcode.com/CPF-Ionic/openHarmony-capacitor/issues"
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

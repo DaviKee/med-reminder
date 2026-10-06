@@ -1,0 +1,462 @@
+:root{
+  --bg:#0A0A0A;
+  --card:#191919;
+  --inner:#1A1C20;
+  --line:#212327;
+  --line-2:#363A3F;
+  --text:#FFFFFF;
+  --sub:#DADBDF;
+  --muted:#7D8187;
+  --accent:#FF7A17;
+
+  /* ---- S-5 明暗主题：新增**语义**变量 ----
+     这些颜色原先散在几十条规则里硬编码，亮色主题没法只改一处。
+     命名按「用途」而不是「颜色」—— 亮色下 --contrast-bg 会变成近黑。
+     下面这组是**暗色值**，与改造前逐像素一致（零视觉回归）。 */
+  --bg-outer:#000;           /* 机身之外的底色（比 --bg 更黑，形成"手机边缘"） */
+  --sheet:#0F1012;           /* 底部弹层 */
+  --pressed:#1D1D1D;         /* 列表 / 按钮按下态 */
+  --placeholder:#5F6368;     /* 输入占位符 */
+  --danger:#FF3B30;          /* 危险（删除 / 写失败告警） */
+  --contrast-bg:#fff;        /* 反色块底色（主按钮 / 白胶囊 / 选中 chip / 打卡实心点） */
+  --contrast-text:#0A0A0A;   /* 反色块上的文字 */
+  --on-accent:#0A0A0A;       /* accent 块上的文字（accent 是亮橙 → 恒用深色） */
+  --scrim:rgba(0,0,0,.72);   /* 遮罩 */
+  --miss-wash:rgba(255,122,23,.16);   /* 「标记漏服」按下态 */
+  --cal-filter:invert(1);    /* 日期选择器图标：暗色下原生图标是黑的，需反色 */
+  --ok:#2E9E5B;              /* 月历「全服」格（S-6）：绿 = 按计划完成 */
+  --on-ok:#FFFFFF;           /* --ok 块上的文字（两套主题都白，绿色底够深） */
+  --font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+  --font-mono:"Geist Mono","JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;
+  --font-num:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;
+  /* 字号缩放因子：只影响文字大小，不动 padding/margin，所以布局骨架不变。
+     默认 1 = 与改造前逐像素一致（零视觉回归）。档位在「记录 → 显示」里设置。 */
+  --fs:1;
+  /* 告诉浏览器用哪套调色板 —— 影响滚动条、日期选择器等原生控件的渲染。 */
+  color-scheme:dark;
+}
+
+/* ---- S-5 亮色主题 ----
+   用 **属性选择器**（html[data-theme="light"]）而不是 @media (prefers-color-scheme: light)：
+   ① 用户手动选的要能覆盖系统；② 判断逻辑集中在 ui/theme.js 一处，可被 spec 测到；
+   ③ CSS 不参与「跟随系统」的判断，避免两处逻辑打架。
+   对比度按 WCAG AA 校过 —— 浅色主题的 --muted / --accent 是**重新取值**，不是把暗色值提亮。 */
+html[data-theme="light"]{
+  color-scheme:light;
+  --bg:#F2F3F5;
+  --card:#FFFFFF;
+  --inner:#ECEDEF;
+  --line:#E3E4E8;
+  --line-2:#C4C6CB;
+  --text:#0A0A0A;
+  --sub:#3A3D42;
+  --muted:#646A70;           /* 4.84:1 on --bg → AA 过 */
+  --accent:#C2410C;          /* 5.18:1 on white；原 #FF7A17 在浅底上只有 2.5:1，不能直接用 */
+  --bg-outer:#E4E5E8;
+  --sheet:#FFFFFF;
+  --pressed:#E8E9EC;
+  --placeholder:#9AA0A6;
+  --danger:#D92D20;          /* 4.83:1 on white */
+  --contrast-bg:#0A0A0A;     /* 反色块翻过来：浅色主题下是**深色**块 */
+  --contrast-text:#FFFFFF;
+  --on-accent:#FFFFFF;       /* 浅色主题的 accent 是深橙 → 上面的字用白 */
+  --scrim:rgba(0,0,0,.45);
+  --miss-wash:rgba(194,65,12,.12);
+  --cal-filter:none;         /* 原生图标本来就是深的，别再反色 */
+  --ok:#1E7A43;              /* 浅底上加深到 4.6:1（#2E9E5B 只有 2.6:1） */
+  --on-ok:#FFFFFF;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+/* 关掉 WebView 的自动字体放大（font boosting）—— 我们有自己的字号档位，
+   两套缩放叠加会让"标准档"在不同设备上大小不一、布局不可预期。 */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  background:var(--bg-outer);color:var(--text);font-family:var(--font-sans);
+  display:flex;justify-content:center;overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;   /* 禁止整页滚动 —— 滚动交给 main，底部导航才能常驻 */
+}
+button{font-family:inherit}
+
+.phone{
+  position:relative;width:100%;max-width:430px;
+  /* 必须是定高而不是 min-height：min-height 会让容器随内容长高，
+     main 的 overflow-y 随之失效、整页滚动把底部导航推走。
+     定高后 main 才会内部滚动，tabbar 在三个选项卡里都常驻。 */
+  height:100%;
+  background:var(--bg);display:flex;flex-direction:column;overflow:hidden;
+  /* 让出系统状态栏高度 —— 状态栏交给系统绘制，这里只负责不被它压住 */
+  padding-top:env(safe-area-inset-top);
+}
+
+/* ---------- views ---------- */
+/* 长 token（备份目录路径 / 插件版本号 / 插件报错里的路径）没有可断点：按 UAX #14，
+   `/` 与 `.` 都不是断行点，浏览器只在空白与 CJK 处断行 → 一整串不可断，会顶出卡片右边
+   （2026-09-28 真机：AUTO 卡的备份目录路径）。
+   `anywhere` 只在放不下时才在词内断（不像 `break-all` 见缝就断），对普通文本无害；
+   它还会影响 min-content 宽度 —— flex 子项里正需要这一点。
+   放在 main 上靠**继承**覆盖全部正文；`.dose-n` 那种刻意 nowrap+ellipsis 截断的不受影响。 */
+main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:8px;overflow-wrap:anywhere}
+.view{display:none}
+.view.active{display:block}
+/* 切页时新页沿切换方向滑入 —— 原来是 display 从 none 跳 block，真机反馈"太硬"。
+   ⚠️ 为什么不做「新旧两页对滑」：.view 是流式布局、#main 是唯一滚动容器，
+   两页同时可见就必须临时绝对定位，而 absolute **不撑父容器** →
+   动画期间内容高度塌成 0，滚动位置与右侧进度条都会跳。
+   为 0.26s 的观感换这个风险不划算（这个 App 的用户是老人，动效更该克制）。
+   class 由 setTab 加、也在 setTab 里摘 —— 不摘的话同一页再次成为目标时不会重播
+   （class 没变化，浏览器就认为动画没变）。 */
+@keyframes viewInRight{from{transform:translateX(36px);opacity:0}to{transform:none;opacity:1}}
+@keyframes viewInLeft{from{transform:translateX(-36px);opacity:0}to{transform:none;opacity:1}}
+.view.enter-from-right{animation:viewInRight .26s cubic-bezier(.22,.61,.36,1) both}
+.view.enter-from-left{animation:viewInLeft .26s cubic-bezier(.22,.61,.36,1) both}
+.stack{display:flex;flex-direction:column;gap:28px;padding:8px 20px 24px}
+.pad{padding:0 20px}
+
+/* ---------- type ---------- */
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums;letter-spacing:-.6px}
+.eyebrow{font-family:var(--font-mono);font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));letter-spacing:1.4px;color:var(--muted);text-transform:uppercase}
+.eyebrow.accent{color:var(--accent)}
+.h1{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.6px;color:var(--text);margin:0;font-weight:400}
+.h2{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));color:var(--text);margin:0;font-weight:500}
+.body{font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted);margin:0}
+.meta{font-size:calc(13px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);margin:0}
+.hint{font-size:calc(13px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);margin:10px 0 0}
+
+/* ---------- card ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px}
+.card-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pill{border:1px solid var(--line);border-radius:9999px;padding:4px 10px;font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--sub);white-space:nowrap}
+.pill.accent{border-color:var(--accent);color:var(--accent)}
+.sect{display:flex;flex-direction:column;gap:12px}
+.list{display:flex;flex-direction:column;gap:12px}
+
+/* schedule rows */
+.sched{padding:8px 20px}
+.dose{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0}
+.dose + .dose{border-top:1px solid var(--line)}
+.dose-l{display:flex;align-items:center;gap:14px;min-width:0}
+.dose-t{font-family:var(--font-num);font-size:calc(15px * var(--fs));line-height:calc(20px * var(--fs));width:calc(52px * var(--fs));flex:0 0 calc(52px * var(--fs));color:var(--muted);font-variant-numeric:tabular-nums}
+.dose-t.now{color:var(--accent)}
+.dose-n{font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dose-n.on{color:var(--text)}
+.dose-n.dim{color:var(--sub)}
+.dose-s{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.dose-s .txt{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted);white-space:nowrap}
+
+/* 漏服可见化：已错过的行 + 补记按钮。触摸目标按 44×44 最小值给足 */
+.dose-miss{position:relative}
+.dose-miss .dose-t{color:var(--accent)}
+.btn-miss{
+  flex:0 0 auto;min-height:44px;padding:0 12px;border-radius:9999px;
+  border:1px solid var(--accent);background:transparent;color:var(--accent);
+  font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+.btn-miss:active{background:var(--miss-wash)}
+.card-miss{border-color:var(--accent);text-align:left}
+.card-miss:active{background:var(--pressed)}
+
+/* med list item */
+.meditem{
+  display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+  background:var(--card);border:1px solid var(--line);border-radius:8px;
+  padding:16px;cursor:pointer;color:inherit;
+}
+.meditem:active{background:var(--pressed)}
+.badge{display:flex;align-items:center;justify-content:center;border-radius:9999px;background:var(--inner);flex:0 0 auto}
+.badge-36{width:36px;height:36px}
+.badge-56{width:56px;height:56px}
+.medinfo{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px}
+.medinfo .n{font-size:calc(15px * var(--fs));line-height:calc(20px * var(--fs));color:var(--text)}
+.medinfo .m{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
+
+/* week dots */
+.week{display:flex;justify-content:space-between}
+.day{display:flex;flex-direction:column;align-items:center;gap:8px}
+.day .lb{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
+.day .lb.on{color:var(--text);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+/* 周视图圆点：用**形状**区分状态，不只靠颜色 —— 色盲 / 灰度屏 / 强光下都要能分辨。
+   无记录 = 空心细圈；已服 = 实心；今天 = 粗环 + 中心点（三者在形状上互不相同）。 */
+.dot{width:12px;height:12px;border-radius:9999px;background:transparent;border:1.5px solid var(--line-2);box-sizing:border-box}
+.dot.fill{background:var(--contrast-bg);border:1.5px solid var(--contrast-bg)}
+.dot.today{background:transparent;border:2px solid var(--accent);position:relative}
+.dot.today::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:4px;height:4px;border-radius:9999px;background:var(--accent)}
+.statrow{display:flex;gap:12px}
+.stat{flex:1 1 0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px;display:flex;flex-direction:column;gap:8px}
+.stat .v{display:flex;align-items:baseline;gap:2px}
+.stat .v .n{font-family:var(--font-num);font-size:calc(32px * var(--fs));line-height:calc(34px * var(--fs));letter-spacing:-1px;color:var(--text)}
+.stat .v .u{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted)}
+
+.medcard.tappable{width:100%;cursor:pointer;display:flex}
+.medcard.tappable:active{background:var(--pressed)}
+
+/* ---------- buttons ---------- */
+.btn{
+  width:100%;height:52px;border-radius:9999px;border:0;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:calc(15px * var(--fs));font-weight:500;line-height:calc(20px * var(--fs));
+}
+.btn:active{opacity:.82}
+.btn-primary{background:var(--contrast-bg);color:var(--contrast-text)}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn-accent{background:var(--accent);color:var(--on-accent)}
+.btn-text{background:transparent;color:var(--accent);height:44px;font-size:calc(14px * var(--fs))}
+.btnrow{display:flex;gap:10px}
+/* 固定时刻：每行一个时刻输入。44px 高满足触摸目标要求 */
+.time-row{display:flex;align-items:center;gap:10px}
+.time-input{flex:1 1 auto;min-width:0;height:44px;padding:0 12px;background:var(--inner);
+  border:1px solid var(--line);border-radius:8px;color:var(--text);font-family:inherit;
+  font-size:calc(16px * var(--fs))}
+.time-input::-webkit-calendar-picker-indicator{filter:var(--cal-filter);opacity:.75}
+.time-input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.icon-btn{width:36px;height:36px;border-radius:9999px;border:1px solid var(--line);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+.hidden{display:none !important}
+
+/* ---------- tabbar ---------- */
+.tabbar{flex:0 0 auto;padding:12px 21px calc(21px + env(safe-area-inset-bottom))}
+.tabpill{position:relative;display:flex;height:62px;border-radius:36px;background:var(--inner);border:1px solid var(--line);padding:4px;gap:4px}
+.tab{
+  position:relative;z-index:1;   /* 抬到 .tab-ind 之上，否则白底会盖住图标文字 */
+  flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  border:0;background:transparent;color:var(--muted);border-radius:26px;cursor:pointer;padding:0;
+  transition:color .26s cubic-bezier(.22,.61,.36,1);
+}
+.tab svg{width:18px;height:18px}
+.tab span{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));font-weight:500}
+.tab.active{color:var(--contrast-text)}
+/* 白色胶囊改成**独立的一层**，切换时平滑滑到目标页签（原来是 background 瞬切，
+   和页面滑动放在一起会很割裂）。
+   位移公式 `var(--i) * (100% + 4px)`：transform 里的 100% 解析为**指示器自身宽度**
+   （= 一个 tab 宽），加上 gap 正好是一格步长。`--i` 由 setTab 写，这里不碰。
+   ⚠️ 宽度的除数 3 是页签个数 —— 加第 4 个页签时这里要一起改，
+      tests/tabs.spec.js 有一条断言盯着它（数量对不上会直接报红）。 */
+.tab-ind{
+  position:absolute;top:4px;bottom:4px;left:4px;pointer-events:none;
+  width:calc((100% - 16px) / 3);border-radius:26px;background:var(--contrast-bg);
+  transform:translateX(calc(var(--i, 0) * (100% + 4px)));
+  transition:transform .26s cubic-bezier(.22,.61,.36,1);
+}
+
+/* ---------- overlays ---------- */
+.scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .22s;z-index:40}
+.scrim.show{opacity:1;pointer-events:auto}
+
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:50;
+  background:var(--sheet);border-top:1px solid var(--line);border-radius:16px 16px 0 0;
+  padding:8px 20px calc(20px + env(safe-area-inset-bottom));
+  transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);
+  max-height:90%;overflow-y:auto;
+}
+.sheet.show{transform:translateY(0)}
+.sheet-grip{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:6px auto 14px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+.sheet-title{font-size:calc(17px * var(--fs));line-height:calc(24px * var(--fs));font-weight:500}
+
+.field{display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+.field-label{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted)}
+.input-wrap{
+  display:flex;align-items:center;height:54px;border-radius:8px;
+  background:var(--inner);border:1px solid var(--line);padding:0 16px;
+}
+.input-wrap input{
+  flex:1 1 auto;background:transparent;border:0;outline:0;color:var(--text);
+  font-size:calc(16px * var(--fs));line-height:calc(22px * var(--fs));font-family:var(--font-sans);min-width:0;
+}
+.input-wrap input::placeholder{color:var(--placeholder)}
+.input-wrap:focus-within{border-color:var(--accent)}
+
+/* 多行输入（备注）：与单行 input「同壳不同骨」—— 壳高自适应、内边距交给 textarea 自己。
+   ⚠️ 别把 textarea 直接放进 .input-wrap：那是 height:54px 的单行壳，rows=2 的内容
+   会垂直溢出，文字与光标跑到框外（2026-10-01 真机反馈）。 */
+.input-wrap.multi{height:auto;align-items:stretch;padding:0}
+.input-wrap.multi textarea{
+  flex:1 1 auto;width:100%;min-width:0;
+  background:transparent;border:0;outline:0;color:var(--text);
+  font-size:calc(16px * var(--fs));line-height:calc(24px * var(--fs));
+  font-family:var(--font-sans);padding:14px 16px;resize:none;
+}
+.input-wrap.multi textarea::placeholder{color:var(--placeholder)}
+
+/* ---- S-7 报告浮层 ----
+   正文是「当场给医生看」的，所以是可滚动的排版内容，**不是文本框**。
+   字号同样走 --fs —— 老人把字号档位调大后，报告也要跟着变大。 */
+.rpt-area{max-height:44vh;overflow-y:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:2px 0}
+.rpt-head{display:flex;align-items:baseline;gap:10px;margin:14px 0 4px}
+.rpt-rate{font-family:var(--font-num);font-size:calc(38px * var(--fs));line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+.rpt-rate-cap{font-size:calc(13px * var(--fs));color:var(--muted)}
+.rpt-meta{font-size:calc(12px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted);margin-bottom:10px}
+.rpt-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.rpt-chip{border:1px solid var(--line-2);border-radius:9999px;padding:3px 10px;font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--text);white-space:nowrap}
+/* 只有「漏服」用警示色 —— 项目里 #FF7A17 就是「漏服」的既定语义（见 .btn-miss / .dose-miss） */
+.rpt-chip.bad{border-color:var(--accent);color:var(--accent)}
+.rpt-tb{width:100%;border-collapse:collapse;font-size:calc(13px * var(--fs))}
+.rpt-tb th{text-align:left;font-weight:400;color:var(--muted);font-size:calc(12px * var(--fs));padding:6px 0;border-bottom:1px solid var(--line)}
+.rpt-tb td{padding:7px 0;border-bottom:1px solid var(--line);color:var(--sub);font-variant-numeric:tabular-nums}
+.rpt-tb td:first-child{color:var(--text);font-family:var(--font-num)}
+.rpt-tb b.bad{color:var(--accent);font-weight:500}
+.rpt-tb tr:last-child td{border-bottom:0}
+/* ---- S-6 月历与统计（ui/viz.js） ----
+   格子只靠底色区分状态，日期数字照常显示 —— 图例就放在图下面，
+   颜色语义不当场说清，用户只能靠猜。全部颜色走变量（S-5 约束）。 */
+.cal{display:flex;flex-direction:column;gap:4px}
+.cal-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-w{text-align:center;font-size:calc(11px * var(--fs));color:var(--muted)}
+.cal-cell{display:flex;align-items:center;justify-content:center;
+  aspect-ratio:1/1;border-radius:9px;font-size:calc(12px * var(--fs));
+  font-variant-numeric:tabular-nums;color:var(--sub)}
+.cal-cell.empty{background:transparent}
+.cal-cell.good{background:var(--ok);color:var(--on-ok)}
+.cal-cell.partial{background:var(--accent);color:var(--on-accent)}
+.cal-cell.bad{background:var(--danger);color:var(--on-accent)}
+/* 进行中：同 good 的绿但半透明 —— 「今天还有没吃的」，不该和已完成长得一样 */
+.cal-cell.part{background:var(--ok);opacity:.45;color:var(--on-ok)}
+.cal-cell.future{opacity:.35}
+.cal-cell.today{box-shadow:inset 0 0 0 2px var(--contrast-bg)}
+.cal-legend{display:flex;flex-wrap:wrap;gap:10px}
+.cal-legend .lg{display:flex;align-items:center;gap:5px;font-size:calc(11px * var(--fs));color:var(--muted)}
+.cal-legend .cal-cell{width:16px;height:16px;aspect-ratio:auto;flex:none}
+.cal-stats{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:calc(12px * var(--fs));color:var(--sub)}
+.cal-stats b{color:var(--text);font-variant-numeric:tabular-nums}
+.bar-row{display:flex;align-items:center;gap:8px;font-size:calc(12px * var(--fs))}
+.bar-lb{flex:0 0 8.5em;color:var(--sub)}
+.bar{flex:1 1 auto;height:14px;border-radius:7px;background:var(--inner);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:7px}
+.bar-n{flex:0 0 2em;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}
+
+
+
+.stepper{
+  display:flex;align-items:center;justify-content:space-between;
+  height:auto;border-radius:8px;border:1px solid var(--line);
+  padding:18px 16px;
+}
+.step-btn{width:44px;height:44px;border-radius:9999px;border:1px solid var(--line);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+.step-plus{background:var(--contrast-bg);border-color:var(--contrast-bg)}
+.step-val{display:flex;flex-direction:column;align-items:center;gap:2px}
+.step-num{font-size:calc(36px * var(--fs));line-height:calc(40px * var(--fs));letter-spacing:-1px;color:var(--text)}
+.step-unit{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
+.chip-row{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:9999px;padding:7px 12px;font-family:var(--font-num);font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--sub)}
+/* 字号档位按钮：触摸目标按 44×44 给足；选中态用实心，不只用颜色区分（色盲可辨） */
+.fs-chip{min-height:44px;padding:7px 16px;cursor:pointer;background:transparent}
+.fs-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
+/* S-3 服用周期：7 个星期按钮等宽平分一行。
+   触摸目标仍按 44px 给足（适老化），所以不能用固定宽度的 .chip。
+   选中态沿用反色块语义 —— 亮色主题下自动翻转（见 §0.3）。 */
+.week-row{display:flex;gap:6px}
+.week-chip{flex:1 1 0;min-width:0;min-height:44px;padding:0;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;background:transparent}
+.week-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
+/* S-4 疗程的日期输入：原生 `input[type=date]` 在不同 WebView 里**高度不一**
+（各自带日历图标、内边距也不同）。
+所以容器用 min-height 而不是固定 height —— 固定高度会把它裁掉
+（与「多行框不能塞进单行壳」同源，见 MEMORY-数据与交互 §4）。 */
+.input-wrap.date-wrap{height:auto;min-height:54px}
+.input-wrap.date-wrap input{font-family:var(--font-num);min-width:0}
+.sheet-actions{display:flex;flex-direction:column;gap:4px}
+
+.dlg-wrap{
+  position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:0 20px;
+  background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.dlg-wrap.show{opacity:1;pointer-events:auto}
+.dlg{
+  width:100%;max-width:350px;background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:28px 28px 24px;display:flex;flex-direction:column;align-items:center;gap:20px;
+  transform:scale(.96);transition:transform .2s;
+}
+.dlg-wrap.show .dlg{transform:scale(1)}
+.dlg-text{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
+.dlg-title{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));font-weight:500;color:var(--text);text-align:center}
+.dlg-title-lg{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.6px;color:var(--text);text-align:center}
+.dlg-body{font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted);text-align:center}
+.strip{
+  width:100%;display:flex;align-items:center;justify-content:space-between;
+  background:var(--inner);border-radius:8px;padding:12px 16px;
+}
+.strip-val{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--sub)}
+.dlg-actions{display:flex;gap:10px;width:100%}
+.dlg-actions-vert{display:flex;flex-direction:column;gap:10px;width:100%}
+
+/* 数据备份/导出对话框：内容左对齐、更宽，容纳长文本 */
+/* 二级菜单里的长列表：自己滚。记录会积到几十天，不设上限会把对话框撑出屏幕
+   （.dlg 没有 max-height，.dlg-wrap 也不滚）。 */
+.dlg-scroll{
+  width:100%;max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:flex;flex-direction:column;gap:10px;padding-right:2px;
+}
+.dlg-wide{max-width:400px;align-items:stretch;padding:24px 20px 20px}
+.dlg-wide .dlg-text{align-items:flex-start}
+.dlg-wide .dlg-title,.dlg-wide .dlg-body{text-align:left}
+.data-area{
+  width:100%;height:176px;resize:none;outline:0;
+  background:var(--inner);border:1px solid var(--line);border-radius:8px;
+  color:var(--sub);font-family:var(--font-mono);font-size:calc(12px * var(--fs));line-height:calc(18px * var(--fs));
+  padding:12px 14px;white-space:pre;overflow:auto;
+}
+.data-area:focus{border-color:var(--accent)}
+
+.toast{
+  position:absolute;left:50%;bottom:130px;z-index:80;
+  transform:translate(-50%,12px);opacity:0;pointer-events:none;
+  background:var(--contrast-bg);color:var(--contrast-text);font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));font-weight:500;
+  padding:10px 18px;border-radius:18px;max-width:calc(100% - 40px);text-align:center;transition:.22s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.empty{padding:36px 20px;text-align:center;font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted)}
+
+/* ---------- 存储告警与状态（D-1） ---------- */
+/* 写失败告警卡：红描边、左对齐、可点。跨今日页与记录页显示。 */
+.card-alert{
+  display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
+  cursor:pointer;border-color:var(--danger);-webkit-tap-highlight-color:transparent;
+}
+.card-alert .alert-title{font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:var(--danger)}
+.card-alert .alert-cta{
+  font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));
+  color:var(--danger);font-weight:600;margin-top:2px;
+}
+/* 存储占用条 */
+.bar{height:6px;border-radius:9999px;background:var(--inner);overflow:hidden}
+.bar > i{display:block;height:100%;border-radius:9999px;transition:width .2s}
+/* 禁用态：清理对话框未选范围时，确认键必须是灰的，而不是「点了没反应」 */
+.btn:disabled{opacity:.4;pointer-events:none}
+
+/* ---------- 拍照打卡（G-1） ---------- */
+/* 相机图标：列表行里的小按钮。用负 margin 扩大点击区，
+   避免为了 44px 触摸目标把整行撑高。 */
+.cam-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;margin:-7px -6px -7px 2px;
+  border:0;background:transparent;color:var(--accent);cursor:pointer;
+  border-radius:9999px;-webkit-tap-highlight-color:transparent;
+}
+.cam-btn:active{opacity:.65}
+/* 「未拍照」用橙色标出来 —— 留痕是方案 B 的核心，不能让它看起来和正常打卡一样 */
+.no-shot{color:var(--accent)}
+
+/* 已延后的剂量标记。计划时刻保持原样，这里只说明「响铃被推到几点」 */
+.snooze-tag{font-size:calc(11px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted);white-space:nowrap}
+
+
+/* ---------- 无障碍（A-2 / A-5） ---------- */
+/* A-2 触摸目标补到 44×44 —— 但**不改布局尺寸**：用透明伪元素扩大命中区。
+   直接把按钮改成 44×44 会把标题行撑高、把药名挤掉，属于"修一个坏三个"。 */
+.icon-btn,.cam-btn{position:relative}
+.icon-btn::after,.cam-btn::after{
+  content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:44px;height:44px;
+}
+
+/* 键盘 / 开关设备需要的可见焦点环。浏览器默认 outline 在纯黑背景上几乎看不见 */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+
+/* A-5 尊重系统的「减少动态效果」设置：不做无谓的位移/淡入动画 */
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:.001ms !important;animation-duration:.001ms !important;animation-iteration-count:1 !important}
+  .scrim{transition:none}
+}

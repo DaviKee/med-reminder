@@ -1,0 +1,21 @@
+{
+	"appId": "io.ionic.starter",
+	"appName": "myApp",
+	"webDir": "www",
+	"harmony": {
+		"Scheme": "https",
+		"Hostname": "app.com",
+		"loggingBehavior": "debug",
+		"remark": "loggingBehavior:开发时配置debug模式，上架时修改为production"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 3000,
+			"launchAutoHide": true,
+			"backgroundColor": "#ffffff",
+			"androidScaleType": "CENTER_CROP",
+			"showSpinner": true,
+			"spinnerColor": "#999999"
+		}
+	}
+}

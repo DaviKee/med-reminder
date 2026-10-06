@@ -1,0 +1,14 @@
+{
+  "name": "harmony-capacitor",
+  "version": "1.0.0",
+  "description": "Capacitor,跨平台SDK,自带所有插件遵守capacitor官方接口规范，几分钟内完成android/ios项目迁移鸿蒙",
+  "main": "Index.ets",
+  "keywords":["capacitor","跨平台","鸿蒙跨平台","鸿蒙capacitor", "PhoneGap","harmony capacitor"],
+  "author": "",
+  "license": "Apache-2.0",
+  "homepage":"",
+  "repository":"",
+  "dependencies": {
+    "libcapacitor.so": "file:./src/main/cpp/types/libcapacitor"
+  }
+}
