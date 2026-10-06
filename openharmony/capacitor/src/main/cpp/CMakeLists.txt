@@ -16,7 +16,6 @@ include_directories(${NATIVERENDER_ROOT_PATH}
 
 #START_ADD_SUBDIRECTORY
 add_subdirectory(getcapacitor)
-add_subdirectory(HotCodePushPlugin)
 add_subdirectory(App)
 add_subdirectory(Camera)
 add_subdirectory(Filesystem)
@@ -95,7 +94,6 @@ target_link_libraries(capacitor PUBLIC
     ${OPENSSL_LIB_PATH}/libcrypto.so.3
     "-Wl,--whole-archive"
     getcapacitor
-    HotCodePushPlugin
     App
     Camera
     Filesystem
