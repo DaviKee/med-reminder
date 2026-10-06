@@ -2,7 +2,7 @@ var capacitorApp = (function (exports, core) {
     'use strict';
 
     const App = core.registerPlugin('App', {
-        web: () => Promise.resolve().then(function () { return web; }).then(m => new m.AppWeb()),
+        web: () => Promise.resolve().then(function () { return web; }).then((m) => new m.AppWeb()),
     });
 
     class AppWeb extends core.WebPlugin {
@@ -37,6 +37,14 @@ var capacitorApp = (function (exports, core) {
         async minimizeApp() {
             throw this.unimplemented('Not implemented on web.');
         }
+        async toggleBackButtonHandler() {
+            throw this.unimplemented('Not implemented on web.');
+        }
+        async getAppLanguage() {
+            return {
+                value: navigator.language.split('-')[0].toLowerCase(),
+            };
+        }
     }
 
     var web = /*#__PURE__*/Object.freeze({
@@ -45,8 +53,6 @@ var capacitorApp = (function (exports, core) {
     });
 
     exports.App = App;
-
-    Object.defineProperty(exports, '__esModule', { value: true });
 
     return exports;
 

@@ -9,13 +9,21 @@ cd "$(dirname "$0")"
 # 优先用环境里已有的 JDK / Android SDK（自己装的 Android Studio 也算），
 # 其次退回 WorkBuddy 的隔离目录（可能已被清理）。
 find_java() {
+  # Capacitor 8 的 android 库按 Java 21 编译（compileOptions VERSION_21），
+  # JDK 17 会在 javac 阶段报 "invalid target release: 21"。
+  # 所以**先找 21**，找不到再退回 17 / JAVA_HOME。
+  # （AGP 8.13 + Gradle 8.14.3 在 Java 21 上官方支持，2026-10-05 实测可用。）
+  for p in "C:/DevEnv/jdk-21" \
+           "C:/Program Files/Microsoft"/jdk-21* \
+           "C:/Program Files/Java"/jdk-21* \
+           "C:/Program Files/Eclipse Adoptium"/jdk-21*; do
+    [ -x "$p/bin/java" ] && { echo "$p"; return; }
+  done
   if [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/java" ]; then echo "$JAVA_HOME"; return; fi
   if command -v java >/dev/null 2>&1; then
     local p; p="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
     [ -x "$p/bin/java" ] && { echo "$p"; return; }
   fi
-  # 用通配匹配带小版本号的目录（如 jdk-17.0.20.101-hotspot）；
-  # 未匹配的 glob 会原样保留，[ -x ] 判定失败即可安全跳过。
   for p in "C:/Program Files/Microsoft"/jdk-17* \
            "C:/Program Files/Java"/jdk-17* \
            "C:/Program Files/Eclipse Adoptium"/jdk-17* \

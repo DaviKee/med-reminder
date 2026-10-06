@@ -17,7 +17,7 @@ var capacitorLocalNotifications = (function (exports, core) {
     })(exports.Weekday || (exports.Weekday = {}));
 
     const LocalNotifications = core.registerPlugin('LocalNotifications', {
-        web: () => Promise.resolve().then(function () { return web; }).then(m => new m.LocalNotificationsWeb()),
+        web: () => Promise.resolve().then(function () { return web; }).then((m) => new m.LocalNotificationsWeb()),
     });
 
     class LocalNotificationsWeb extends core.WebPlugin {
@@ -36,7 +36,7 @@ var capacitorLocalNotifications = (function (exports, core) {
                         new Notification('');
                     }
                     catch (e) {
-                        if (e.name == 'TypeError') {
+                        if (e instanceof Error && e.name === 'TypeError') {
                             return false;
                         }
                     }
@@ -60,9 +60,16 @@ var capacitorLocalNotifications = (function (exports, core) {
         }
         async removeDeliveredNotifications(delivered) {
             for (const toRemove of delivered.notifications) {
-                const found = this.deliveredNotifications.find(n => n.tag === String(toRemove.id));
+                const found = this.deliveredNotifications.find((n) => n.tag === String(toRemove.id));
                 found === null || found === void 0 ? void 0 : found.close();
                 this.deliveredNotifications = this.deliveredNotifications.filter(() => !found);
+            }
+        }
+        async removeDeliveredNotificationsById(options) {
+            for (const id of options.ids) {
+                const found = this.deliveredNotifications.find((n) => n.tag === String(id));
+                found === null || found === void 0 ? void 0 : found.close();
+                this.deliveredNotifications = this.deliveredNotifications.filter((n) => n !== found);
             }
         }
         async removeAllDeliveredNotifications() {
@@ -70,6 +77,32 @@ var capacitorLocalNotifications = (function (exports, core) {
                 notification.close();
             }
             this.deliveredNotifications = [];
+        }
+        async getByIds(options) {
+            const ids = options.ids.map((id) => String(id));
+            const scheduled = this.pending.filter((n) => ids.includes(String(n.id)));
+            const delivered = this.deliveredNotifications
+                .filter((n) => ids.includes(n.tag))
+                .map((n) => this.deliveredToSchema(n));
+            return { notifications: [...scheduled, ...delivered] };
+        }
+        async getAll(options) {
+            const scheduled = [...this.pending];
+            const delivered = this.deliveredNotifications.map((n) => this.deliveredToSchema(n));
+            if ((options === null || options === void 0 ? void 0 : options.state) === 'SCHEDULED') {
+                return { notifications: scheduled };
+            }
+            if ((options === null || options === void 0 ? void 0 : options.state) === 'TRIGGERED') {
+                return { notifications: delivered };
+            }
+            return { notifications: [...scheduled, ...delivered] };
+        }
+        deliveredToSchema(notification) {
+            return {
+                title: notification.title,
+                id: parseInt(notification.tag),
+                body: notification.body,
+            };
         }
         async createChannel() {
             throw this.unimplemented('Not implemented on web.');
@@ -88,9 +121,28 @@ var capacitorLocalNotifications = (function (exports, core) {
                 this.sendNotification(notification);
             }
             return {
-                notifications: options.notifications.map(notification => ({
+                notifications: options.notifications.map((notification) => ({
                     id: notification.id,
                 })),
+            };
+        }
+        async update(options) {
+            if (!this.hasNotificationSupport()) {
+                throw this.unavailable('Notifications not supported in this browser.');
+            }
+            const updated = [];
+            for (const notification of options.notifications) {
+                const index = this.pending.findIndex((n) => n.id === notification.id);
+                if (index === -1) {
+                    // Only update notifications that are already scheduled.
+                    continue;
+                }
+                this.pending.splice(index, 1);
+                this.sendNotification(notification);
+                updated.push(notification);
+            }
+            return {
+                notifications: updated.map((notification) => ({ id: notification.id })),
             };
         }
         async getPending() {
@@ -98,11 +150,14 @@ var capacitorLocalNotifications = (function (exports, core) {
                 notifications: this.pending,
             };
         }
+        async cancelAll() {
+            this.pending = [];
+        }
         async registerActionTypes() {
             throw this.unimplemented('Not implemented on web.');
         }
         async cancel(pending) {
-            this.pending = this.pending.filter(notification => !pending.notifications.find(n => n.id === notification.id));
+            this.pending = this.pending.filter((notification) => !pending.notifications.find((n) => n.id === notification.id));
         }
         async areEnabled() {
             const { display } = await this.checkPermissions();
@@ -145,13 +200,12 @@ var capacitorLocalNotifications = (function (exports, core) {
             const toRemove = [];
             const now = new Date().getTime();
             for (const notification of this.pending) {
-                if (((_a = notification.schedule) === null || _a === void 0 ? void 0 : _a.at) &&
-                    notification.schedule.at.getTime() <= now) {
+                if (((_a = notification.schedule) === null || _a === void 0 ? void 0 : _a.at) && notification.schedule.at.getTime() <= now) {
                     this.buildNotification(notification);
                     toRemove.push(notification);
                 }
             }
-            this.pending = this.pending.filter(notification => !toRemove.find(n => n === notification));
+            this.pending = this.pending.filter((notification) => !toRemove.find((n) => n === notification));
         }
         sendNotification(notification) {
             var _a;
@@ -196,8 +250,6 @@ var capacitorLocalNotifications = (function (exports, core) {
     });
 
     exports.LocalNotifications = LocalNotifications;
-
-    Object.defineProperty(exports, '__esModule', { value: true });
 
     return exports;
 

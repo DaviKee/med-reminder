@@ -41,6 +41,9 @@ _*.md
 # ===== harness 自检的临时备份（selftest_e2e.py 用，正常 finally 会删） =====
 *.selftest-bak
 
+# ===== Python 字节码缓存（跑 harness 时产生） =====
+__pycache__/
+
 # ===== S-0 鸿蒙 spike 的产物（HAP、鸿蒙原生工程、签名文件） =====
 # spike 是试验性质，结论出来之前不把鸿蒙原生工程纳入版本库。
 # 见 MedReminder-后续任务计划.md §24。
