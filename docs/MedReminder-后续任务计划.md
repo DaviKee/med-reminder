@@ -3319,3 +3319,60 @@ HEAD == 远端 ｜ 工作区干净
 
 > ⚠️ 仍未做：① 代理提醒二申（秦老师）② S-9 的 **ArkTS 卡片侧**（需鸿蒙工程）
 > ③ **真机验证 v1.5.13~v1.5.21**（秦老师选择一次性验证 —— 清单见当日回复）
+
+
+---
+
+## 45. 2026-10-06~07：鸿蒙落地 —— `harmony` 分支 + 模拟器 7 项验证 + 插件 bug 修复
+
+> 主项目 `harmony` 分支（main 线零影响）：Capacitor 6→8 升级（`b801042`）→ hionic 生成 openharmony 工程 + 4 插件注册（`9e266ea`）→ 摘除 HotCodePushPlugin（`8829bd8`，AGC 驳回红线 908166）→ HAP 编译/安装/启动跑通。本节记录 7 项功能验证结果与过程中发现并修复的插件 bug。
+
+### 45.1 验证结果（模拟器，2026-10-06）
+
+| # | 验证项 | 结果 | 证据 |
+|---|---|---|---|
+| 1 | 应用启动 / ArkWeb 渲染 | ✅ | hilog：CEF/ArkWeb 活跃、Capacitor 桥接全通、无崩溃 |
+| 2 | 4 插件注册（DEBUG 卡 plugLine） | ✅ | OCR：App / Camera / Filesystem / LocalNotifications 全在列，「已注入 5 个插件头」「版本 v1.5.21」 |
+| 3 | 生命周期 / 返回键 | ✅ | ESC(keycode 1)=HarmonyOS 返回键；返回退到多任务不闪退；锁屏→解锁→重启状态完整保留（含通知权限 granted） |
+| 4 | Filesystem（备份/恢复） | ✅ | hilog：点「立即备份一次」触发 `mkdir→writeFile→mkdir→writeFile→readdir`（3 份轮转）；UI「最近一次」时间戳 22:37→23:18 |
+| 5 | LocalNotifications（测试提醒） | ✅ **修复后通过** | 权限弹窗→允许→granted；publish 成功 + 铃声播放（HiPlayer 日志）；DEBUG 卡「通知栏显示」0→1；下拉面板见「测试提醒 / 这是一条测试通知…」 |
+| 6 | Camera（加药拍照打卡） | ⏸ 未自动化 | 模拟器无相机输出不算失败（spike 结论沿用）——**待真机验证** |
+| 7 | 记录页渲染（月历/依从率/主题/字号） | ✅ | OCR：月历、统计、chips、STORAGE/AUTO 卡全部正常 |
+
+### 45.2 ⭐ 插件 bug：`publishNow()` 把 undefined 传给 `NotificationRequest`
+
+- **现象**：点「测试提醒」→ toast 显示「已登记」但通知不响；hilog 抓到 `notificationManager.publish` 抛 napi 校验错误。
+- **根因**：web 层（`platform/notifications.js`）**故意不传** `group`/`sound`/`autoCancel` 等字段（Android 端省缺省值）；插件 `publishNow()` 却把它们**显式写进对象字面量** → napi 逐字段校验（实测顺序：先 `The type of groupName must be string`，修掉后又报 `The type of sound must be string`）→ publish 抛异常。
+- **修复**（`LocalNotifications.ets` `publishNow()`）：`groupName`/`sound`/`additionalText` 改**条件赋值**（`!== undefined && !== null` 才赋值）；其余 `tapDismissed`/`extraInfo`/`actionButtons` 同步防护。修复后 hilog 无错误、通知可见可响。
+- **⚠️ 为什么 spike 没抓到**：`compareDate()` 要求距触发 ≥60s 才走 `reminderAgent`（`publishReminderNotification`，不吃 groupName/sound）；**<60s 降级 `publishNow()`** 才踩坑。spike 当时测的是长时提醒。**正式服药提醒（提前登记，必然 >60s）不受此 bug 影响**。
+- **⚠️ 语义差异（记录在案）**：「测试提醒（10 秒后响）」在鸿蒙上会因 60s 阈值**降级为立即发布**。可接受——测试按钮的目的是确认链路通。
+- **⚠️ web 层判据失真（已知问题，未改 web）**：插件把错误当正常响应返回（`{result:"failed", errorMsg}`）→ `MedNotify.test()` 误判成功。根因在插件侧错误响应设计；本次只修 publish 本身。
+
+### 45.3 其他发现（低危，均已记录）
+
+| # | 发现 | 处置 |
+|---|---|---|
+| 1 | AppSettings 插件未注册 → DEBUG 权限卡「跳设置」按钮报「插件未注册」 | 低危：通知权限走系统弹窗路径已验证可用；**跳应用设置页待补**（可用 `@kit.AbilityKit` `openAppSettings` 或注册插件） |
+| 2 | 插件 `listChannels` UNIMPLEMENTED → DEBUG 卡显示「渠道 未创建」 | 仅影响 DEBUG 显示，无功能影响 |
+| 3 | `capacitor.config.json` 键大小写不匹配（配置 `LocalNotifications` vs 插件读 `localNotifications`）→ `load()` 提前 return，`slotChannelId` 保持默认 1（SOCIAL_COMMUNICATION） | 无实际影响；**待插件侧统一键名** |
+| 4 | 「下载 .json 文件」按钮（`a[download]`）在 ArkWeb **静默无效** | 预期内：`data.js` 注释写明「复制」是主路径，导出主按钮走 Filesystem 已验证 |
+| 5 | 模拟器自动锁屏干扰验证 | `power-shell timeout -o 600` 延长；验证脚本已固化 |
+
+### 45.4 验证方法备注（可复用）
+
+- `verify_ui`（截图智能判定）3 次机会耗尽（小艺输入法首启向导劫持输入 / 加药浮层内滑动失效 / 记录页滚动上限）→ 改用 **WinRT OCR 盲驱**：`snapshot_display`（1280×2832，与 `uinput` 坐标 1:1）→ `hdc file recv` → PowerShell 5.1 WinRT OCR → 坐标点按。
+- `uinput` 要点：点按 `-T -c x y`；滚动必须 `-T -m x1 y1 x2 y2`（`-g` 长按会触发文本选择）；按键单次调用 `-K -d 1 -u 1`；ESC(1)=返回。
+- hilog 缓冲区被 chromium 日志快速滚掉 → 抓事件必须 `hilog -r` 清缓冲 → 操作 → 立即 `hilog -x`。
+
+### 45.5 状态
+
+- `harmony` 分支：v1.5.21 web + openharmony 工程 + 插件补丁，`hvigorw assembleHap` BUILD SUCCESSFUL，模拟器 7 项验证 5 项硬证据 + 1 项记录 + 1 项待真机。
+- **main 线（Android）零影响**：harness 26/26（863 用例）、verify-apk 106/106、`MedReminder-v1.5.21-2026-10-06.apk` 基线全绿。
+- 工作区未提交项（来历待确认，未入提交）：`openharmony/capacitor/BuildProfile.ets` 头部注释被剥（疑似 hvigor 再生）；`spike/harmony-test/screenshots-for-agc/` 8 张截图被删。
+
+### 45.6 ⏭ 下一步
+
+1. **真机验证**（秦老师）：通知铃声/震动实际效果、Camera 拍照打卡、锁屏息屏提醒。
+2. **AGC 材料**：签名证书配置（当前 unsigned HAP）、代理提醒审批结果（二申材料已备）、AGC 商店截图（注意 §45.5 的 8 张截图删除待确认）。
+3. **插件侧小修**（可合并到下次构建）：`listChannels` 补实现 / 配置键大小写统一 / AppSettings 跳设置页。
+4. `harmony` → `main` 合并决策（建议等真机验证 + 签名 HAP 之后）。

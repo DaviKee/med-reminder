@@ -103,23 +103,38 @@ async function publishNow(notificationObj: LocalNotificationSchema,pageIndex: Na
   let channelId = notificationManager.SlotType.SOCIAL_COMMUNICATION
   channelId = slotChannelId
   let contentType = notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT
+  const normalContent: notificationManager.NotificationBasicContent = {
+    title: notificationObj.title,
+    text: notificationObj.body,
+  }
+  if (notificationObj.summaryText !== undefined && notificationObj.summaryText !== null) {
+    normalContent.additionalText = notificationObj.summaryText
+  }
   const notification: notificationManager.NotificationRequest = {
     id: notificationObj.id,
     notificationSlotType: channelId,
-    sound: notificationObj.sound,
     content: {
       notificationContentType: contentType,
       //只能看到title和body
-      normal: {
-        title: notificationObj.title,
-        text: notificationObj.body,
-        additionalText: notificationObj.summaryText,
-      }
-    },
-    groupName: notificationObj.group,
-    tapDismissed: notificationObj.autoCancel,
-    extraInfo: notificationObj.extra,
-    actionButtons: buttonArray
+      normal: normalContent
+    }
+  }
+  /* FIX(2026-10-06): 缺省字段不能把 undefined 显式传给 NotificationRequest，
+   * napi 参数校验会逐字段抛 "The type of xx must be xx" 导致 publish 失败（groupName/sound 实测均中招） */
+  if (notificationObj.sound !== undefined && notificationObj.sound !== null) {
+    notification.sound = notificationObj.sound
+  }
+  if (notificationObj.group !== undefined && notificationObj.group !== null) {
+    notification.groupName = notificationObj.group
+  }
+  if (notificationObj.autoCancel !== undefined && notificationObj.autoCancel !== null) {
+    notification.tapDismissed = notificationObj.autoCancel
+  }
+  if (notificationObj.extra !== undefined && notificationObj.extra !== null) {
+    notification.extraInfo = notificationObj.extra
+  }
+  if (buttonArray.length > 0) {
+    notification.actionButtons = buttonArray
   }
   if(notificationObj.largeBody !== undefined && notificationObj.largeBody !== ''){
     //只能看到longTitle和lines
