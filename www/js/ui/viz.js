@@ -19,7 +19,7 @@
 import { S } from '../core/store.js';
 import { dueAt, MISS_GRACE_MIN } from '../core/schedule.js';
 import { pad, fmtDate, todayKey, nowMin } from '../core/util.js';
-import { openDlg, closeDlg } from './overlay.js';
+import { openDlg, closeDlg, bindDlgClose } from './overlay.js';
 import { photoTally } from './photo.js';
 
 /* ---------------- 状态（只由 bindViz 写） ---------------- */
@@ -251,6 +251,7 @@ export function vizHtml() {
 export function openVizDlg() {
   if (!viz.y) { var t = todayParts(); viz.y = t.y; viz.m = t.m; }
   document.getElementById('vizBody').innerHTML = vizHtml();
+  bindDlgClose('dlgViz');   /* ⚠️ 漏了这行关闭按钮就是死的（2026-10-07 真机踩过） */
   openDlg(document.getElementById('dlgViz'));
 }
 

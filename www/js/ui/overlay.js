@@ -116,6 +116,20 @@ export function closableDialogs() {
   });
 }
 
+/* 浮层关闭按钮（data-dlg-close）的统一绑定。
+ * ⚠️ 两个配套的坑，都踩过：
+ *   ① 新浮层的 id 必须登记进下方 closableDialogs()，否则返回键关不掉
+ *      （不报错，只表现为"按了没反应"，2026-10-01 加 dlgReport 时踩过）；
+ *   ② 打开浮层的函数必须调这里，否则关闭按钮**没有任何 handler**
+ *      （同样不报错 —— 2026-10-07 dlgViz 就漏了：点「关闭」无反应，
+ *        只能靠侧滑返回；因为按钮是静态 HTML，看起来"应该已经有人绑了"）。
+ * 每次打开时重复绑定是故意的（幂等），与 openDisplayDlg 等的用法一致。 */
+export function bindDlgClose(id) {
+  $$('#' + id + ' [data-dlg-close]').forEach(function (el) {
+    el.onclick = function () { closeDlg($('#' + id)); };
+  });
+}
+
 /* Tab 焦点陷阱。返回 true 表示已处理（调用方不用再管）。
  * 只在有浮层显示时生效 —— 没有浮层时保持浏览器默认行为。 */
 export function trapTab(ev) {

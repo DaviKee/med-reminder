@@ -6,7 +6,7 @@
 import { $, $$, esc, fmtDate, minToStr, nowMin, pad, todayKey } from '../core/util.js';
 import { S } from '../core/store.js';
 import { MISS_GRACE_MIN, dueAt, medById } from '../core/schedule.js';
-import { openDlg, closeDlg } from './overlay.js';
+import { openDlg, closeDlg, bindDlgClose } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
 import { ICON, storageAlertHtml } from './cards.js';
@@ -221,14 +221,9 @@ export function openDebugDlg() {
   openDlg($('#dlgDebug'));
 }
 
-/* 浮层关闭按钮（data-dlg-close）—— 三个新浮层共用这一段。
- * ⚠️ 浮层 id 必须登记进 overlay.js 的 closableDialogs()，否则返回键关不掉
- *    （不报错，只表现为"按了没反应" —— 项目踩过的坑）。 */
-function bindDlgClose(id) {
-  $$('#' + id + ' [data-dlg-close]').forEach(function (el) {
-    el.onclick = function () { closeDlg($('#' + id)); };
-  });
-}
+/* 浮层关闭按钮（data-dlg-close）的绑定原语已于 2026-10-07 **上收到 overlay.js**
+ * （export bindDlgClose）—— viz.js 也要用，而 records.js 已 import viz.js，
+ * 留在这里会变成循环依赖。 */
 
 
 export function calcStreak() {

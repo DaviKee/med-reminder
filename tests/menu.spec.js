@@ -52,6 +52,14 @@ t('关闭按钮用 data-dlg-close（三个壳共用一段绑定）',
 
 console.log('=== 3. 各浮层内容注入与绑定 ===');
 t('openVizDlg 注入 vizBody 并打开', /openVizDlg/.test(VIZ) && /vizBody'\)\.innerHTML = vizHtml\(\)/.test(VIZ), '');
+/* ★ 2026-10-07 真机踩坑：openVizDlg 漏调 bindDlgClose，「关闭」按钮没有任何 handler，
+ * 点了没反应、只能侧滑返回 —— 不报错，纯静默。三个浮层逐个锁死。 */
+t('★ bindDlgClose 已上收为 overlay 导出（viz 依赖它，留 records 会循环 import）',
+  /export function bindDlgClose/.test(OVL), '');
+t('★ openVizDlg 打开时绑定关闭按钮',
+  (VIZ.match(/function openVizDlg\([\s\S]*?\n\}/) || ['']).join('').indexOf("bindDlgClose('dlgViz')") >= 0, '');
+t('★ openDisplayDlg / openDebugDlg 打开时绑定关闭按钮',
+  REC.indexOf("bindDlgClose('dlgDisplay')") >= 0 && REC.indexOf("bindDlgClose('dlgDebug')") >= 0, '');
 t('翻月只刷浮层内容（不再全页 render）',
   /vizBody'\)\.innerHTML = vizHtml\(\)/.test(VIZ) && !/render\(\)/.test(VIZ.split('openVizDlg')[1] || ''), '');
 t('openDisplayDlg 注入 displayHtml + 绑定', /openDisplayDlg/.test(REC) && /displayHtml\(\)/.test(REC), '');
