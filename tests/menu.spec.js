@@ -71,6 +71,10 @@ t('★ DEBUG 一键清理按钮仍在（notify.spec / verify-apk 盯着；字面
   /id="btnPurgeNotif"/.test(APP), '');
 t('dlgData 打开时注入存储/自动备份卡（dataCards）',
   /dataCards/.test(DATA) && /storageCardHtml\(\) \+ autoBackupCardHtml\(\)/.test(DATA), '');
+/* ★ 2026-10-07 真机踩坑：dlgData 的中段没包 .dlg-scroll —— .dlg 无 max-height、
+ * .dlg-wrap 不滚，卡片塞进来后总高超屏，表现为「点开以后滑不动、按钮够不着」。 */
+t('★ dlgData 中段（文本框+卡片）包进 .dlg-scroll（否则浮层超高且滑不动）',
+  /id="dlgData"[\s\S]*?class="dlg-scroll"[\s\S]*?id="dataArea"[\s\S]*?id="dataCards"[\s\S]*?id="dlgReport"/.test(IDX), '');
 t('自动备份 / 清理按钮的绑定随卡片注入（不再依赖 renderRecords）',
   /btnAutoBak/.test(DATA) && /btnClean/.test(DATA) && REC.indexOf("$('#btnAutoBak')") < 0, '');
 
