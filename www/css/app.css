@@ -302,10 +302,14 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
    格子只靠底色区分状态，日期数字照常显示 —— 图例就放在图下面，
    颜色语义不当场说清，用户只能靠猜。全部颜色走变量（S-5 约束）。 */
 .cal{display:flex;flex-direction:column;gap:4px}
-.cal-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;aspect-ratio:7/1}
 .cal-w{text-align:center;font-size:calc(11px * var(--fs));color:var(--muted)}
-.cal-cell{display:flex;align-items:center;justify-content:center;
-  aspect-ratio:1/1;border-radius:9px;font-size:calc(12px * var(--fs));
+/* ⚠️ 方块比例放在「行容器」上、绝不放格子上：部分 WebView 对 grid 子项的
+   aspect-ratio 会把最小尺寸撑破容器（真机 10-07 实测溢出，桌面 Chromium 复现不了）。
+   行高 = 行宽 ÷ 7，格子 stretch 填满。表头行豁免。 */
+.cal-row.cal-head{aspect-ratio:auto}
+.cal-cell{display:flex;min-width:0;align-items:center;justify-content:center;
+  border-radius:9px;font-size:calc(12px * var(--fs));
   font-variant-numeric:tabular-nums;color:var(--sub)}
 .cal-cell.empty{background:transparent}
 .cal-cell.good{background:var(--ok);color:var(--on-ok)}
