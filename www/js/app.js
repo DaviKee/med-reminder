@@ -2,7 +2,7 @@
  * 打卡制：每天第一次服药打卡后，按药品间隔自动排程当天剩余提醒。
  */
 
-import { $, $$, esc, nowMin, minToStr, todayKey } from './core/util.js';
+import { $, $$, esc, nowMin, minToStr, todayKey, pushRemindLog } from './core/util.js';
 /* ⬆ 2026-09-24 架构重构：这些工具函数已抽到 core/util.js。
  * import 必须在模块顶层 —— 所以它在 IIFE 外面，IIFE 内部靠闭包可见。
  * 其余代码一字未改。 */
@@ -121,7 +121,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.23';
+  var APP_VERSION = '1.5.24';
   var APP_BUILD = '2026-10-07';
 
 
@@ -305,23 +305,33 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
       var due = dueAt(ds);                 // 延后过就按延后时刻；原计划时刻不动
       if (due > now) continue;
       if (now - due > 30) { S.notified[ds.id] = 1; save(); continue; } // 过期太久，静默
+      /* ★ 第四道防线（2026-10-07 二次反馈）：**任何浮层开着时都不弹新打卡框**。
+       * 真机时序：点「已服药」→ 弹出拍照框 → 与此同时 tick 每秒照跑，
+       * 若同药还有另一条到点的剂量，打卡框会**叠在拍照框上**再弹一次 ——
+       * 用户体感就是"点了没效，还得再点一次"。这秒先不弹、也不置已告知标记
+       * （剂量仍是 pending，浮层关掉后下一秒 tick 会正常处理；
+       * 若那时上一条已完成打卡，下面的冷却闸会把它静音）。 */
+      if (document.visibilityState === 'visible' && isOverlayOpen()) break;
       S.notified[ds.id] = 1; save();
       // 前台（App 可见）弹页面内提醒，确保开屏也看得见；
       // 后台 / 锁屏 / 息屏由系统通知负责，无需此处处理
       if (document.visibilityState === 'visible') {
         if (window.MedNotify && window.MedNotify.native) window.MedNotify.cancelOne(ds.id); // 撤销系统通知，避免与页面内弹窗重复
-        showReminder(ds);
+        showReminder(ds, '到点自动弹');
       }
       break;
     }
   }
 
   var remindDose = null;
-  function showReminder(ds) {
+  function showReminder(ds, via) {
     /* ★ 幂等护栏：只有「待服」才值得弹。已服/已跳过的剂量再弹就是骚扰
      * （真机 2026-10-07 反馈的重复弹窗，防线之一）。 */
     if (!ds || ds.status !== 'pending') return;
     var med = medById(ds.medId);
+    /* 取证（2026-10-07）：重复弹窗桌面复现不了 —— 把每次弹窗记下来，
+     * 真机再复现时「调试与验收」里能看到完整时间线。 */
+    pushRemindLog('弹窗 · ' + (med ? med.name : '?') + ' · ' + minToStr(ds.time) + (via ? ' · ' + via : ''));
     remindDose = ds;
     $('#remindName').textContent = med ? med.name : '服药时间';
     $('#remindMeta').textContent = minToStr(ds.time)
@@ -355,6 +365,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
     if (action === 'taken') {
       if (ds.status !== 'pending') return;
       var med = medById(ds.medId);
+      pushRemindLog('点「已服药」· ' + (med ? med.name : '?') + '（通知路径）');
       /* 通知上的「已服用」也走拍照 —— 否则它就是一条绕过拍照的捷径，
        * 「强制拍照」直接形同虚设。点通知会唤起 App，所以能交给同一套流程；
        * 拍照期间 App 若被系统杀掉，resumeShot() 会从 appRestoredResult 把这次接上。 */
@@ -369,7 +380,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
       var sr = snoozeDose(ds);
       save(); render(); toast(snoozeToast(sr));
     } else if (action === 'open') {
-      if (ds.status === 'pending') showReminder(ds); else render();
+      if (ds.status === 'pending') showReminder(ds, '点通知打开'); else render();
     }
   }
 
@@ -596,6 +607,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
       remindDose = null;
       if (!dose) { render(); return; }
       var med = medById(dose.medId);
+      pushRemindLog('点「已服药」· ' + (med ? med.name : '?') + '（弹窗路径）');
       photoGate({ desc: '这次是：' + (med ? med.name : '服药') + '。', kind: 'one', doseId: dose.id }, function (rel, skipped) {
         stampPhoto([dose], rel, skipped);
         var at = Date.now();

@@ -126,6 +126,17 @@ const sandbox = {
   syncNotifications: () => {},
   askNotify: () => {}
 };
+/* resumeShot 的「剂量 id 分支」用到的两个 schedule 原语（2026-10-07 起）。
+ * ⚠️ 必须在字面量外挂、且用 sandbox.todayDoses 取值：写在字面量里的宿主函数
+ * 作用域链在宿主，裸标识符 todayDoses 解析不到 vm 上下文（会 ReferenceError）。
+ * 用行为等价的桩而非 cut 真实现 —— markTaken 的顺延逻辑拖着一串排程内部状态，
+ * 抽进沙箱又会带出新的隐式依赖（工程纪律第 5 条）。 */
+sandbox.findDoseById = function (id) {
+  var l = sandbox.todayDoses();
+  for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+  return null;
+};
+sandbox.markTaken = function (ds, at) { ds.status = 'taken'; ds.takenAt = at; return { shifted: 0 }; };
 sandbox.window = sandbox;
 sandbox.window.MedNotify = { cancelOne: () => {} };
 /* MedPhoto 桩：take / fromRestored / ready 由各用例按需替换 */

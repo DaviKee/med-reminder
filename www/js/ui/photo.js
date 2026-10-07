@@ -12,7 +12,7 @@
  */
 import { $, minToStr, pad } from '../core/util.js';
 import { S, save, photoStats, setPhotoStats } from '../core/store.js';
-import { checkIn, checkInAll, findDoseById, medById, todayDoses } from '../core/schedule.js';
+import { checkIn, checkInAll, findDoseById, markTaken, medById, todayDoses } from '../core/schedule.js';
 import { openDlg, closeDlg } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
@@ -158,10 +158,23 @@ export function resumeShot(photoPath) {
       toast('拍照已完成，今天的打卡已记上');
       return;
     }
-    /* ★ kind === 'one'：这里的 p.doseId 实际是**药品 id**（photoGate 的调用方
-     * 从 data-checkin 拿到的就是 med.id —— 见 bindToday）。原来错当成 dose.id 去
-     * todayDoses() 里找，永远找不到 → 静默丢打卡、照片变孤儿。
-     * 正确做法与 checkIn 一致：按 medId 走一次正常打卡流程。 */
+    /* ★ kind === 'one'：⚠️ **两种调用方、两种 id**（2026-10-07 修复）——
+     *   · bindToday 的 data-checkin 传**药品 id**（注释原话，见下）；
+     *   · remindDone / btnEarly / onNotifyAction('taken') 传的都是**剂量 id**。
+     * 旧代码只按药品 id 走 checkIn —— 剂量 id 传进来时 medById 永远找不到 →
+     * checkIn 返回 null → 兜底循环又拿「medId === 剂量id」去比 → 也不命中 →
+     * **这次打卡被静默丢掉**：拍照期间 App 被杀的用户回来发现"没记上"，
+     * 只能再点一次 —— 正是"点了没效、还得再来一次"的真机反馈之一。
+     * 修法：先按剂量 id 找，找得到且还是 pending 就直接 markTaken（与死亡流程
+     * 本来要做的事一致）；找不到再按老语义当药品 id 走 checkIn。 */
+    var ds0 = findDoseById(p.doseId);
+    if (ds0 && ds0.status === 'pending') {
+      stampPhoto([ds0], r.rel, false);
+      markTaken(ds0, Date.now());
+      save(); render();
+      toast('拍照已完成，打卡已记上');
+      return;
+    }
     var arr = checkIn(p.doseId);
     if (arr) {
       stampPhoto(arr, r.rel, false);
@@ -171,9 +184,16 @@ export function resumeShot(photoPath) {
       return;
     }
     /* checkIn 返回 null 有两种：今天已排过（也算成功，把照片挂到今天的剂量上）、
-     * 或药品已被删除。前者把照片补挂上，别让它变孤儿。 */
-    var l = todayDoses(), hit = null;
-    for (var i = 0; i < l.length; i++) if (l[i].medId === p.doseId) { hit = l[i]; break; }
+     * 或药品已被删除。挂照片要挑**还 pending 的那条**——旧代码拿第一条（可能是
+     * 已服用的），照片挂错剂量、该记的那条还是 pending。 */
+    var l = todayDoses(), hit = null, hitAny = null;
+    for (var i = 0; i < l.length; i++) {
+      if (l[i].medId === p.doseId) {
+        if (!hitAny) hitAny = l[i];
+        if (l[i].status === 'pending') { hit = l[i]; break; }
+      }
+    }
+    if (!hit) hit = hitAny;
     if (hit) { stampPhoto([hit], r.rel, false); save(); render(); toast('拍照已完成，今天的打卡已记上'); return; }
     render();
   });

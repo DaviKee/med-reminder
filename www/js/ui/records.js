@@ -3,7 +3,7 @@
  * 架构重构：从 app.js 抽出。
  * 函数体一字未改，只去掉一层缩进并加 export。
  */
-import { $, $$, esc, fmtDate, minToStr, nowMin, pad, todayKey } from '../core/util.js';
+import { $, $$, esc, fmtDate, minToStr, nowMin, pad, todayKey, readRemindLog } from '../core/util.js';
 import { S } from '../core/store.js';
 import { MISS_GRACE_MIN, dueAt, medById } from '../core/schedule.js';
 import { openDlg, closeDlg, bindDlgClose } from './overlay.js';
@@ -189,9 +189,23 @@ function debugHtml() {
     + '<p class="body">想立刻确认提醒能不能正常响？点下面按钮，10 秒后会收到一条测试通知（息屏 / 锁屏也能测，不会写入任何服药记录）。</p>'
     + '<button class="btn btn-ghost" id="btnTest" style="align-self:flex-start;margin-top:2px">测试提醒 · 10 秒后响一次</button>'
     + diagHtml()
+    + remindLogHtml()
     + '<p class="hint">' + esc(versionLine()) + '</p>'
     + '</div>';
   return html;
+}
+
+/* 弹窗取证时间线（2026-10-07）：重复弹窗桌面复现不了，靠这份记录定位真实路径。
+ * 内容由 app.js 的 showReminder / remindDone / onNotifyAction 写入（最近 8 条）。 */
+function remindLogHtml() {
+  var log = readRemindLog();
+  if (!log.length) return '';
+  var lines = log.map(function (x) {
+    var d = new Date(x.at);
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+      + '　' + esc(x.text || '');
+  }).join('<br>');
+  return '<p class="hint" style="margin:0">最近提醒事件（新在上）：<br>' + lines + '</p>';
 }
 
 function bindDebugControls() {

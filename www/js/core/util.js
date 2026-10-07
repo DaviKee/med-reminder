@@ -87,3 +87,25 @@ export function esc(s) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
+
+/* ---------------- 提醒弹窗取证日志 ----------------
+ * 重复弹窗在桌面 Chromium 复现不了（2026-10-07 两轮修复都被真机打回）。
+ * 真机上没有 console 可看 —— 唯一可靠的取证是把「弹窗事件」本身记下来，
+ * 下次复现时打开「调试与验收」就能看到时间线：几点弹的、弹的谁、
+ * 用户几点点的「已服药」、之后又弹了什么。独立 localStorage key：
+ * 不进备份格式、不碰主状态，永远只有最近 8 条。 */
+var REMIND_LOG_KEY = 'medreminder.remindLog.v1';
+
+export function pushRemindLog(text) {
+  try {
+    var log = JSON.parse(localStorage.getItem(REMIND_LOG_KEY) || '[]');
+    log.unshift({ at: Date.now(), text: String(text || '') });
+    if (log.length > 8) log.length = 8;
+    localStorage.setItem(REMIND_LOG_KEY, JSON.stringify(log));
+  } catch (e) { /* 日志失败绝不影响打卡主流程 */ }
+}
+
+export function readRemindLog() {
+  try { return JSON.parse(localStorage.getItem(REMIND_LOG_KEY) || '[]'); }
+  catch (e) { return []; }
+}

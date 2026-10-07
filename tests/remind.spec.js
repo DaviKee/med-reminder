@@ -35,6 +35,17 @@ function fnBody(name) {
   }
   return '';
 }
+/* 同上，但作用于任意源码文本（photo.js 等模块也要抽函数体） */
+function fnBodyIn(src, name) {
+  const i = src.indexOf('function ' + name);
+  if (i < 0) return '';
+  let d = 0, j = src.indexOf('{', i);
+  for (let k = j; k < src.length; k++) {
+    if (src[k] === '{') d++;
+    else if (src[k] === '}') { d--; if (!d) return src.slice(i, k + 1); }
+  }
+  return '';
+}
 
 console.log('=== ① showReminder 幂等护栏 ===');
 const sr = fnBody('showReminder');
@@ -79,9 +90,40 @@ t('onNotifyAction 的「已服用」路径本来就有 cancelOne（对齐基准�
   eventBody("onNotifyAction").indexOf('cancelOne(ds.id)') >= 0, '');
 
 console.log('=== ④ 幂等护栏没有误伤：三个调用方仍在 ===');
-t('tick 到点仍会弹（可见时）', /showReminder\(ds\)/.test(tick), '');
-t('通知点开（open）仍会弹（pending 时）', /showReminder\(ds\)/.test(APPJS), '');
-t('测试提醒（浏览器降级）仍会弹', /showReminder\(td\)/.test(APPJS), '');
+/* showReminder 现在带第二参数 via（取证日志来源），所以用 [,)] 匹配调用 */
+t('tick 到点仍会弹（可见时）', /showReminder\(ds[,)]/.test(tick), '');
+t('通知点开（open）仍会弹（pending 时）', /showReminder\(ds[,)]/.test(APPJS), '');
+t('测试提醒（浏览器降级）仍会弹', /showReminder\(td[,)]/.test(APPJS), '');
+
+console.log('=== ⑤ 第四道防线：浮层开着不弹新打卡框（2026-10-07 二次反馈） ===');
+/* 真机时序：点「已服药」→ 拍照框弹出 → tick 每秒照跑，同药另一条到点剂量
+ * 把打卡框叠在拍照框上再弹 → 用户体感"点了没效还得再点一次"。 */
+t('★ tick 弹窗前检查 isOverlayOpen', /isOverlayOpen\(\)/.test(tick), '');
+t('★ 检查位置在 showReminder 之前（弹完再查就晚了）',
+  tick.indexOf('isOverlayOpen()') >= 0
+  && tick.indexOf('isOverlayOpen()') < tick.indexOf('showReminder(ds'), '顺序不对');
+t('★ 浮层开着时不置已告知标记（否则浮层关了就永远不弹了）',
+  /visibilityState === 'visible' && isOverlayOpen\(\)/.test(tick), '');
+
+console.log('=== ⑥ 恢复路径不再丢打卡（photo.js resumeShot） ===');
+/* resumeShot 原来只认药品 id，而 remindDone/btnEarly/通知路径传的都是剂量 id
+ * → App 拍照期间被杀的用户回来发现"没记上"，只能再点一次。 */
+const PHOTO = fs.readFileSync(path.join(__dirname, '../www/js/ui/photo.js'), 'utf8');
+const rs = fnBodyIn(PHOTO, 'resumeShot');
+t('能抽到 resumeShot 函数体', rs.length > 300, '');
+t('★ 先按剂量 id 找（三种调用方传的都是剂量 id）', /findDoseById\(p\.doseId\)/.test(rs), '');
+t('★ 找到 pending 剂量直接 markTaken（与死亡流程本来要做的事一致）',
+  /markTaken\(ds0, Date\.now\(\)\)/.test(rs), '');
+t('药品 id 老路径（data-checkin）仍走 checkIn', /checkIn\(p\.doseId\)/.test(rs), '');
+t('兜底挂照片优先挑 pending 的剂量（旧代码拿第一条，可能挂到已服用的上）',
+  rs.indexOf("status === 'pending'") >= 0 && rs.indexOf('hitAny') >= 0, '');
+
+console.log('=== ⑦ 弹窗取证日志（真机复现时的时间线证据） ===');
+t('showReminder 写弹窗日志', /pushRemindLog\(/.test(fnBody('showReminder')), '');
+t('remindDone 写「已服药」日志', /pushRemindLog\(/.test(rd), '');
+t('onNotifyAction taken 路径也写日志', /pushRemindLog\(/.test(eventBody('onNotifyAction')), '');
+t('调试卡渲染时间线（remindLogHtml）', /remindLogHtml/.test(
+  fs.readFileSync(path.join(__dirname, '../www/js/ui/records.js'), 'utf8')), '');
 
 console.log('\n通过 ' + pass + ' / 共 ' + (pass + fail));
 if (fail) { console.log('失败清单:\n  - ' + fails.join('\n  - ')); process.exit(1); }
