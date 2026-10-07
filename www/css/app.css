@@ -329,6 +329,18 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .bar{flex:1 1 auto;height:14px;border-radius:7px;background:var(--inner);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:7px}
 .bar-n{flex:0 0 2em;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}
+/* ---- 记录页功能入口（二级菜单的行） ----
+   页面只留概览，功能各归各的浮层；行 = 52px 触摸目标 + 副标题 + 箭头。
+   按下态用 --pressed（亮色主题自动翻转，见 §0.3）。 */
+.menu-card{padding:4px 0 2px}
+.menu-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;min-height:52px;padding:8px 16px;background:transparent;border:0;
+  border-bottom:1px solid var(--line);cursor:pointer;text-align:left;color:var(--text)}
+.menu-row:last-child{border-bottom:0}
+.menu-row:active{background:var(--pressed)}
+.menu-lb{font-size:calc(14px * var(--fs));display:flex;flex-direction:column;gap:2px}
+.menu-sub{font-size:calc(12px * var(--fs));color:var(--muted)}
+.menu-chev{font-size:22px;color:var(--muted);line-height:1}
 
 
 

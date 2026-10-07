@@ -282,6 +282,7 @@
       </div>
       <textarea class="data-area" id="dataArea" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
       <input type="file" id="pickBackup" class="hidden" accept="application/json,.json,text/plain">
+      <div id="dataCards" style="display:flex;flex-direction:column;gap:12px;margin-top:12px"></div>
       <div class="dlg-actions">
         <button class="btn btn-ghost" id="dataClose">关闭</button>
         <button class="btn btn-accent" id="dataCopy">复制</button>
@@ -321,6 +322,48 @@
       <div class="dlg-scroll" id="histBody"></div>
       <div class="dlg-actions">
         <button class="btn btn-ghost" id="histClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- S-6 月历与统计（二级菜单入口）—— 内容由 ui/viz.js 动态注入 -->
+  <div class="dlg-wrap" id="dlgViz">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="vizTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent">STATS</span>
+        <div class="dlg-title" id="vizTitle">月历与统计</div>
+      </div>
+      <div class="dlg-scroll" id="vizBody"></div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" data-dlg-close>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 显示设置（主题 · 字号）—— 内容由 records.js 的 displayHtml() 注入 -->
+  <div class="dlg-wrap" id="dlgDisplay">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dispTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent">DISPLAY</span>
+        <div class="dlg-title" id="dispTitle">显示设置</div>
+      </div>
+      <div class="dlg-scroll" id="dispBody"></div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" data-dlg-close>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 调试与验收（测试提醒 · 通知诊断）—— 内容由 records.js 的 debugHtml() 注入 -->
+  <div class="dlg-wrap" id="dlgDebug">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dbgTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent">DEBUG</span>
+        <div class="dlg-title" id="dbgTitle">调试与验收</div>
+      </div>
+      <div class="dlg-scroll" id="dbgBody"></div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" data-dlg-close>关闭</button>
       </div>
     </div>
   </div>

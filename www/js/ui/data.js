@@ -271,7 +271,50 @@ export function openDataDlg(mode) {
   ap.classList.remove('btn-accent');
   ap.classList.add('btn-primary');
   $('#dataDownload').textContent = mode === 'csv' ? '下载 .csv 文件' : '下载 .json 文件';
+  /* 存储状态 + 自动备份卡：原在记录页铺着，2026-10-07 整合进本浮层。
+   * 每次打开都重算（备份份数 / 剩余空间是动态的），绑定也在这里做 ——
+   * 卡片是动态注入的，绑在 renderRecords 里会扑空。 */
+  var cards = $('#dataCards');
+  if (cards) {
+    cards.innerHTML = storageCardHtml() + autoBackupCardHtml();
+    var ab = $('#btnAutoBak');
+    if (ab) ab.onclick = function () {
+      var A = window.MedAutoBackup;
+      if (!A || !A.status().supported) { toast('这台设备不支持自动备份'); return; }
+      toast('正在备份…');
+      A.now().then(function (s) {
+        cards.innerHTML = storageCardHtml() + autoBackupCardHtml();   // 份数变了，卡要刷新
+        bindDataCards();
+        toast(s && s.ok
+          ? '已备份到本地（' + (s.count == null ? '1' : s.count) + ' 份）'
+          : '备份失败：' + ((s && s.err) || '未知原因'));
+      });
+    };
+    bindDataCards();
+  }
+
   openDlg($('#dlgData'));
+}
+
+/* dataCards 里的动态按钮绑定。备份完成后重注入卡片，**必须重绑** ——
+ * innerHTML 重建会扔掉旧元素上的 handler（"点了没反应"的成因）。 */
+function bindDataCards() {
+  var ab = $('#btnAutoBak');
+  if (ab) ab.onclick = function () {
+    var A = window.MedAutoBackup;
+    if (!A || !A.status().supported) { toast('这台设备不支持自动备份'); return; }
+    toast('正在备份…');
+    A.now().then(function (s) {
+      var cards = $('#dataCards');
+      if (cards) cards.innerHTML = storageCardHtml() + autoBackupCardHtml();
+      bindDataCards();
+      toast(s && s.ok
+        ? '已备份到本地（' + (s.count == null ? '1' : s.count) + ' 份）'
+        : '备份失败：' + ((s && s.err) || '未知原因'));
+    });
+  };
+  var bcl = $('#btnClean');
+  if (bcl) bcl.onclick = openCleanDlg;
 }
 
 export function applyRestore() {

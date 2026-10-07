@@ -192,7 +192,11 @@ console.log('=== 6. 接线 ===');
   const idx = fs.readFileSync(path.join(__dirname, '../www/index.html'), 'utf8');
   const sw = fs.readFileSync(path.join(__dirname, '../www/sw.js'), 'utf8');
   const vap = fs.readFileSync(path.join(__dirname, '../tools/verify-apk.py'), 'utf8');
-  t('records.js 引入并嵌入 vizHtml', /import \{ statsRange, vizHtml \} from '\.\/viz\.js'/.test(rec) && /vizHtml\(\)/.test(rec), '');
+  /* 2026-10-07 整合：月历挪进 dlgViz 浮层 —— records.js 只负责**打开**（openVizDlg），
+   * 不再直接嵌 vizHtml（页面信息过载，见菜单整合）。 */
+  t('records.js 引入并调用 openVizDlg（入口在菜单里）',
+    /import \{ openVizDlg \} from '\.\/viz\.js'/.test(rec) && /openVizDlg\(\)/.test(rec), '');
+  t('records.js 页面不再直接嵌 vizHtml（已收进浮层）', !/vizHtml\(\)/.test(rec), '还嵌着');
   t('★ adherenceStats 已委托 statsRange（口径唯一实现）',
     /return statsRange\(prefix, medId\);/.test(rec), '');
   t('app.js 注册 bindViz（document 委托只注册一次）',

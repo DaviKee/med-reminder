@@ -6,15 +6,16 @@
 import { $, $$, esc, fmtDate, minToStr, nowMin, pad, todayKey } from '../core/util.js';
 import { S } from '../core/store.js';
 import { MISS_GRACE_MIN, dueAt, medById } from '../core/schedule.js';
-import { openDlg } from './overlay.js';
+import { openDlg, closeDlg } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
 import { ICON, storageAlertHtml } from './cards.js';
 import { diagHtml, invalidatePermProbe, refreshPerm } from './permission.js';
 import { FS_LEVELS, applyFontScale, fontScale, fsLabel } from './fontsize.js';
 import { THEME_MODES, applyTheme, themeMode, themeLabel } from './theme.js';
-import { openPhoto, photoTally } from './photo.js';
-import { autoBackupCardHtml, openCleanDlg, openDataDlg, openReportDlg, storageCardHtml } from './data.js';
+import { openPhoto } from './photo.js';
+import { openDataDlg, openReportDlg } from './data.js';
+import { openVizDlg } from './viz.js';
 import { statsRange, vizHtml } from './viz.js';
 
 /* ---------------- render: RECORDS ---------------- */
@@ -63,27 +64,52 @@ export function renderRecords() {
   }
   html += '<p class="hint" style="margin-top:-8px">每次服药后打卡，记录会自动更新。</p>';
 
-  /* ★ S-6：月历 + 月度统计 + 漏服时段 + 计划 vs 实际偏差（口径同上，见 ui/viz.js）。 */
-  html += vizHtml();
-
   /* ---- 历史记录：页面只放摘要，完整列表进二级菜单 ----
    * 之前这里把「近 14 天」的每一天都铺成卡片 —— 用得越久越长，翻不到底
    * （2026-09-28 反馈）。现在页面留摘要 + 最近 3 天，剩下的点按钮进二级菜单看。 */
-  if (S.meds.length) {
-    html += histChipsHtml();
-  }
-  html += historySummaryHtml();
+  /* ---- 功能入口：全部收进二级菜单（2026-10-07 整合） ----
+   * 页面此前把月历 / 显示 / 备份 / 调试全铺开，滚动过长、信息过载（秦老师反馈）。
+   * 概览只留「本周 + 连续打卡 + 依从率」，其余各归各的二级菜单。 */
+  html += '<div class="card menu-card">'
+    + '<span class="eyebrow" style="padding:12px 16px 0">MORE</span>'
+    + menuRow('viz', '月历与统计', '月历 · 漏服时段 · 计划 vs 实际')
+    + menuRow('hist', '历史记录', '按天回看每一次打卡')
+    + menuRow('report', '给医生看的报告', '近 7 天依从率')
+    + menuRow('data', '数据与备份', '导出 · 恢复 · 清理')
+    + menuRow('disp', '显示设置', '主题 · 字号')
+    + menuRow('debug', '调试与验收', '测试提醒 · 通知诊断')
+    + '</div>';
+  host.innerHTML = html;
 
+  /* 菜单行：页面元素每次 render 重建，跟着重建后绑定（与既有模式一致） */
+  $$('[data-entry]').forEach(function (el) {
+    el.onclick = function () {
+      var k = el.getAttribute('data-entry');
+      if (k === 'viz') openVizDlg();
+      else if (k === 'hist') openHistoryDlg();
+      else if (k === 'report') openReportDlg();
+      else if (k === 'data') openDataDlg('backup');
+      else if (k === 'disp') openDisplayDlg();
+      else if (k === 'debug') openDebugDlg();
+    };
+  });
+}
 
-  /* 拍照打卡统计。跳过率单独列出来 —— 它是这个功能该收紧还是放宽的依据。 */
-  var ph = photoTally();
-  if (ph.shot + ph.skipped > 0) {
-    var tot = ph.shot + ph.skipped;
-    html += '<p class="hint" style="margin-top:-8px">本月拍照打卡 ' + ph.shot + '/' + tot + ' 次'
-      + (ph.skipped ? (' · 未拍照 ' + ph.skipped + ' 次（' + Math.round(ph.skipped / tot * 100) + '%）') : '')
-      + '</p>';
-  }
+/* ---------------- 二级菜单的内容与开关 ----------------
+ *
+ * 2026-10-07 整合：月历 / 显示 / 调试从记录页搬进各自浮层。
+ * 内容**每次打开都重新注入** —— 选中态（主题档位 / 字号档位）跟着最新状态走，
+ * 不用惦记「改了设置忘了刷新」。 */
 
+function menuRow(entry, label, sub) {
+  return '<button class="menu-row" data-entry="' + entry + '">'
+    + '<span class="menu-lb">' + label + '<span class="menu-sub">' + sub + '</span></span>'
+    + '<span class="menu-chev">›</span></button>';
+}
+
+/* 显示设置卡（主题 + 字号）—— markup 原样从记录页搬来 */
+function displayHtml() {
+  var html = '';
   /* 显示设置：主题 + 字号。
    *
    * 主题放这里而不是做成"跟随系统就完事"：老人手机设置多为浅色，
@@ -119,25 +145,45 @@ export function renderRecords() {
     + '</div>'
     + '<p class="body" style="margin:0">只放大文字，页面布局不变。</p>'
     + '</div>';
+  return html;
+}
 
-  /* 存储状态卡放在备份卡之前：先知道「还剩多少空间」，再决定要不要导出/清理 */
-  html += storageCardHtml();
+/* 主题 / 字号按钮的绑定。⚠️ 保持 `$$('[data-theme-mode]')` 这个字面形式 ——
+ * theme.spec 盯着它（属性名绝不能换成 data-theme，那已被 <html> 占用）。 */
+function bindDisplayControls() {
+  $$('[data-theme-mode]').forEach(function (el) {
+    el.onclick = function () {
+      var m = el.getAttribute('data-theme-mode');
+      if (m === themeMode) return;
+      applyTheme(m, true);
+      $('#dispBody').innerHTML = displayHtml();   // 只刷浮层，选中态即最新
+      bindDisplayControls();
+      toast('主题已设为「' + themeLabel() + '」');
+    };
+  });
 
-  /* 自动备份卡。放在**手动导出之前** —— 它每天自动发生，是「数据没丢」的主要保障；
-   * 手动导出是换机时才用的。局限（卸载会删）必须写在卡片上，不能含糊。 */
-  html += autoBackupCardHtml();
+  $$('[data-fs]').forEach(function (el) {
+    el.onclick = function () {
+      var v = parseFloat(el.getAttribute('data-fs'));
+      if (v === fontScale) return;
+      applyFontScale(v, true);
+      $('#dispBody').innerHTML = displayHtml();
+      bindDisplayControls();
+      toast('字号已设为「' + fsLabel() + '」');
+    };
+  });
+}
 
-  html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
-    + '<span class="eyebrow">DATA · 备份</span>'
-    + '<p class="body">记录只存在这台手机上：清缓存、换手机都会丢，也没法直接拿给医生看。定期导出留一份。</p>'
-    + '<div class="btnrow" style="margin-top:2px">'
-    + '<button class="btn btn-primary" id="btnBackup" style="height:44px;font-size:calc(14px * var(--fs))">导出备份</button>'
-    + '<button class="btn btn-ghost" id="btnCsv" style="height:44px;font-size:calc(14px * var(--fs))">导出 CSV</button>'
-    + '</div>'
-    + '<button class="btn btn-ghost" id="btnReport" style="height:44px;font-size:calc(14px * var(--fs))">给医生看的报告（近 7 天）</button>'
-    + '<button class="btn btn-ghost" id="btnRestore" style="height:44px;font-size:calc(14px * var(--fs))">从备份恢复</button>'
-    + '</div>';
+export function openDisplayDlg() {
+  $('#dispBody').innerHTML = displayHtml();
+  bindDisplayControls();
+  bindDlgClose('dlgDisplay');
+  openDlg($('#dlgDisplay'));
+}
 
+/* 调试与验收卡 —— markup 原样从记录页搬来 */
+function debugHtml() {
+  var html = '';
   html += '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
     + '<span class="eyebrow">DEBUG · 验收用</span>'
     + '<p class="body">想立刻确认提醒能不能正常响？点下面按钮，10 秒后会收到一条测试通知（息屏 / 锁屏也能测，不会写入任何服药记录）。</p>'
@@ -145,9 +191,10 @@ export function renderRecords() {
     + diagHtml()
     + '<p class="hint">' + esc(versionLine()) + '</p>'
     + '</div>';
+  return html;
+}
 
-  host.innerHTML = html;
-
+function bindDebugControls() {
   var tb = $('#btnTest');
   /* 处理器由 app.js 在 boot 里注入（`setTestReminder`）——
    * 它依赖提醒流程（showReminder），那还在 app.js，不能反向 import。 */
@@ -165,58 +212,24 @@ export function renderRecords() {
         else toast('已清除全部已登记的提醒');
       });
   };
+}
 
-  $$('[data-theme-mode]').forEach(function (el) {
-    el.onclick = function () {
-      var m = el.getAttribute('data-theme-mode');
-      if (m === themeMode) return;
-      applyTheme(m, true);
-      render();                       // 重建本页 → 按钮选中态跟着更新
-      toast('主题已设为「' + themeLabel() + '」');
-    };
-  });
+export function openDebugDlg() {
+  $('#dbgBody').innerHTML = debugHtml();
+  bindDebugControls();
+  bindDlgClose('dlgDebug');
+  openDlg($('#dlgDebug'));
+}
 
-  $$('[data-fs]').forEach(function (el) {
-    el.onclick = function () {
-      var v = parseFloat(el.getAttribute('data-fs'));
-      if (v === fontScale) return;
-      applyFontScale(v, true);
-      render();
-      toast('字号已设为「' + fsLabel() + '」');
-    };
-  });
-  var ab = $('#btnAutoBak');
-  if (ab) ab.onclick = function () {
-    var A = window.MedAutoBackup;
-    if (!A || !A.status().supported) { toast('这台设备不支持自动备份'); return; }
-    toast('正在备份…');
-    A.now().then(function (s) {
-      render();
-      toast(s && s.ok
-        ? '已备份到本地（' + (s.count == null ? '1' : s.count) + ' 份）'
-        : '备份失败：' + ((s && s.err) || '未知原因'));
-    });
-  };
-
-  var bb = $('#btnBackup');
-  if (bb) bb.onclick = function () { openDataDlg('backup'); };
-  var bc = $('#btnCsv');
-  if (bc) bc.onclick = function () { openDataDlg('csv'); };
-  var br = $('#btnRestore');
-  if (br) br.onclick = function () { openDataDlg('restore'); };
-  var brp = $('#btnReport');
-  if (brp) brp.onclick = openReportDlg;
-  var bcl = $('#btnClean');
-  if (bcl) bcl.onclick = openCleanDlg;
-
-  /* 历史行里的相机图标：点开看当时的照片 */
-  $$('[data-photo]').forEach(function (el) {
-    el.onclick = function (ev) {
-      if (ev && ev.stopPropagation) ev.stopPropagation();
-      openPhoto(el.getAttribute('data-photo'));
-    };
+/* 浮层关闭按钮（data-dlg-close）—— 三个新浮层共用这一段。
+ * ⚠️ 浮层 id 必须登记进 overlay.js 的 closableDialogs()，否则返回键关不掉
+ *    （不报错，只表现为"按了没反应" —— 项目踩过的坑）。 */
+function bindDlgClose(id) {
+  $$('#' + id + ' [data-dlg-close]').forEach(function (el) {
+    el.onclick = function () { closeDlg($('#' + id)); };
   });
 }
+
 
 export function calcStreak() {
   var n = 0;

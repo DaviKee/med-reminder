@@ -19,7 +19,8 @@
 import { S } from '../core/store.js';
 import { dueAt, MISS_GRACE_MIN } from '../core/schedule.js';
 import { pad, fmtDate, todayKey, nowMin } from '../core/util.js';
-import { render } from './render.js';
+import { openDlg, closeDlg } from './overlay.js';
+import { photoTally } from './photo.js';
 
 /* ---------------- 状态（只由 bindViz 写） ---------------- */
 
@@ -234,8 +235,23 @@ export function vizHtml() {
         + ' 次晚了一小时以上 —— 如果总在同一个药上，看看是不是间隔设得太紧。</p>';
     }
   }
+  /* 拍照打卡统计 —— 原在记录页铺着，并入本浮层（统计性质，见 2026-10-07 整合） */
+  var ph = photoTally();
+  if (ph.shot + ph.skipped > 0) {
+    var tot = ph.shot + ph.skipped;
+    html += '<p class="hint" style="margin:0">本月拍照打卡 ' + ph.shot + '/' + tot + ' 次'
+      + (ph.skipped ? (' · 未拍照 ' + ph.skipped + ' 次（' + Math.round(ph.skipped / tot * 100) + '%）') : '')
+      + '</p>';
+  }
   html += '</div></div>';
   return html;
+}
+
+/* 打开「月历与统计」浮层。内容每次打开 / 翻月都重算 —— 状态在 viz 里，刷新即最新。 */
+export function openVizDlg() {
+  if (!viz.y) { var t = todayParts(); viz.y = t.y; viz.m = t.m; }
+  document.getElementById('vizBody').innerHTML = vizHtml();
+  openDlg(document.getElementById('dlgViz'));
 }
 
 /* 翻月绑定：挂在 **document** 上只注册一次（boot 里调）。
@@ -259,6 +275,7 @@ export function bindViz() {
     if (y > t.y || (y === t.y && m > t.m)) return;         // 不看未来
     if (y < 2020) return;                                  // 别翻到没有意义的年代
     viz.y = y; viz.m = m;
-    render();
+    var body = document.getElementById('vizBody');
+    if (body) body.innerHTML = vizHtml();   // 只刷浮层内容，不动背后的页面
   });
 }
