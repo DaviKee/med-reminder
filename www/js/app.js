@@ -287,6 +287,21 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
       var ds = list[i];
       if (ds.status !== 'pending') continue;
       if (S.notified[ds.id]) continue;
+      /* ★ 防重复弹窗（2026-10-07 真机反馈）：同一种药刚打过卡（2 分钟内），
+       * 就不再为它的下一条剂量自动弹提醒 —— 真机上出现过「点完已服药，
+       * 同一种药的打卡框又弹出来」。无论设备上的真实路径是哪条
+       * （桌面 Chromium 复现不了），这道闸都把症状堵死。
+       * 剂量本身仍是 pending：该手动补打卡的照样能补，只是不再自动弹。 */
+      var lastTk = 0;
+      for (var j = 0; j < list.length; j++) {
+        var o = list[j];
+        if (o.medId === ds.medId && o.status === 'taken' && o.takenAt && o.takenAt > lastTk) lastTk = o.takenAt;
+      }
+      if (lastTk && Date.now() - lastTk < 120000) {
+        S.notified[ds.id] = 1; save();
+        if (window.MedNotify && window.MedNotify.native) window.MedNotify.cancelOne(ds.id);
+        continue;
+      }
       var due = dueAt(ds);                 // 延后过就按延后时刻；原计划时刻不动
       if (due > now) continue;
       if (now - due > 30) { S.notified[ds.id] = 1; save(); continue; } // 过期太久，静默
@@ -303,6 +318,9 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
 
   var remindDose = null;
   function showReminder(ds) {
+    /* ★ 幂等护栏：只有「待服」才值得弹。已服/已跳过的剂量再弹就是骚扰
+     * （真机 2026-10-07 反馈的重复弹窗，防线之一）。 */
+    if (!ds || ds.status !== 'pending') return;
     var med = medById(ds.medId);
     remindDose = ds;
     $('#remindName').textContent = med ? med.name : '服药时间';
@@ -582,6 +600,10 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
         stampPhoto([dose], rel, skipped);
         var at = Date.now();
         var r = markTaken(dose, at);
+        /* ★ 撤掉这条剂量的系统通知 —— onNotifyAction 的「已服用」路径有这一步，
+         * 这里原来漏了，靠 save→syncNotifications 兜底（那是 250ms 防抖的，
+         * 极端时序下通知会多活一会儿再响一次）。 */
+        if (window.MedNotify && window.MedNotify.native) window.MedNotify.cancelOne(dose.id);
         save(); render();
         toast(takenToast(med, at, r));
       });
