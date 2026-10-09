@@ -10,6 +10,8 @@
  *    ③ 免得 CSS 与 JS 各判一次、结果打架。
  */
 
+import { setStatusBarIcons } from '../platform/lifecycle.js';
+
 export var THEME_KEY = 'medreminder.theme.v1';
 
 /* 档位顺序 = 界面上按钮的顺序。「深色」排第一，与现状一致。 */
@@ -76,6 +78,19 @@ export function applyTheme(mode, persist) {
     if (tc) tc.setAttribute('content', eff === 'light' ? '#F2F3F5' : '#0A0A0A');
   } catch (e) { /* ignore */ }
 
+  /* 纯净状态栏（2026-10-09 小米 13）：App 背景铺到状态栏底下后，
+   * 图标必须与背景对比 —— 浅色主题深色图标，深色主题白图标。
+   * ⚠️ 只在「真铺进去了」的设备上切：判据是 MainActivity 注入的 --sat > 0。
+   *    旧设备（Android 14-）状态栏是黑底白字，跟着切浅色就看不见了。
+   *    --sat 还没注入（原生晚于本函数）时先跳过 —— MainActivity 注入完
+   *    会调 window.__onSafeArea（下面注册的钩子）重走一遍这里。 */
+  try {
+    /* 读内联 style 而不是 getComputedStyle：--sat 由 MainActivity 直接
+     * setProperty 在 documentElement 上，这里取的就是它；浏览器没有注入 → 空串 → 跳过 */
+    var satRaw = (el.style.getPropertyValue('--sat') || '').trim();
+    if (parseFloat(satRaw) > 0) setStatusBarIcons(eff === 'light');
+  } catch (e) { /* ignore */ }
+
   if (persist) {
     try { localStorage.setItem(THEME_KEY, themeMode); } catch (e) { /* ignore */ }
   }
@@ -106,3 +121,10 @@ export function initTheme() {
   applyTheme(loadThemeMode(), false);
   watchSystemTheme(function () { applyTheme(themeMode, false); });
 }
+
+/* MainActivity 注入 --sat/--sab 后会调这个钩子（见该文件注释）——
+ * boot 时的 applyTheme 跑得比注入早，那时 --sat 还没有值、图标颜色判定被跳过；
+ * 注入完成后补一遍，浅色主题的设备才能把状态栏图标切成深色。 */
+try {
+  window.__onSafeArea = function () { applyTheme(themeMode, false); };
+} catch (e) { /* ignore */ }

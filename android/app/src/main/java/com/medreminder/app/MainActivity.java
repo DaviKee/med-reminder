@@ -2,7 +2,7 @@ package com.medreminder.app;
 
 import android.os.Bundle;
 import android.view.View;
-import android.view.ViewGroup;
+import android.webkit.WebView;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -12,6 +12,9 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
 
+    /* 上次注入的 insets —— 相同就不重复注入（每次布局变化都会回调） */
+    private int lastTop = -1, lastBottom = -1;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // 必须写在 super.onCreate() 之前：
@@ -20,34 +23,49 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppSettingsPlugin.class);
         super.onCreate(savedInstanceState);
 
-        // ---- 安全区适配（2026-10-09，小米 13 真机反馈：内容顶进状态栏） ----
+        // ---- 纯净状态栏（2026-10-09 小米 13，v1.5.25 的黑条 margin 方案被否） ----
         //
-        // 根因：targetSdk 35+ 在 Android 15+ 上被系统**强制全面屏**（edge-to-edge），
-        // WebView 会画到状态栏底下；而 Android WebView 不上报 CSS 的
-        // env(safe-area-inset-top)（恒为 0），CSS 那道防线形同虚设。
-        // 旧设备（Android 14-）没有强制全面屏，WebView 本来就在状态栏下方，所以没暴露。
+        // 根因链：targetSdk 35+ 在 Android 15+ 被系统**强制全面屏**，WebView 画到
+        // 状态栏底下；而 Android WebView 不上报 CSS 的 env(safe-area-inset-*)（恒 0），
+        // CSS 自己让不了位。
         //
-        // 修法：把系统栏 insets 变成 WebView 的 margin —— 让出状态栏/导航栏，
-        // 让出的区域露出窗口背景（splash_bg 近黑，与旧设备 statusBarColor 的表现一致）。
+        // 方案：WebView 保持全出血，把真实 insets **注入成 CSS 变量**，
+        //   --sat = 顶部（状态栏+挖孔），--sab = 底部（导航条）
+        // 由 www/css/app.css 的 `.phone` border-top / tabbar padding-bottom 消费。
+        // 好处：状态栏底下就是 App 自己的背景（随明暗主题变色），浑然一体 ——
+        // 这才是「纯净状态栏」；v1.5.25 的 margin 会让出一条死黑，被秦老师否了。
         //
-        // 自适应的关键：DecorView 在「非全面屏」路径上会先消费掉 insets 再往下游派发，
-        // 所以旧设备这里收到的是 0（行为不变）；只有被强制全面屏的设备才会拿到
-        // 非零 insets —— 这正是「只在该让的地方让」。
+        // 自适应：非全面屏设备（Android 14-）DecorView 先消费 insets 再派发，
+        // 这里收到 0 → 变量 0 → 布局与从前完全一致。
+        //
+        // ⚠️ 注入完顺手调 window.__onSafeArea：boot 里的 applyTheme 跑得比这次注入早，
+        //    它需要 --sat 有值才能决定「要不要跟随主题切状态栏图标颜色」。
         View web = bridge.getWebView();
         if (web != null) {
             ViewCompat.setOnApplyWindowInsetsListener(web, (v, windowInsets) -> {
                 Insets bars = windowInsets.getInsets(
                         WindowInsetsCompat.Type.systemBars()
                                 | WindowInsetsCompat.Type.displayCutout());
-                ViewGroup.MarginLayoutParams lp =
-                        (ViewGroup.MarginLayoutParams) v.getLayoutParams();
-                if (lp != null
-                        && (lp.topMargin != bars.top || lp.bottomMargin != bars.bottom)) {
-                    lp.topMargin = bars.top;
-                    lp.bottomMargin = bars.bottom;
-                    v.setLayoutParams(lp);
+                if (bars.top != lastTop || bars.bottom != lastBottom) {
+                    lastTop = bars.top;
+                    lastBottom = bars.bottom;
+                    final int top = bars.top, bottom = bars.bottom;
+                    v.post(() -> {
+                        try {
+                            ((WebView) v).evaluateJavascript(
+                                "document.documentElement.style.setProperty('--sat','"
+                                    + top + "px');"
+                                  + "document.documentElement.style.setProperty('--sab','"
+                                    + bottom + "px');"
+                                  + "if(window.__onSafeArea)try{window.__onSafeArea("
+                                    + top + "," + bottom + ")}catch(e){}",
+                                null);
+                        } catch (Exception e) {
+                            // 页面尚未就绪等异常：insets 下次变化会再试
+                        }
+                    });
                 }
-                return WindowInsetsCompat.CONSUMED;
+                return windowInsets;
             });
         }
     }

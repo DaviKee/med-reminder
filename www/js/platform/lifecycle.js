@@ -70,3 +70,20 @@ export function onAppStateChange(cb) {
   A.addListener('appStateChange', function (st) { cb(!!(st && st.isActive)); });
   return true;
 }
+
+/* ---- 纯净状态栏（2026-10-09 小米 13） ----
+ * App 背景铺到状态栏底下（edge-to-edge）之后，状态栏图标必须与背景对比：
+ * 浅色主题 → 深色图标（dark=true），深色主题 → 白色图标（dark=false）。
+ * 原生侧由本项目 AppSettingsPlugin.setStatusBarIcons 提供（官方没有这能力）。
+ *
+ * ⚠️ 调用方（ui/theme.js）负责只在「真铺进去了」的设备上调 —— 判据是
+ *    MainActivity 注入的 --sat > 0；旧设备状态栏是黑底白字，不能跟着切。
+ * 浏览器 / PWA 无此插件，安全返回 false。 */
+export function setStatusBarIcons(dark) {
+  var C = window.Capacitor;
+  var P = C && C.Plugins && C.Plugins.AppSettings;
+  if (P && typeof P.setStatusBarIcons === 'function') {
+    try { P.setStatusBarIcons({ dark: !!dark }); return true; } catch (e) { return false; }
+  }
+  return false;
+}

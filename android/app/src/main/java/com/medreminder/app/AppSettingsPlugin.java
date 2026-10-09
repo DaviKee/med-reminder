@@ -1,9 +1,14 @@
 package com.medreminder.app;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.view.Window;
+
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -51,6 +56,29 @@ public class AppSettingsPlugin extends Plugin {
             } catch (Exception e2) {
                 call.reject("无法打开系统设置", e2);
             }
+        }
+    }
+
+    /* ---- 纯净状态栏（2026-10-09）：状态栏图标颜色跟随 App 主题 ----
+     * App 背景铺到状态栏底下之后，图标必须与背景对比：
+     *   dark=true  → 浅色背景 → 深色图标（appearanceLightStatusBars=true）
+     *   dark=false → 深色背景 → 白色图标（默认，与历史行为一致）
+     * 由 ui/theme.js 在主题生效时调用；只对 edge-to-edge 设备有意义，
+     * 旧设备（黑底状态栏）调用方会先判 --sat>0 才调。 */
+    @PluginMethod
+    public void setStatusBarIcons(PluginCall call) {
+        Boolean dark = call.getBoolean("dark");
+        if (dark == null) { call.reject("缺少 dark 参数"); return; }
+        Activity activity = getActivity();
+        if (activity == null) { call.reject("activity 不可用"); return; }
+        try {
+            Window window = activity.getWindow();
+            WindowInsetsControllerCompat c =
+                    WindowCompat.getInsetsController(window, window.getDecorView());
+            c.setAppearanceLightStatusBars(dark);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("设置状态栏图标失败", e);
         }
     }
 }

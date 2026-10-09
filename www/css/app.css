@@ -87,8 +87,15 @@ button{font-family:inherit}
      定高后 main 才会内部滚动，tabbar 在三个选项卡里都常驻。 */
   height:100%;
   background:var(--bg);display:flex;flex-direction:column;overflow:hidden;
-  /* 让出系统状态栏高度 —— 状态栏交给系统绘制，这里只负责不被它压住 */
-  padding-top:env(safe-area-inset-top);
+  /* ---- 纯净状态栏（2026-10-09 小米 13，v1.5.25 黑条方案被否） ----
+     App 背景**铺到状态栏底下**（edge-to-edge），内容用这根随主题变色的
+     "隐形梁"让开 → 状态栏区域与页面同色、浑然一体。
+     --sat/--sab 由 MainActivity 注入（Android WebView 不上报 env()，恒 0）；
+     浏览器 / iOS PWA 走 env() 兜底。
+     ⚠️ 必须用 border 而不是 padding：绝对定位浮层（dlg-wrap / sheet / scrim）
+     的包含块是 .phone 的 **padding box** —— 用 padding 让位，浮层照样顶进
+     状态栏；border 在包含块之外，浮层会跟着让开。 */
+  border-top:var(--sat, 0px) solid var(--bg);
 }
 
 /* ---------- views ---------- */
@@ -215,7 +222,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .hidden{display:none !important}
 
 /* ---------- tabbar ---------- */
-.tabbar{flex:0 0 auto;padding:12px 21px calc(21px + env(safe-area-inset-bottom))}
+.tabbar{flex:0 0 auto;padding:12px 21px calc(21px + var(--sab, env(safe-area-inset-bottom, 0px)))}
 .tabpill{position:relative;display:flex;height:62px;border-radius:36px;background:var(--inner);border:1px solid var(--line);padding:4px;gap:4px}
 .tab{
   position:relative;z-index:1;   /* 抬到 .tab-ind 之上，否则白底会盖住图标文字 */
@@ -246,7 +253,7 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 .sheet{
   position:absolute;left:0;right:0;bottom:0;z-index:50;
   background:var(--sheet);border-top:1px solid var(--line);border-radius:16px 16px 0 0;
-  padding:8px 20px calc(20px + env(safe-area-inset-bottom));
+  padding:8px 20px calc(20px + var(--sab, env(safe-area-inset-bottom, 0px)));
   transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);
   max-height:90%;overflow-y:auto;
 }

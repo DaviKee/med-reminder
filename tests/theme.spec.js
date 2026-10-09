@@ -67,7 +67,10 @@ const LIGHT_VARS = vars(block(CSS, 'html[data-theme="light"]{'));
 const KEY_VAL = (THEME.match(/THEME_KEY = '([^']+)'/) || [])[1];
 
 /* ---------------- 沙箱：真源码 + 桩 DOM ---------------- */
-const NOEXPORT = THEME_SRC.replace(/^export\s+/gm, '');
+/* import 行也要剥：vm Script 跑不了 ES module 语法（2026-10-09 起 theme.js
+ * import 了 platform/lifecycle 的 setStatusBarIcons）。剥掉后该名字在沙箱里
+ * 是 undefined —— applyTheme 里的调用包在 try/catch，安全跳过。 */
+const NOEXPORT = THEME_SRC.replace(/^export\s+/gm, '').replace(/^import[^\n]*\n/gm, '');
 
 function env(opts) {
   opts = opts || {};
