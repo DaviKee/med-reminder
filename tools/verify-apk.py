@@ -79,6 +79,7 @@ def main():
     photo = read('assets/public/js/platform/camera.js')
     backup = read('assets/public/js/platform/storage.js')
     shadow = read_opt('assets/public/js/platform/shadow.js')
+    tts = read_opt('assets/public/js/platform/tts.js')
     css = read('assets/public/css/app.css')
     html = read('assets/public/index.html')
     sw = read('assets/public/sw.js')
@@ -250,6 +251,12 @@ def main():
         ('A-3-影子随 sw 预缓存', "'./js/platform/shadow.js'" in SW),
         ('A-3-影子脚本已加载', 'js/platform/shadow.js' in html),
         ('A-3-saveHooks 挂了 shadow 槽', 'h.shadow' in APP and 'shadow:' in APP),
+        # S-10 语音播报（2026-10-10）
+        ('S-10-TTS 模块随包', tts is not None and 'MedTts' in tts and 'speechSynthesis' in tts),
+        ('S-10-TTS 随 sw 预缓存', "'./js/platform/tts.js'" in SW),
+        ('S-10-TTS 脚本已加载', 'js/platform/tts.js' in html),
+        ('S-10-提醒弹窗会念药名', 'MedTts.speak(' in APP and 'MedTts.enabled()' in APP),
+        ('S-10-弹窗处理时打断播报', APP.count('MedTts.stop()') >= 2),
         ('H-2-注册失败不静默',
          "serviceWorker.register('sw.js').then" in APP and "console.warn('[sw]" in APP),
         # 2026-09-24 真机反馈批次

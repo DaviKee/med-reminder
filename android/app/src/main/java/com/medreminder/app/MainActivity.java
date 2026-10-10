@@ -21,6 +21,7 @@ public class MainActivity extends BridgeActivity {
         // super 内部最后会调 load()，而 load() 才用 bridgeBuilder 创建 Bridge。
         // registerPlugin() 只是往 bridgeBuilder 里加，写在 super 之后插件不会生效。
         registerPlugin(AppSettingsPlugin.class);
+        registerPlugin(TtsPlugin.class);   // S-10 语音播报（Android TTS；鸿蒙侧同 JS 出口换实现）
         super.onCreate(savedInstanceState);
 
         // ---- 纯净状态栏（2026-10-09 小米 13，v1.5.25 的黑条 margin 方案被否） ----

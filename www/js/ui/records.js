@@ -144,6 +144,21 @@ function displayHtml() {
       }).join('')
     + '</div>'
     + '<p class="body" style="margin:0">只放大文字，页面布局不变。</p>'
+
+    /* S-10 语音播报（2026-10-10）：到点念药名 —— 看不清屏幕也能知道吃哪种药。
+     * 默认开（这个功能就是给看不清屏幕的人设计的，装了就该响）；
+     * 引擎缺失的环境 speaks 静默失败，开关只是把"要不要试"关掉。 */
+    + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:6px;border-top:1px solid var(--line);padding-top:14px">'
+    + '<span class="eyebrow">语音 · 播报</span>'
+    + '<span class="meta" id="ttsNow">' + (window.MedTts && window.MedTts.enabled() ? '开' : '关') + '</span></div>'
+    + '<div class="chip-row" id="ttsRow">'
+    + [{ v: true, label: '开' }, { v: false, label: '关' }].map(function (o) {
+        var on = (window.MedTts && window.MedTts.enabled()) === o.v;
+        return '<button class="chip fs-chip' + (on ? ' on' : '') + '" data-tts="' + o.v + '"'
+          + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + o.label + '</button>';
+      }).join('')
+    + '</div>'
+    + '<p class="body" style="margin:0">到点提醒时念出药名（' + (window.MedTts && window.MedTts.supported() ? '本设备支持' : '本设备没有语音引擎，开了也不响') + '）。</p>'
     + '</div>';
   return html;
 }
@@ -170,6 +185,20 @@ function bindDisplayControls() {
       $('#dispBody').innerHTML = displayHtml();
       bindDisplayControls();
       toast('字号已设为「' + fsLabel() + '」');
+    };
+  });
+
+  /* 语音播报开关（S-10）。切到「开」时当场念一句试听 ——
+   * 老人需要立刻知道这个开关是干什么的、效果什么样，不用等到下次提醒。 */
+  $$('[data-tts]').forEach(function (el) {
+    el.onclick = function () {
+      var v = el.getAttribute('data-tts') === 'true';
+      if (window.MedTts && window.MedTts.enabled() === v) return;
+      window.MedTts.setEnabled(v);
+      $('#dispBody').innerHTML = displayHtml();
+      bindDisplayControls();
+      toast('语音播报已' + (v ? '打开' : '关闭'));
+      if (v && window.MedTts.supported()) window.MedTts.speak('语音播报已打开');
     };
   });
 }

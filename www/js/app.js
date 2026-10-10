@@ -128,7 +128,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.28';
+  var APP_VERSION = '1.5.29';
   var APP_BUILD = '2026-10-10';
 
 
@@ -346,6 +346,12 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
       + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · ' + (med ? esc(medScheduleLabel(med)) : '-');
     openDlg($('#dlgRemind'));
     fireNotification(med, ds);
+    /* S-10 语音播报：到点念药名 —— 老人看不清屏幕也能知道吃哪种药。
+     * 默认开（显示设置可关）；没有 TTS 能力的环境静默跳过（锦上添花原则）。 */
+    if (window.MedTts && window.MedTts.enabled()) {
+      var ttsText = '该吃药了，' + (med ? med.name : '') + '，' + minToStr(ds.time);
+      window.MedTts.speak(ttsText);
+    }
   }
   function fireNotification(med, ds) {
     try {
@@ -609,6 +615,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
 
     $('#remindDone').onclick = function () {
       var dose = remindDose;
+      if (window.MedTts) window.MedTts.stop();   // 弹窗处理了就别让语音念完拖在后台
       /* 先关提醒弹窗再开拍照弹窗 —— 否则两个浮层会叠在一起 */
       closeDlg($('#dlgRemind'));
       remindDose = null;
@@ -628,6 +635,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
       });
     };
     $('#remindSnooze').onclick = function () {
+      if (window.MedTts) window.MedTts.stop();
       var msg = '这条已经处理过了';
       if (remindDose) {
         msg = snoozeToast(snoozeDose(remindDose));
