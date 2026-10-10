@@ -190,9 +190,25 @@ function debugHtml() {
     + '<button class="btn btn-ghost" id="btnTest" style="align-self:flex-start;margin-top:2px">测试提醒 · 10 秒后响一次</button>'
     + diagHtml()
     + remindLogHtml()
+    + shadowStatusHtml()
     + '<p class="hint">' + esc(versionLine()) + '</p>'
     + '</div>';
   return html;
+}
+
+/* 影子状态文件状态（A-3，2026-10-10）：真机验收用 ——
+ * 有这行才能确认「web 层确实在往沙箱写原生可读的副本」。
+ * 浏览器模式没有文件系统插件 → supported=false → 只显示一行说明。 */
+function shadowStatusHtml() {
+  var S2 = window.MedShadow;
+  if (!S2) return '';
+  var s = S2.status();
+  if (!s.supported) return '<p class="hint" style="margin:0">影子文件：当前环境没有文件系统插件（浏览器模式）</p>';
+  var d = s.at ? new Date(s.at) : null;
+  var when = d ? pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) : '从未';
+  return '<p class="hint" style="margin:0">影子文件：'
+    + (s.ok ? '✓ 正常 · 最近写入 ' + when + ' · ' + s.dir + '/' : '✗ 异常（' + s.err + '）· ' + when)
+    + '</p>';
 }
 
 /* 弹窗取证时间线（2026-10-07）：重复弹窗桌面复现不了，靠这份记录定位真实路径。
