@@ -129,7 +129,8 @@ export var saveHooks = {
   refresh: function () {},
   notify: function () {},
   backup: function () {},
-  card: function () {}      // S-9：桌面卡片的数据摘要（每次都重写沙箱里的小文件）
+  card: function () {},     // S-9：桌面卡片的数据摘要（每次都重写沙箱里的小文件）
+  shadow: function () {}    // A-3：影子状态文件（原生进程可读的副本，喂卡片 / Agent）
 };
 export function setSaveHooks(h) {
   if (!h) return;
@@ -137,6 +138,7 @@ export function setSaveHooks(h) {
   if (h.notify) saveHooks.notify = h.notify;
   if (h.backup) saveHooks.backup = h.backup;
   if (h.card) saveHooks.card = h.card;
+  if (h.shadow) saveHooks.shadow = h.shadow;
 }
 
 /* 每次改动都落盘。写入失败**不抛给调用方**（那会让用户的操作半途中断），

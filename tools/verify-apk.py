@@ -78,6 +78,7 @@ def main():
     notify = read('assets/public/js/platform/notifications.js')
     photo = read('assets/public/js/platform/camera.js')
     backup = read('assets/public/js/platform/storage.js')
+    shadow = read_opt('assets/public/js/platform/shadow.js')
     css = read('assets/public/css/app.css')
     html = read('assets/public/index.html')
     sw = read('assets/public/sw.js')
@@ -243,6 +244,12 @@ def main():
          and re.search(r'isShellRequest\(req, url\)[\s\S]{0,600}?fetch\(req\)\.then', SW) is not None),
         ('H-2-预缓存含照片/备份/插件',
          all(x in SW for x in ["'./js/platform/camera.js'", "'./js/platform/storage.js'", "'./vendor/plugin-camera.js'"])),
+        # A-3 影子状态文件（2026-10-09）
+        ('A-3-影子模块随包', shadow is not None and "medreminder.shadow.v1" in shadow),
+        ('A-3-影子走原子替换协议', shadow is not None and 'state.json.tmp' in shadow and '.rename(' in shadow),
+        ('A-3-影子随 sw 预缓存', "'./js/platform/shadow.js'" in SW),
+        ('A-3-影子脚本已加载', 'js/platform/shadow.js' in html),
+        ('A-3-saveHooks 挂了 shadow 槽', 'h.shadow' in APP and 'shadow:' in APP),
         ('H-2-注册失败不静默',
          "serviceWorker.register('sw.js').then" in APP and "console.warn('[sw]" in APP),
         # 2026-09-24 真机反馈批次

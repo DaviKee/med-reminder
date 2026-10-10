@@ -62,7 +62,7 @@ import { loadPendingShot, photoGate, finishShot, stampPhoto, resumeShot, refresh
 import { refreshPerm, invalidatePermProbe, initBrowserPerm } from './ui/permission.js';
 
 
-import { loadFontScale, applyFontScale } from './ui/fontsize.js';
+import { loadFontScale, applyFontScale, fontScale } from './ui/fontsize.js';
 import { initTheme } from './ui/theme.js';
 
 
@@ -100,6 +100,13 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
     notify: syncNotifications,
     /* S-9：每次落盘顺手刷新桌面卡片的摘要文件（实现见 core/cardSummary.js）。 */
     card: writeCardFile,
+    /* A-3：影子状态文件（platform/shadow.js）—— 原生进程可读的副本，
+     * 喂鸿蒙桌面卡片 / Agent。防抖与失败静默都在插件侧，钩子只管喂最新值。 */
+    shadow: function () {
+      if (window.MedShadow) {
+        window.MedShadow.schedule(function () { return { state: S, fontScale: fontScale }; });
+      }
+    },
     backup: function () {
       if (window.MedAutoBackup) {
         window.MedAutoBackup.schedule(function () { return JSON.stringify(buildBackup()); });
@@ -121,8 +128,8 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.26';
-  var APP_BUILD = '2026-10-09';
+  var APP_VERSION = '1.5.27';
+  var APP_BUILD = '2026-10-10';
 
 
 
@@ -709,9 +716,10 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
           /* ⚠️ 后台时 JS 定时器被系统暂停 —— 过夜后回到前台是第一现场，
            * 必须在这里补一次跨天处理（否则今天没有剂量，见 rollDayIfNeeded 的注释）。 */
           rollDayIfNeeded();
-        } else if (window.MedAutoBackup) {
-          /* 切到后台时把还没写的备份立刻落盘 —— 防抖窗口内被杀掉就白改了 */
-          window.MedAutoBackup.flush();
+        } else {
+          /* 切到后台时把还没写的备份/影子立刻落盘 —— 防抖窗口内被杀掉就白改了 */
+          if (window.MedAutoBackup) window.MedAutoBackup.flush();
+          if (window.MedShadow) window.MedShadow.flush();
         }
       });
     }
