@@ -13,6 +13,8 @@ const path = require('path');
 const SHEET = fs.readFileSync(path.join(__dirname, '../www/js/ui/sheet.js'), 'utf8');
 const IDX = fs.readFileSync(path.join(__dirname, '../www/index.html'), 'utf8');
 const APP = require('./sources').all();
+const MEDS = fs.readFileSync(path.join(__dirname, '../www/js/ui/meds.js'), 'utf8');
+const ACT = fs.readFileSync(path.join(__dirname, '../www/js/ui/actions.js'), 'utf8');
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -65,6 +67,21 @@ t('保存 handler 的防重入守卫仍在', SHEET.indexOf('sheetSaveBegin()') >
 t('剂型 chips 走事件委托（重建后不失效的项目坑）',
   SHEET.indexOf("fr.addEventListener('click'") >= 0
   && SHEET.indexOf("$$('#formRow [data-form]').forEach") < 0, '');
+
+console.log('=== 6. M3 长期/短期分组 + 提前结束 ===');
+t('★ medClass 派生函数存在（零新数据字段）', /function medClass\(m\)/.test(APP) && /return dayDiff\(s\.to, todayKey\(\)\) > 0 \? 'ended' : 'short'/.test(APP), '');
+t('药品页分三组（长期/短期/已结束）',
+  MEDS.indexOf('长期服药') >= 0 && MEDS.indexOf('短期用药') >= 0 && MEDS.indexOf('已结束') >= 0, '');
+t('短期卡带剩余天数角标（今天=最后一天有专属文案）',
+  /shortLeft/.test(MEDS) && /今天最后一天/.test(MEDS) && /还剩 ' \+ diff \+ ' 天/.test(MEDS), '');
+{
+  const eme = (ACT.match(/export function endMedEarly[\s\S]*?\n\}/) || [''])[0];
+  t('★ endMedEarly 只改结束日期，不删药不动历史',
+    eme.indexOf('s.to = todayKey()') >= 0 && eme.indexOf('S.meds') < 0, '函数体不对');
+}
+t('★ 提前结束走二次确认（askConfirm）', SHEET.indexOf("askConfirm(\n      '提前结束") >= 0 || /askConfirm\([\s\S]{0,60}提前结束/.test(SHEET), '');
+t('提前结束按钮只在编辑短期药时出现', /we\.classList\.toggle\('hidden', !\(m && medClass\(m\) === 'short'\)\)/.test(SHEET), '');
+t('按钮文案说清"记录保留"（别让人以为在删数据）', IDX.indexOf('已吃的记录全部保留') >= 0, '');
 
 console.log('\n通过 ' + pass + ' / 共 ' + (pass + fail));
 if (fail) { console.log('失败清单:\n  - ' + fails.join('\n  - ')); process.exit(1); }

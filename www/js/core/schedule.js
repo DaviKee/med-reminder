@@ -122,6 +122,18 @@ export function courseState(m, dateKey) {
   return 'active';
 }
 
+/* 长期 / 短期分类（2026-10-13，向导 M3）—— **派生函数，不加数据字段**：
+ *   · 结束日期为空            → 'long'  （长期服用，一直循环）
+ *   · 有结束日期且还没到       → 'short' （短期疗程，到期自动停）
+ *   · 结束日期已过            → 'ended'（已结束，不再提醒）
+ * 口径只有这一份 —— 药品页分组、向导确认页共用（设计文档 §4.3：
+ * 为什么不做 kind 字段：与 end 派生信息重复，两处状态会打架）。 */
+export function medClass(m) {
+  var s = normSched(m);
+  if (!s.to) return 'long';
+  return dayDiff(s.to, todayKey()) > 0 ? 'ended' : 'short';
+}
+
 /* 疗程的中文描述（卡片 / 编辑页'用）。没设疗程返回空串。 */
 export function courseLabel(m) {
   var s = normSched(m);

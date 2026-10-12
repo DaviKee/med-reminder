@@ -14,7 +14,7 @@
  */
 import { minToStr, minOfDay, dateAt, todayKey } from '../core/util.js';
 import { S, save } from '../core/store.js';
-import { dueAt, medById, todayDoses, ensureFixedDoses } from '../core/schedule.js';
+import { dueAt, medById, normSched, todayDoses, ensureFixedDoses } from '../core/schedule.js';
 import { FS_HINT_KEY } from './cards.js';
 import { render } from './render.js';
 
@@ -53,6 +53,19 @@ export function deleteMed(id) {
   S.meds = S.meds.filter(function (m) { return m.id !== id; });
   S.doses[todayKey()] = todayDoses().filter(function (d) { return d.medId !== id; });
   return { name: med.name, doses: todays.length };
+}
+
+/* 短期疗程「提前结束」（2026-10-13，向导 M3）：结束日期改为**今天** ——
+ * 今天照常吃照常提醒，明天起不再排；已吃的记录全部保留
+ * （工程纪律：重排/清理不动已发生的事实）。调方后 save() 的钩子会自动
+ * 撤多余通知 + 同步影子文件。返回改动的药（供 toast），找不到返回 null。 */
+export function endMedEarly(id) {
+  var med = medById(id);
+  if (!med) return null;
+  var s = normSched(med);
+  s.to = todayKey();
+  med.sched = s;              // s 永远是完整对象（normSched 兜底），直接赋值即可
+  return med;
 }
 
 export function takenToast(med, takenMs, r) {

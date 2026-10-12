@@ -205,6 +205,12 @@
       <p class="hint" id="courseHint">不填 = 长期服用。填了结束日，当天之后自动停提醒。</p>
     </div>
 
+    <!-- 提前结束（向导 M3）：只在编辑短期疗程的药时出现（sheet.js renderDur 控制） -->
+    <div class="field hidden" data-wz="5">
+      <button class="btn btn-ghost" id="wzEnd">病好了，提前结束这个药</button>
+      <p class="hint">今天之后不再提醒；已吃的记录全部保留。</p>
+    </div>
+
     <div class="field hidden" data-wz="3" id="fieldInterval">
       <label class="field-label">服药间隔</label>
       <div class="stepper">

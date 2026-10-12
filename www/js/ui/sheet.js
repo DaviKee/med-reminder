@@ -5,12 +5,12 @@
  */
 import { $, $$, dayDiff, minToStr, uid, todayKey } from '../core/util.js';
 import { S, save } from '../core/store.js';
-import { MAX_TIMES, ensureFixedDoses, medById, medMode, needRebuildDoses, normTimes,
+import { MAX_TIMES, ensureFixedDoses, medById, medClass, medMode, needRebuildDoses, normTimes,
          rebuildTodayDoses, schedLabel, normSched, timeInputToMin, todayDoses } from '../core/schedule.js';
 import { askConfirm, enterOverlay, leaveOverlay, rememberFocus, restoreFocus, setScrim, sheetSaveBegin, sheetSaveReset } from './overlay.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
-import { deleteMed } from './actions.js';
+import { deleteMed, endMedEarly } from './actions.js';
 import { guideNotifyOnce } from './permission.js';
 import { setOrDel } from './cards.js';
 
@@ -131,7 +131,7 @@ function renderNoteRow() {
   }).join('');
 }
 
-/* 长期/短期 chips + 快捷天数显隐 */
+/* 长期/短期 chips + 快捷天数显隐 + 「提前结束」按钮显隐（仅编辑短期药时出现） */
 function renderDur() {
   $$('#durRow [data-dur]').forEach(function (el) {
     var on = el.getAttribute('data-dur') === durDraft;
@@ -140,6 +140,12 @@ function renderDur() {
   });
   var q = $('#durQuick');
   if (q) q.classList.toggle('hidden', durDraft !== 'short');
+  /* 提前结束只对「编辑中且仍是短期」的药出现 —— 长期药没有"结束"一说 */
+  var we = $('#wzEnd');
+  if (we) {
+    var m = editingId ? medById(editingId) : null;
+    we.classList.toggle('hidden', !(m && medClass(m) === 'short'));
+  }
 }
 
 /* 向导主渲染：按步显隐 + 进度 + 按钮 + 进入某步时的即时刷新。
@@ -575,6 +581,23 @@ export function bindSheet() {
       renderCourseHint();
     };
   });
+
+  /* 提前结束（编辑短期药）：结束日期改成今天 —— 今天照常，明天起不再提醒。
+   * 破坏性弱于删除（历史全保留），但仍走二次确认 + askConfirm 纪律。 */
+  var we = $('#wzEnd');
+  if (we) we.onclick = function () {
+    var m = editingId ? medById(editingId) : null;
+    if (!m) return;
+    askConfirm(
+      '提前结束「' + m.name + '」？',
+      '今天照常提醒，明天起不再排。已吃的记录全部保留；之后要继续吃，把结束日期改回未来即可。',
+      '确认结束',
+      function () {
+        endMedEarly(editingId);
+        save(); closeSheet(); render();
+        toast('已提前结束 ' + m.name);
+      });
+  };
 
   /* 上一步 / 下一步。下一步在第 1 步要先验药名 —— 老人不能等到最后一步才发现漏填。 */
   $('#wzBack').onclick = function () {

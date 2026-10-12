@@ -3,9 +3,9 @@
  * 架构重构：从 app.js 抽出。
  * 函数体一字未改，只去掉一层缩进并加 export。
  */
-import { $, esc } from '../core/util.js';
+import { $, esc, dayDiff, todayKey } from '../core/util.js';
 import { S, save } from '../core/store.js';
-import { todayDoseCount } from '../core/schedule.js';
+import { medClass, normSched, todayDoseCount } from '../core/schedule.js';
 import { render } from './render.js';
 import { toast } from './toast.js';
 import { ICON, medScheduleLabel } from './cards.js';
@@ -35,6 +35,15 @@ export function dropLegacySamples() {
 }
 
 /* ---------------- render: MEDS ---------------- */
+
+/* 短期药的剩余天数文案（今天 = 最后一天时有特殊文案） */
+function shortLeft(m) {
+  var s = normSched(m);
+  if (!s.to) return '';
+  var diff = dayDiff(todayKey(), s.to);       // 今天之后还有几天
+  if (diff <= 0) return '今天最后一天';
+  return '还剩 ' + diff + ' 天';
+}
 export function renderMeds() {
   var host = $('#medsView');
   var html = ''
@@ -47,15 +56,32 @@ export function renderMeds() {
   if (!S.meds.length) {
     html += '<div class="card"><p class="body" style="text-align:center">还没有药品。点右上角 + 添加第一个。</p></div>';
   } else {
-    html += '<div class="list">';
-    S.meds.forEach(function (m) {
-      html += '<button class="meditem" data-med="' + m.id + '">'
+    /* ★ 长期/短期分组（2026-10-13，向导 M3）：medClass 派生（不加数据字段）。
+     * 长期在上（一般不动）、短期居中（带剩余天数角标）、已结束垫底（不再提醒）。 */
+    var groups = { long: [], short: [], ended: [] };
+    S.meds.forEach(function (m) { groups[medClass(m)].push(m); });
+
+    function medItem(m, badge) {
+      var meta = medScheduleLabel(m) + ' · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '未排程');
+      if (badge) meta += ' · ' + badge;
+      return '<button class="meditem" data-med="' + m.id + '">'
         + '<span class="badge badge-36" style="color:#DADBDF">' + ICON.pill + '</span>'
         + '<span class="medinfo"><span class="n">' + esc(m.name) + '</span>'
-        + '<span class="m">' + esc(medScheduleLabel(m)) + ' · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '未排程') + '</span></span>'
+        + '<span class="m">' + esc(meta) + '</span></span>'
         + ICON.chev + '</button>';
-    });
-    html += '</div>';
+    }
+    function section(title, arr, badgeFn) {
+      if (!arr.length) return '';
+      return '<div class="sect" style="margin-bottom:14px">'
+        + '<span class="eyebrow">' + title + '</span>'
+        + '<div class="list">'
+        + arr.map(function (m) { return medItem(m, badgeFn ? badgeFn(m) : ''); }).join('')
+        + '</div></div>';
+    }
+
+    html += section('LONG-TERM · 长期服药', groups.long, null);
+    html += section('SHORT-TERM · 短期用药（到期自动停）', groups.short, shortLeft);
+    html += section('ENDED · 已结束（不再提醒）', groups.ended, null);
   }
   html += '<p class="hint" style="margin-top:-8px">点任意药品，可以改名称、改服药间隔，或者删掉它。</p>';
 
