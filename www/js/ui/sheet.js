@@ -44,8 +44,14 @@ export function openSheet(medId) {
   if ($('#courseFrom')) $('#courseFrom').value = sc0.from || '';
   if ($('#courseTo')) $('#courseTo').value = sc0.to || '';
   renderCourseHint();
+  /* ★ 录入向导：步数归 1、剂型/长短期草稿预填（编辑一次不能把原有值冲掉） */
+  wzStep = 1;
+  formDraft = (med && med.form) || '';
+  durDraft = (sc0.from || sc0.to) ? 'short' : 'long';
+  renderWizardStatic();
   $('#deleteMed').classList.toggle('hidden', !med);
   renderPreview();
+  renderWizard();
   /* 浮层打开时把焦点带进去（键盘用户不用满屏找输入框）。
    * 焦点与计数住在 ui/overlay.js —— 外部只能经这两个函数写。 */
   rememberFocus();
@@ -75,13 +81,104 @@ export var cycleDraft = 2;
 
 export var fixedTimes = [];
 
+/* ---------------- 录入向导（2026-10-10，见 docs/MedReminder-药品录入向导与长期短期分类-设计.md） ----------------
+ *
+ * 设计铁律：**只重组交互，不动数据**。
+ *   · 每个 .field 用 data-wz 标了步号（index.html），renderWizard 按步显隐 ——
+ *     所有 id / 保存 / 校验 / 重排逻辑一概不动，旧数据天然兼容；
+ *   · 长期/短期**不加数据字段**：med.end 为空 = 长期，有值 = 短期疗程（S-4 现有能力），
+ *     durDraft 只是编辑期的界面草稿；
+ *   · 唯一新增的数据字段是 med.form（剂型，可空）—— 与 S-1 三字段同一套 setOrDel 纪律。
+ */
+
+/* 剂型清单（国内常见口服+外用剂型；「其他」不落库）。单位与剂型联动 ——
+ * 用户不该面对与自己的剂型无关的单位选项（Medisafe 同款设计，见设计文档 §1.1）。 */
+var FORMS = ['片剂', '胶囊', '颗粒', '口服液', '丸剂', '含片', '缓释片', '泡腾片', '贴剂', '喷剂', '滴剂', '软膏', '其他'];
+var UNIT_BY_FORM = {
+  '片剂': '片', '缓释片': '片', '泡腾片': '片', '含片': '片',
+  '胶囊': '粒', '颗粒': '袋', '口服液': '支', '丸剂': '丸',
+  '滴剂': '滴', '贴剂': '贴', '喷剂': '喷', '软膏': '次'
+};
+
+/* 快捷说明 —— 点一下填进备注框，免得老人手打「饭后服用」。 */
+var NOTE_PRESETS = ['餐前', '随餐', '餐后', '睡前', '空腹'];
+
+var STEP_TITLES = ['', '这个药是什么', '怎么吃', '什么时候提醒', '哪些天吃', '吃多久'];
+
+export var wzStep = 1;            // 当前向导步（1..5）
+export var formDraft = '';        // 剂型草稿；'' = 未选；'其他' 不落库
+export var durDraft = 'long';     // 长期/短期的界面草稿（保存的只有疗程起止日期）
+
+/* 剂型 chips（#formRow 每次打开重建 —— 选中态跟 formDraft 走） */
+function renderForm() {
+  var row = $('#formRow');
+  if (!row) return;
+  row.innerHTML = FORMS.map(function (f) {
+    var on = f === formDraft;
+    return '<button type="button" class="chip fs-chip' + (on ? ' on' : '') + '" data-form="' + f + '"'
+      + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + f + '</button>';
+  }).join('');
+}
+
+/* 快捷说明 chips（#noteRow） */
+function renderNoteRow() {
+  var row = $('#noteRow');
+  if (!row) return;
+  row.innerHTML = NOTE_PRESETS.map(function (n) {
+    var on = ($('#medNote').value || '').trim() === n;
+    return '<button type="button" class="chip fs-chip' + (on ? ' on' : '') + '" data-note="' + n + '"'
+      + ' aria-pressed="' + (on ? 'true' : 'false') + '">' + n + '</button>';
+  }).join('');
+}
+
+/* 长期/短期 chips + 快捷天数显隐 */
+function renderDur() {
+  $$('#durRow [data-dur]').forEach(function (el) {
+    var on = el.getAttribute('data-dur') === durDraft;
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  var q = $('#durQuick');
+  if (q) q.classList.toggle('hidden', durDraft !== 'short');
+}
+
+/* 向导主渲染：按步显隐 + 进度 + 按钮 + 进入某步时的即时刷新。
+ * ⚠️ 每次都全量执行「该步的渲染函数」—— 选中态/预览即最新，与 openSheet 的预填纪律一致。 */
+export function renderWizard() {
+  $$('#sheetMed [data-wz]').forEach(function (el) {
+    el.classList.toggle('hidden', parseInt(el.getAttribute('data-wz'), 10) !== wzStep);
+  });
+  var prog = $('#wzProg');
+  if (prog) prog.textContent = '第 ' + wzStep + ' / 5 步 · ' + STEP_TITLES[wzStep];
+  var back = $('#wzBack');
+  if (back) back.classList.toggle('hidden', wzStep === 1);
+  var next = $('#wzNext');
+  if (next) next.classList.toggle('hidden', wzStep === 5);
+  var save = $('#saveMed');
+  if (save) save.classList.toggle('hidden', wzStep !== 5);
+  if (wzStep === 2) renderNoteRow();
+  if (wzStep === 3) renderPreview();
+  if (wzStep === 4) renderSched();
+  if (wzStep === 5) renderDur(); renderCourseHint();
+}
+
+/* 每次打开浮层都重建静态 chips（选中态跟着草稿走） */
+function renderWizardStatic() {
+  renderForm();
+  renderNoteRow();
+  renderDur();
+}
+
 export function renderPreview() {
-  /* 先按当前模式切换字段可见性（模式是编辑期的临时状态，不碰数据） */
+  /* 先按当前模式切换字段可见性（模式是编辑期的临时状态，不碰数据）。
+   * ⚠️ 录入向导之后：这三个字段住在第 3 步 —— 不在第 3 步时必须**保持隐藏**，
+   * 否则 openSheet 里的 renderPreview 会把第 3 步的字段漏到第 1 步来。 */
+  var onStep = (wzStep === 3);
   var isFixed = medModeDraft === 'fixed';
   var fi = $('#fieldInterval'), ff = $('#fieldFixed'), fp = $('#fieldPreview');
-  if (fi) fi.classList.toggle('hidden', isFixed);
-  if (ff) ff.classList.toggle('hidden', !isFixed);
-  if (fp) fp.classList.toggle('hidden', isFixed);   // 预览只对间隔模式有意义
+  if (fi) fi.classList.toggle('hidden', !onStep || isFixed);
+  if (ff) ff.classList.toggle('hidden', !onStep || !isFixed);
+  if (fp) fp.classList.toggle('hidden', !onStep || isFixed);   // 预览只对间隔模式有意义
   $$('#modeRow [data-mode]').forEach(function (el) {
     var on = el.getAttribute('data-mode') === medModeDraft;
     el.classList.toggle('on', on);
@@ -293,6 +390,8 @@ export function bindSheet() {
         setOrDel(m, 'dose', doseRaw);
         setOrDel(m, 'unit', unitRaw);
         setOrDel(m, 'note', noteRaw);
+        /* ★ 向导：剂型（「其他」与未选都不落库） */
+        setOrDel(m, 'form', formDraft === '其他' ? '' : formDraft);
         /* ★ S-2：剩余量存**数字**（要参与减法）；填 0 表示这盒吃完了，是合法值 */
         setOrDel(m, 'stock', stockRaw === '' ? '' : Number(stockRaw));
         /* 模式换了 / 间隔改了 / **固定模式时刻改了** → 今天的排程要重排（已打卡的记录一律保留）。
@@ -314,6 +413,8 @@ export function bindSheet() {
       setOrDel(nm, 'dose', doseRaw);
       setOrDel(nm, 'unit', unitRaw);
       setOrDel(nm, 'note', noteRaw);
+      /* ★ 向导：剂型（「其他」与未选都不落库） */
+      setOrDel(nm, 'form', formDraft === '其他' ? '' : formDraft);
       /* ★ S-2：剩余量（数字） */
       setOrDel(nm, 'stock', stockRaw === '' ? '' : Number(stockRaw));
       S.meds.push(nm);
@@ -420,4 +521,73 @@ export function bindSheet() {
       renderTimes(); renderFixedHint();
     });
   }
+
+  /* ---- 录入向导的绑定（状态与绑定同住） ---- */
+
+  /* 剂型 chips：⚠️ #formRow 的内容每次打开都重建，必须**委托**在不会被替换的
+   * #formRow 本体上（逐个 onclick 会在第二次打开时静默失效 —— 项目踩过的坑）。 */
+  var fr = $('#formRow');
+  if (fr) fr.addEventListener('click', function (ev) {
+    var el = ev.target && ev.target.closest ? ev.target.closest('[data-form]') : null;
+    if (!el) return;
+    var f = el.getAttribute('data-form');
+    formDraft = (f === formDraft) ? '' : f;      // 再点一下取消
+    renderForm();
+    /* 单位联动：剂型给了默认单位且单位还空着 → 自动填；用户自己填过就不动 */
+    var def = UNIT_BY_FORM[f];
+    if (def && formDraft === f && $('#medUnit').value.trim() === '') $('#medUnit').value = def;
+  });
+
+  /* 快捷说明 chips：同上委托。填进备注框；再点同一个 = 清掉。备注框本身仍可自由编辑。 */
+  var nr = $('#noteRow');
+  if (nr) nr.addEventListener('click', function (ev) {
+    var el = ev.target && ev.target.closest ? ev.target.closest('[data-note]') : null;
+    if (!el) return;
+    var n = el.getAttribute('data-note');
+    $('#medNote').value = ($('#medNote').value.trim() === n) ? '' : n;
+    renderNoteRow();
+  });
+
+  /* 长期/短期：短期显示日期输入与快捷天数；长期清空起止（= 派生回长期） */
+  $$('#durRow [data-dur]').forEach(function (el) {
+    el.onclick = function () {
+      durDraft = el.getAttribute('data-dur');
+      if (durDraft === 'long') {
+        if ($('#courseFrom')) $('#courseFrom').value = '';
+        if ($('#courseTo')) $('#courseTo').value = '';
+      } else {
+        /* 短期默认从今天开始 —— 给个起点比空着好 */
+        if ($('#courseFrom') && !$('#courseFrom').value) $('#courseFrom').value = todayKey();
+      }
+      renderDur(); renderCourseHint();
+    };
+  });
+  $$('#durQuick [data-durq]').forEach(function (el) {
+    el.onclick = function () {
+      var n = parseInt(el.getAttribute('data-durq'), 10);
+      var f = todayKey();
+      var d = new Date();
+      d.setDate(d.getDate() + n - 1);
+      var p = function (x) { return String(x).padStart(2, '0'); };
+      if ($('#courseFrom')) $('#courseFrom').value = f;
+      if ($('#courseTo')) $('#courseTo').value =
+        d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+      renderCourseHint();
+    };
+  });
+
+  /* 上一步 / 下一步。下一步在第 1 步要先验药名 —— 老人不能等到最后一步才发现漏填。 */
+  $('#wzBack').onclick = function () {
+    if (wzStep <= 1) return;
+    wzStep--;
+    renderWizard();
+  };
+  $('#wzNext').onclick = function () {
+    if (wzStep === 1 && !$('#medName').value.trim()) {
+      toast('请先填药品名称'); $('#medName').focus(); return;
+    }
+    if (wzStep >= 4) return;                     // 第 5 步没有「下一步」，只有保存
+    wzStep++;
+    renderWizard();
+  };
 }

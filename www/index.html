@@ -71,17 +71,27 @@
       </button>
     </div>
 
-    <div class="field">
+    <!-- ★ 录入向导（2026-10-10）：data-wz 标记每个字段属于第几步，
+         ui/sheet.js 的 renderWizard() 按 wzStep 逐屏显示 —— DOM 结构与 id 一概不动，
+         保存/校验/重排逻辑零改动，旧数据天然兼容。 -->
+    <div class="field" data-wz="1">
       <label class="field-label" for="medName">药品名称</label>
       <div class="input-wrap">
         <input id="medName" type="text" placeholder="例如 维生素 D3" maxlength="20" autocomplete="off">
       </div>
     </div>
 
+    <!-- 药品剂型（向导第 1 步）：决定第 2 步的单位预设；存 med.form，旧数据没有 = 未设 -->
+    <div class="field" data-wz="1">
+      <label class="field-label">药品剂型（可不选）</label>
+      <div class="chip-row" id="formRow"></div>
+      <p class="hint">选了剂型，下一步的单位会自动填好。</p>
+    </div>
+
     <!-- ★ S-1（2026-10-01）：剂量与单位。
          适老化设计 —— 只多两行，不引入更多弹层；两项都可留空。
          旧数据没有这三个字段 → 视为空，**天然向后兼容**（备份 JSON 自动携带）。 -->
-    <div class="field">
+    <div class="field" data-wz="2">
       <label class="field-label" for="medDose">每次剂量与单位（可不填）</label>
       <div style="display:flex;gap:10px">
         <div class="input-wrap" style="flex:1">
@@ -101,7 +111,7 @@
 
     <!-- ★ S-2（2026-10-01）：剩余量。单位沿用上面的「单位」字段，不重复问一遍。
          填了才会算「还够几天」并做低库存提醒；留空则完全不显示库存 UI。 -->
-    <div class="field">
+    <div class="field" data-wz="2">
       <label class="field-label" for="medStock">目前还剩（可不填）</label>
       <div class="input-wrap">
         <input id="medStock" type="text" inputmode="decimal" placeholder="例如 28" maxlength="8" autocomplete="off">
@@ -109,8 +119,10 @@
       <p class="hint">用上面的单位（如「片」）。填了会自动算还够几天、快吃完时提醒，且每次打卡自动扣减。</p>
     </div>
 
-    <div class="field">
+    <div class="field" data-wz="2">
       <label class="field-label" for="medNote">服用说明 / 备注（可不填）</label>
+      <!-- 快捷说明：点一下填进备注框，再点一下清掉 —— 免得老人手打「饭后服用」 -->
+      <div class="chip-row" id="noteRow" style="margin-bottom:8px"></div>
       <!-- ⚠️ 多行输入用 .multi 变体：.input-wrap 是给**单行 input** 的固定 54px 壳，
            直接把 rows=2 的 textarea 塞进去，内容会垂直溢出、文字与光标跑到框外
            （2026-10-01 真机反馈）。样式统一交给 CSS，不再写 inline —— 这样字号才会
@@ -120,7 +132,7 @@
       </div>
     </div>
 
-    <div class="field">
+    <div class="field" data-wz="3">
       <label class="field-label">服药方式</label>
       <div class="chip-row" id="modeRow">
         <button class="chip fs-chip on" data-mode="interval" aria-pressed="true">按间隔</button>
@@ -132,7 +144,7 @@
 
     <!-- S-3 服用周期：医嘱里「隔天一次」「每周一三五」很常见。
          默认「每天」——与改造前一致，不动它就等于没这个功能。 -->
-    <div class="field">
+    <div class="field" data-wz="4">
       <label class="field-label">服用周期</label>
       <div class="chip-row" id="schedRow">
         <button class="chip fs-chip on" data-sched="daily" aria-pressed="true">每天</button>
@@ -163,10 +175,24 @@
       <p class="hint" id="schedHint">每天</p>
     </div>
 
+    <div class="field" data-wz="5">
+      <label class="field-label">吃多久</label>
+      <!-- 长期/短期（向导第 5 步）：派生自疗程字段（end 空 = 长期），不新增数据字段。
+           设计见 docs/MedReminder-药品录入向导与长期短期分类-设计.md §4.3。 -->
+      <div class="chip-row" id="durRow" style="margin-bottom:10px">
+        <button class="chip fs-chip" data-dur="long" aria-pressed="false">长期服用 · 一直循环</button>
+        <button class="chip fs-chip" data-dur="short" aria-pressed="false">短期疗程 · 到期自动停</button>
+      </div>
+      <div class="chip-row hidden" id="durQuick" style="margin-bottom:10px">
+        <button class="chip fs-chip" data-durq="7">服 7 天</button>
+        <button class="chip fs-chip" data-durq="14">服 14 天</button>
+      </div>
+    </div>
+
     <!-- S-4 疗程：起止日期（含两端）。不填 = 长期服用 —— 与改造前一致。
          抗生素疗程最典型：医生开了 7 天，不该让用户自己记着到点删药。 -->
-    <div class="field">
-      <label class="field-label">疗程（可选）</label>
+    <div class="field" data-wz="5">
+      <label class="field-label">疗程起止（短期才需要填）</label>
       <div style="display:flex;gap:10px;align-items:center">
         <div class="input-wrap date-wrap" style="flex:1 1 0">
           <input type="date" id="courseFrom" aria-label="疗程开始日期">
@@ -179,7 +205,7 @@
       <p class="hint" id="courseHint">不填 = 长期服用。填了结束日，当天之后自动停提醒。</p>
     </div>
 
-    <div class="field" id="fieldInterval">
+    <div class="field hidden" data-wz="3" id="fieldInterval">
       <label class="field-label">服药间隔</label>
       <div class="stepper">
         <button class="step-btn" id="stepMinus" aria-label="减少">
@@ -209,6 +235,13 @@
       <span class="eyebrow">AUTO SCHEDULE · 以 06:00 为例</span>
       <div class="chip-row" id="previewChips"></div>
     </div>
+
+    <!-- 录入向导导航：进度 + 上一步/下一步。保存键只在第 5 步出现（sheet.js renderWizard 控制显隐） -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px">
+      <span class="meta" id="wzProg">第 1 / 5 步 · 这个药是什么</span>
+      <button class="btn btn-text hidden" id="wzBack" aria-label="上一步">‹ 上一步</button>
+    </div>
+    <button class="btn btn-primary" id="wzNext">下一步 ›</button>
 
     <div class="sheet-actions">
       <button class="btn btn-primary" id="saveMed">保存药品</button>
