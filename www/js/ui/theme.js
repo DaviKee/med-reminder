@@ -80,14 +80,13 @@ export function applyTheme(mode, persist) {
 
   /* 纯净状态栏（2026-10-09 小米 13）：App 背景铺到状态栏底下后，
    * 图标必须与背景对比 —— 浅色主题深色图标，深色主题白图标。
-   * ⚠️ 只在「真铺进去了」的设备上切：判据是 MainActivity 注入的 --sat > 0。
-   *    旧设备（Android 14-）状态栏是黑底白字，跟着切浅色就看不见了。
-   *    --sat 还没注入（原生晚于本函数）时先跳过 —— MainActivity 注入完
-   *    会调 window.__onSafeArea（下面注册的钩子）重走一遍这里。 */
+   * ⚠️ 只在「真铺进去了」的设备上切：判据是 Capacitor 8 SystemBars 注入的
+   *    --safe-area-inset-top > 0（2026-10-13 起收编 Capacitor 内置方案，
+   *    自写注入因没除 density 造成三倍让位，已删）。
+   *    旧设备（Android 14-）走物理 padding 路径，变量恒 0，图标保持白字。
+   *    注入晚于本函数时先跳过 —— SystemBars 注入完由 __onSafeArea 钩子重走这里。 */
   try {
-    /* 读内联 style 而不是 getComputedStyle：--sat 由 MainActivity 直接
-     * setProperty 在 documentElement 上，这里取的就是它；浏览器没有注入 → 空串 → 跳过 */
-    var satRaw = (el.style.getPropertyValue('--sat') || '').trim();
+    var satRaw = (el.style.getPropertyValue('--safe-area-inset-top') || '').trim();
     if (parseFloat(satRaw) > 0) setStatusBarIcons(eff === 'light');
   } catch (e) { /* ignore */ }
 
@@ -122,9 +121,13 @@ export function initTheme() {
   watchSystemTheme(function () { applyTheme(themeMode, false); });
 }
 
-/* MainActivity 注入 --sat/--sab 后会调这个钩子（见该文件注释）——
- * boot 时的 applyTheme 跑得比注入早，那时 --sat 还没有值、图标颜色判定被跳过；
- * 注入完成后补一遍，浅色主题的设备才能把状态栏图标切成深色。 */
+/* Capacitor 8 SystemBars 注入 --safe-area-inset-* 后不会主动回调 ——
+ * boot 时的 applyTheme 跑得比注入早，那时变量还没有值、图标颜色判定被跳过。
+ * 兜底：启动后延迟补判一次（原生注入是启动早期的 evaluateJavascript，
+ * 500ms 足够覆盖；变量换值只发生在转屏/分屏，届时 applyTheme 会被重新触发）。
+ * ⚠️ 整段包 try：无 setTimeout 的环境（theme.spec 的 vm 沙箱）安全跳过。 */
 try {
-  window.__onSafeArea = function () { applyTheme(themeMode, false); };
+  setTimeout(function () {
+    try { applyTheme(themeMode, false); } catch (e) { /* ignore */ }
+  }, 500);
 } catch (e) { /* ignore */ }

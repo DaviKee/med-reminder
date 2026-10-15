@@ -40,7 +40,8 @@ t('★ renderWizard 按步显隐（data-wz 全量扫描）',
 t('★ 保存键只到最后一步出现', /wzStep !== 5/.test(SHEET), '');
 t('第 1 步先验药名（别让老人到最后一步才发现漏填）',
   /wzStep === 1 && !\$\('#medName'\)\.value\.trim\(\)/.test(SHEET), '');
-t('「下一步」到第 5 步为止（保存另有按钮）', /wzStep >= 4\) return/.test(SHEET), '');
+t('★ 步进守卫边界是 5（v1.5.31 曾写成 >=4 —— 第 4 步永远到不了第 5 步，真机反馈）',
+  /wzStep >= 5\) return/.test(SHEET) && !/wzStep >= 4\) return/.test(SHEET), '');
 
 console.log('=== 3. 剂型 → 单位词汇表 ===');
 t('剂型清单覆盖国内常见剂型',

@@ -77,7 +77,8 @@ export function onAppStateChange(cb) {
  * 原生侧由本项目 AppSettingsPlugin.setStatusBarIcons 提供（官方没有这能力）。
  *
  * ⚠️ 调用方（ui/theme.js）负责只在「真铺进去了」的设备上调 —— 判据是
- *    MainActivity 注入的 --sat > 0；旧设备状态栏是黑底白字，不能跟着切。
+ *    Capacitor 8 SystemBars 注入的 --safe-area-inset-top > 0；旧设备（物理
+ *    padding 路径）变量恒 0，状态栏黑底白字保持不变。
  * 浏览器 / PWA 无此插件，安全返回 false。 */
 export function setStatusBarIcons(dark) {
   var C = window.Capacitor;

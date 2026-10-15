@@ -609,7 +609,7 @@ export function bindSheet() {
     if (wzStep === 1 && !$('#medName').value.trim()) {
       toast('请先填药品名称'); $('#medName').focus(); return;
     }
-    if (wzStep >= 4) return;                     // 第 5 步没有「下一步」，只有保存
+    if (wzStep >= 5) return;                     // 第 5 步没有「下一步」，只有保存
     wzStep++;
     renderWizard();
   };
