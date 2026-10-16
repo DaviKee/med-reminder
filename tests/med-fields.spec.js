@@ -107,7 +107,7 @@ console.log('=== D. 备注是多行框：外壳与骨架必须配对（2026-10-0
    * 根因不是文字太长，是**壳选错了** —— .input-wrap 是给单行 input 的 `height:54px` 固定壳，
    * `rows=2` 的 textarea 塞进去必然垂直溢出。这组断言锁死「壳 + 骨架」的配对关系，
    * 防止以后有人图省事又把它塞回单行壳。 */
-  const CSS = fs.readFileSync(path.join(ROOT, 'www/css/app.css'), 'utf8');
+  const CSS = require('./sources').cssAll();
   const iNote = HTML_SRC.indexOf('id="medNote"');
   const iDiv = HTML_SRC.lastIndexOf('<div class="input-wrap', iNote);
   const shell = HTML_SRC.slice(iDiv, iNote);

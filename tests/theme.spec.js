@@ -1,4 +1,5 @@
-/* S-5 明暗主题（ui/theme.js + css/app.css）—— 2026-10-04
+/* S-5 明暗主题（ui/theme.js + css/tokens.css 等四个文件）—— 2026-10-04
+ * （2026-10-17 P1：app.css 拆为 tokens/base/components/views，CSS_SRC 改读四文件拼接）
  *
  * 测三件事：
  *   ① `resolveTheme` 判定矩阵 —— 「跟随系统」要真的跟，手动档要压过系统。
@@ -13,7 +14,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const THEME_SRC = fs.readFileSync(path.join(ROOT, 'www/js/ui/theme.js'), 'utf8');
-const CSS_SRC = fs.readFileSync(path.join(ROOT, 'www/css/app.css'), 'utf8');
+const CSS_SRC = require('./sources').cssAll();
 const HTML_SRC = fs.readFileSync(path.join(ROOT, 'www/index.html'), 'utf8');
 const REC_SRC = fs.readFileSync(path.join(ROOT, 'www/js/ui/records.js'), 'utf8');
 const APP_SRC = fs.readFileSync(path.join(ROOT, 'www/js/app.js'), 'utf8');
@@ -104,7 +105,7 @@ function env(opts) {
 }
 
 console.log('=== 0. 自检 ===');
-t('theme.js / app.css 都读到了', THEME.length > 800 && CSS.length > 5000,
+t('theme.js / 拆分后 css 都读到了', THEME.length > 800 && CSS.length > 5000,
   THEME.length + ' / ' + CSS.length);
 t('能抽到 THEME_KEY', typeof KEY_VAL === 'string' && KEY_VAL.length > 8, String(KEY_VAL));
 t('能定到 :root 块', Object.keys(ROOT_VARS).length > 15, String(Object.keys(ROOT_VARS).length));
@@ -294,12 +295,12 @@ console.log('=== 7. 首屏防闪内联脚本与 theme.js 一致 ===');
     m && m[1] === KEY_VAL, (m && m[1]) + ' vs ' + KEY_VAL);
 }
 t('内联脚本在 <link rel="stylesheet"> 之前（否则会先按旧主题画一遍）',
-  HTML_SRC.indexOf('medreminder.theme.v1') < HTML_SRC.indexOf('css/app.css'), '顺序反了');
+  HTML_SRC.indexOf('medreminder.theme.v1') < HTML_SRC.indexOf('css/tokens.css'), '顺序反了');
 t('内联脚本认 light / sys 两个档位字样',
   /'light'/.test(HTML_SRC.slice(HTML_SRC.indexOf('medreminder.theme.v1') - 400,
-    HTML_SRC.indexOf('css/app.css'))) &&
+    HTML_SRC.indexOf('css/tokens.css'))) &&
   /'sys'/.test(HTML_SRC.slice(HTML_SRC.indexOf('medreminder.theme.v1') - 400,
-    HTML_SRC.indexOf('css/app.css'))), '档位名对不上');
+    HTML_SRC.indexOf('css/tokens.css'))), '档位名对不上');
 t('index.html 声明了 theme.js 的 modulepreload',
   /modulepreload" href="js\/ui\/theme\.js"/.test(HTML_SRC), '少了 modulepreload');
 

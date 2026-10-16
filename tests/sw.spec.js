@@ -160,7 +160,9 @@ function makeEnv(opts) {
     t('★ 含 js/platform/storage.js（原缺失）', A.indexOf('./js/platform/storage.js') >= 0, '缺');
     t('含 js/platform/notifications.js', A.indexOf('./js/platform/notifications.js') >= 0, '缺');
     t('含 js/app.js', A.indexOf('./js/app.js') >= 0, '缺');
-    t('含 css/app.css', A.indexOf('./css/app.css') >= 0, '缺');
+    ['./css/tokens.css', './css/base.css', './css/components.css', './css/views.css'].forEach(function (f) {
+      t('含 ' + f.replace('./', ''), A.indexOf(f) >= 0, '缺');
+    });
 
     /* index.html 用的是**裸相对路径**（`js/app.js`，没有 `./` 前缀）。
      * 第一版我按 `./` 前缀去解析，结果解析到 0 条 —— 而"全部在清单里"这条

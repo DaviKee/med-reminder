@@ -79,4 +79,19 @@ function standalone(rel) {
   return read(rel);
 }
 
-module.exports = { all: all, standalone: standalone, stripModuleSyntax: stripModuleSyntax, read: read, MODULES: MODULES };
+/* ---- CSS（2026-10-17 P1 四拆分后）----
+ * index.html 按 tokens → base → components → views 的顺序加载四个文件，
+ * 合并后与拆分前的 app.css 等价（拆分时做过规则多重集比对，零视觉变化）。
+ * spec 里原先读 app.css 的地方统一改成读这里 —— 测试论文不变
+ * （仍是"读真实源码文本"），只是源从一个文件变成四个文件的按序拼接。 */
+const CSS_DIR = path.join(ROOT, 'www', 'css');
+const CSS_FILES = ['tokens.css', 'base.css', 'components.css', 'views.css'];
+
+/** 全部样式文本：按 index.html 的加载顺序拼接（等价于拆分前的 app.css）。 */
+function cssAll() {
+  return CSS_FILES.map(function (f) {
+    return fs.readFileSync(path.join(CSS_DIR, f), 'utf8');
+  }).join('\n');
+}
+
+module.exports = { all: all, standalone: standalone, stripModuleSyntax: stripModuleSyntax, read: read, MODULES: MODULES, cssAll: cssAll };

@@ -25,7 +25,14 @@
   if (eff === 'light') document.documentElement.setAttribute('data-theme', 'light');
 } catch (e) { /* ignore */ } })();
 </script>
-<link rel="stylesheet" href="css/app.css">
+<!-- 样式按职责拆成四个文件（2026-10-17 UI 重构 P1，原 app.css 488 行已废弃）。
+     ⚠️ 顺序即级联顺序，勿调换：tokens 提供变量 → base 是 reset 与骨架 →
+     components 是通用组件 → views 是各视图专属覆盖（.bar 等重复选择器
+     依赖 views 内部 "viz 在前、存储细条在后" 的先后关系）。 -->
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/views.css">
 </head>
 <body>
 <div class="phone" id="phone">

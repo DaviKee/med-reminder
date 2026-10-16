@@ -14,7 +14,7 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const APP_SRC = require('./sources').all();
 const HTML = fs.readFileSync(path.join(ROOT, 'www/index.html'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'www/css/app.css'), 'utf8');
+const CSS = require('./sources').cssAll();
 const OVERLAY = fs.readFileSync(path.join(ROOT, 'www/js/ui/overlay.js'), 'utf8');
 
 const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');

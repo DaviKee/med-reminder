@@ -47,11 +47,18 @@ if [ "${SKIP_HARNESS:-}" = "1" ]; then
 fi
 
 # ---- 找 python（绝对路径优先：本机裸调 python 有时会落到商店占位程序）----
+# ⚠️ 2026-10-17：光判 -x 不够 —— `.workbuddy` 旧托管根的
+#    envs/default/Scripts/python.exe 是个 launcher shim：可执行位在、
+#    文件在，但基解释器 versions/3.13.12 的符号链接随托管目录搬家已断，
+#    一跑就 rc=103。所以每个候选都要真跑一次 --version 才算数。
+#    顺序上 `.workbuddy-ai`（现行托管根）优先。
 PY=""
-for c in "$USERPROFILE/.workbuddy/binaries/python/envs/default/Scripts/python.exe" \
+for c in "$USERPROFILE/.workbuddy-ai/binaries/python/envs/default/Scripts/python.exe" \
+         "$USERPROFILE/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe" \
+         "$USERPROFILE/.workbuddy/binaries/python/envs/default/Scripts/python.exe" \
          "$USERPROFILE/.workbuddy/binaries/python/versions/3.13.12/python.exe" \
          "$HOME/.workbuddy/binaries/python/versions/3.13.12/python.exe"; do
-  if [ -n "${c:-}" ] && [ -x "$c" ]; then PY="$c"; break; fi
+  if [ -n "${c:-}" ] && [ -x "$c" ] && "$c" --version >/dev/null 2>&1; then PY="$c"; break; fi
 done
 if [ -z "$PY" ]; then
   if command -v python3 >/dev/null 2>&1; then PY=python3

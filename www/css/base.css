@@ -1,0 +1,91 @@
+/* ============================================================
+ * base.css —— 复位 / 布局骨架 / 排版类 / 无障碍底线
+ *
+ * 2026-10-16 P1 架构拆分：从 app.css 拆出。
+ * 只管「页面骨架与文字」，不含任何具体组件（组件在 components.css，
+ * 页级样式在 views.css）。全部用色/字号走 tokens.css 的变量。
+ * ============================================================ */
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+/* 关掉 WebView 的自动字体放大（font boosting）—— 我们有自己的字号档位，
+   两套缩放叠加会让"标准档"在不同设备上大小不一、布局不可预期。 */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  background:var(--bg-outer);color:var(--text);font-family:var(--font-sans);
+  display:flex;justify-content:center;overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;   /* 禁止整页滚动 —— 滚动交给 main，底部导航才能常驻 */
+}
+button{font-family:inherit}
+
+.phone{
+  position:relative;width:100%;max-width:430px;
+  /* 必须是定高而不是 min-height：min-height 会让容器随内容长高，
+     main 的 overflow-y 随之失效、整页滚动把底部导航推走。
+     定高后 main 才会内部滚动，tabbar 在三个选项卡里都常驻。 */
+  height:100%;
+  background:var(--bg);display:flex;flex-direction:column;overflow:hidden;
+  /* ---- 纯净状态栏（2026-10-09 起；2026-10-13 收编 Capacitor 8 内置方案） ----
+     App 背景**铺到状态栏底下**（edge-to-edge），内容用这根随主题变色的
+     "隐形梁"让开 → 状态栏区域与页面同色、浑然一体。
+     变量由 Capacitor 8 内置 SystemBars 插件注入（--safe-area-inset-*，
+     已做 density 换算与键盘修正；老 WebView 路径它改用物理 padding、
+     变量自动为 0 —— 不会双重让位）。
+     ⚠️ 历史教训（v1.5.26-31）：自己注入物理 px 不除 density → 预留空间
+     变 3 倍，真机"上下削去太多"。
+     ⚠️ 必须用 border 而不是 padding：绝对定位浮层（dlg-wrap / sheet / scrim）
+     的包含块是 .phone 的 **padding box** —— 用 padding 让位，浮层照样顶进
+     状态栏；border 在包含块之外，浮层会跟着让开。 */
+  border-top:var(--safe-area-inset-top, 0px) solid var(--bg);
+}
+
+/* ---------- views ---------- */
+/* 长 token（备份目录路径 / 插件版本号 / 插件报错里的路径）没有可断点：按 UAX #14，
+   `/` 与 `.` 都不是断行点，浏览器只在空白与 CJK 处断行 → 一整串不可断，会顶出卡片右边
+   （2026-09-28 真机：AUTO 卡的备份目录路径）。
+   `anywhere` 只在放不下时才在词内断（不像 `break-all` 见缝就断），对普通文本无害；
+   它还会影响 min-content 宽度 —— flex 子项里正需要这一点。
+   放在 main 上靠**继承**覆盖全部正文；`.dose-n` 那种刻意 nowrap+ellipsis 截断的不受影响。 */
+main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:8px;overflow-wrap:anywhere}
+.view{display:none}
+.view.active{display:block}
+/* 切页时新页沿切换方向滑入 —— 原来是 display 从 none 跳 block，真机反馈"太硬"。
+   ⚠️ 为什么不做「新旧两页对滑」：.view 是流式布局、#main 是唯一滚动容器，
+   两页同时可见就必须临时绝对定位，而 absolute **不撑父容器** →
+   动画期间内容高度塌成 0，滚动位置与右侧进度条都会跳。
+   为 0.26s 的观感换这个风险不划算（这个 App 的用户是老人，动效更该克制）。
+   class 由 setTab 加、也在 setTab 里摘 —— 不摘的话同一页再次成为目标时不会重播
+   （class 没变化，浏览器就认为动画没变）。 */
+@keyframes viewInRight{from{transform:translateX(36px);opacity:0}to{transform:none;opacity:1}}
+@keyframes viewInLeft{from{transform:translateX(-36px);opacity:0}to{transform:none;opacity:1}}
+.view.enter-from-right{animation:viewInRight .26s cubic-bezier(.22,.61,.36,1) both}
+.view.enter-from-left{animation:viewInLeft .26s cubic-bezier(.22,.61,.36,1) both}
+.stack{display:flex;flex-direction:column;gap:28px;padding:8px 20px 24px}
+.pad{padding:0 20px}
+
+/* ---------- type ---------- */
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums;letter-spacing:-.6px}
+.eyebrow{font-family:var(--font-mono);font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));letter-spacing:1.4px;color:var(--muted);text-transform:uppercase}
+.eyebrow.accent{color:var(--accent)}
+.h1{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.6px;color:var(--text);margin:0;font-weight:400}
+.h2{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));color:var(--text);margin:0;font-weight:500}
+.body{font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted);margin:0}
+.meta{font-size:calc(13px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);margin:0}
+.hint{font-size:calc(13px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);margin:10px 0 0}
+
+/* ---------- 无障碍（A-2 / A-5） ---------- */
+/* 键盘 / 开关设备需要的可见焦点环。浏览器默认 outline 在纯黑背景上几乎看不见 */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+
+/* A-5 尊重系统的「减少动态效果」设置：不做无谓的位移/淡入动画 */
+/* ⚠️ 2026-10-16 P1 拆分级联注记：本块里的 `.scrim{transition:none}` 原先靠
+   "排在 app.css 末尾" 覆盖 .scrim 的正牌过渡；拆分后 base 先于 components 加载，
+   该条被 components 的 `.scrim{...transition:opacity .22s}` 反覆盖——
+   但首行 `*{transition-duration:.001ms !important}` 以 !important 通杀
+   （特异性/顺序都让位于 important），实际效果不变。tabs.spec 的通杀断言
+   盯的正是这一行。若要改回显式覆盖，把 .scrim 规则挪来本块之后即可。 */
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:.001ms !important;animation-duration:.001ms !important;animation-iteration-count:1 !important}
+  .scrim{transition:none}
+}

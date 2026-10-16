@@ -22,7 +22,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const APP_SRC = require('./sources').all();
-const CSS_SRC = fs.readFileSync(path.join(ROOT, 'www/css/app.css'), 'utf8');
+const CSS_SRC = require('./sources').cssAll();
 
 /* ⚠️ CSS 也要剥注释：否则断言可能命中注释里的字样，而不是真的声明 */
 const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');

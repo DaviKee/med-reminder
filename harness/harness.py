@@ -48,32 +48,71 @@ import gates as gates_mod                          # noqa: E402
 
 # ---------------------------------------------------------------- 环境探测
 
+def _runnable(exe):
+    """候选解释器**真的跑得起来**才算数。
+
+    ⚠️ 2026-10-17（D 盘工作副本）：`.workbuddy` 旧托管根里的
+    `envs\\default\\Scripts\\python.exe` 只是个 launcher shim ——
+    文件在、os.path.isfile 为真，但一执行就 rc=103：它要找基解释器
+    `versions\\3.13.12\\python.exe`，而那条符号链接在托管目录搬家到
+    `.workbuddy-ai` 之后已经断了。**isfile 会被"存在但跑不了"的文件
+    骗过**，所以每个候选都要真跑一次 --version 验证。"""
+    if not exe or not os.path.isfile(exe):
+        return False
+    try:
+        p = subprocess.run([exe, '--version'], capture_output=True, timeout=60)
+        return p.returncode == 0
+    except Exception:
+        return False
+
+
+def _binaries_pythons():
+    """托管 python 可能的位置（按优先度）。
+
+    ⚠️ 2026-10-17：托管目录根在 `.workbuddy` 与 `.workbuddy-ai`
+    之间搬过（D 盘工作副本落后者）—— 两个根都找、`.workbuddy-ai`
+    优先（现行托管根）。
+    版本号也别写死：写死过一次（3.13.12），另一台机器升到
+    3.14 后整个 imports 关口报退出码 103（可执行文件找不到）。"""
+    out = []
+    for root in ('.workbuddy-ai', '.workbuddy'):
+        base = os.path.join(os.environ.get('USERPROFILE', ''), root, 'binaries', 'python')
+        out.append(os.path.join(base, 'envs', 'default', 'Scripts', 'python.exe'))
+        vdir = os.path.join(base, 'versions')
+        try:
+            vers = sorted(os.listdir(vdir), reverse=True)
+        except OSError:
+            vers = []
+        for v in vers:
+            out.append(os.path.join(vdir, v, 'python.exe'))
+    return out
+
 def find_python():
     """优先用装了库的 venv，退回到裸的解释器（本机 python 会落到商店 stub）。"""
-    cands = [
-        os.path.join(os.environ.get('USERPROFILE', ''), '.workbuddy', 'binaries',
-                     'python', 'envs', 'default', 'Scripts', 'python.exe'),
-        os.path.join(os.environ.get('USERPROFILE', ''), '.workbuddy', 'binaries',
-                     'python', 'versions', '3.13.12', 'python.exe'),
-    ]
-    for c in cands:
-        if c and os.path.isfile(c):
+    for c in _binaries_pythons():
+        if _runnable(c):
             return c
     return sys.executable
 
 
 def find_node():
-    """优先用托管 node，退回到系统 node。"""
-    cands = [
-        os.path.join(os.environ.get('USERPROFILE', ''), '.workbuddy', 'binaries',
-                     'node', 'versions', '22.22.2-3', 'node.exe'),
-    ]
-    for c in cands:
-        if c and os.path.isfile(c):
-            return c
+    """优先用托管 node，退回到系统 node。
+
+    同 find_python：两个托管根都找、`.workbuddy-ai` 优先、版本号
+    逐个排序取最高，不写死单一版本号；候选必须真的跑得起来。"""
+    for root in ('.workbuddy-ai', '.workbuddy'):
+        vdir = os.path.join(os.environ.get('USERPROFILE', ''), root, 'binaries', 'node', 'versions')
+        try:
+            vers = sorted(os.listdir(vdir), reverse=True)
+        except OSError:
+            continue
+        for v in vers:
+            c = os.path.join(vdir, v, 'node.exe')
+            if _runnable(c):
+                return c
     for p in os.environ.get('PATH', '').split(os.pathsep):
         exe = os.path.join(p, 'node.exe' if os.name == 'nt' else 'node')
-        if os.path.isfile(exe):
+        if _runnable(exe):
             return exe
     return 'node'
 
