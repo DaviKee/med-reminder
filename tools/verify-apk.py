@@ -80,7 +80,10 @@ def main():
     backup = read('assets/public/js/platform/storage.js')
     shadow = read_opt('assets/public/js/platform/shadow.js')
     tts = read_opt('assets/public/js/platform/tts.js')
-    css = read('assets/public/css/app.css')
+    # 样式自 2026-10-17（dd0413b）拆成四文件，app.css 只剩墓碑注释 ——
+    # 必须按 index.html 的加载顺序拼接，否则下面所有 CSS 断言会在墓碑上空跑（假绿）。
+    CSS_FILES = ['css/tokens.css', 'css/base.css', 'css/components.css', 'css/views.css']
+    css = '\n'.join(read('assets/public/' + n) for n in CSS_FILES)
     html = read('assets/public/index.html')
     sw = read('assets/public/sw.js')
 
@@ -124,7 +127,9 @@ def main():
     for name in ['js/app.js', 'js/core/util.js', 'js/core/store.js', 'js/core/schedule.js',
                  'js/ui/overlay.js',
                  'js/platform/notifications.js', 'js/platform/camera.js', 'js/platform/storage.js',
-                 'css/app.css', 'index.html', 'sw.js']:
+                 'js/platform/shadow.js', 'js/platform/tts.js',
+                 'css/tokens.css', 'css/base.css', 'css/components.css', 'css/views.css',
+                 'index.html', 'sw.js']:
         src = os.path.join(WEB, name)
         zp = 'assets/public/' + name
         if not os.path.exists(src):
@@ -257,6 +262,12 @@ def main():
         ('S-10-TTS 脚本已加载', 'js/platform/tts.js' in html),
         ('S-10-提醒弹窗会念药名', 'MedTts.speak(' in APP and 'MedTts.enabled()' in APP),
         ('S-10-弹窗处理时打断播报', APP.count('MedTts.stop()') >= 2),
+        # UI 重构 P1：样式四拆（2026-10-17 dd0413b）
+        ('UI-样式按四文件加载', all(('css/' + n + '"') in html
+                                  for n in ['tokens.css', 'base.css', 'components.css', 'views.css'])),
+        ('UI-死文件 app.css 不再被引用', 'css/app.css"' not in html),
+        ('UI-安全区规则仍在（.phone border-top）', 'var(--safe-area-inset-top' in CSS),
+        ('UI-设计令牌齐全（暗/亮双套）', ':root{' in CSS and 'html[data-theme="light"]{' in CSS),
         ('H-2-注册失败不静默',
          "serviceWorker.register('sw.js').then" in APP and "console.warn('[sw]" in APP),
         # 2026-09-24 真机反馈批次

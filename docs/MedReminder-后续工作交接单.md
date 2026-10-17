@@ -15,7 +15,7 @@
 | 仓库 | `https://github.com/DaviKee/med-reminder`（私有）｜**✅ 与远端同步**（HEAD `c73eb1b`，`harmony` 分支） |
 | 工作区 | `C:\WorkBuddy\med-reminder`（**仓库在子目录 `med-reminder/`**；**活文档在仓库的 `docs/`**） |
 | 技术栈 | Capacitor 8（`harmony` 分支）+ 纯 ES module（**无打包器**） |
-| 最新版本 | **v1.5.30**（2026-10-13，录入向导 + 长期/短期分组第一步）：**A-3 影子状态文件 web 侧 ✅**（`platform/shadow.js`，喂鸿蒙卡片/Agent；调试卡可看影子状态）。10-07~10 连续六版：v1.5.22 月历浮层关闭按钮 / v1.5.23 备份浮层滚动 / v1.5.24 重复弹窗第四道防线+恢复丢打卡 / v1.5.25~26 **纯净状态栏**（insets 注入 CSS 变量，黑条 margin 方案被否后重做） |
+| 最新版本 | **v1.5.33**（2026-10-17，UI 重构 P1：样式拆四文件 tokens/base/components/views，零视觉回归已核）：**A-3 影子状态文件 web 侧 ✅**（`platform/shadow.js`，喂鸿蒙卡片/Agent；调试卡可看影子状态）。10-07~10 连续六版：v1.5.22 月历浮层关闭按钮 / v1.5.23 备份浮层滚动 / v1.5.24 重复弹窗第四道防线+恢复丢打卡 / v1.5.25~26 **纯净状态栏**（insets 注入 CSS 变量，黑条 margin 方案被否后重做） |
 | 测试 | **harness 一键 29 关口**：25 套 920 条 spec（新增 shadow 17 条）+ APK 验收 + 漏 import 硬闸门 |
 | 当前阶段 | **A-3 数据层 web 侧 ✅**（c73eb1b）→ 读侧（ArkTS，卡片/Agent）待做 —— **不碰 `openharmony/`（秦老师的 DevEco 工作区）** |
 | **下一步** | ① 小米 13 真机回归（纯净状态栏 / 重复弹窗四道防线，等秦老师装机反馈）② **AGC 代理提醒 ✅ 已批准（10-10）** → 鸿蒙真机复测 `publishReminder`（注意 profile 可能要重生成重签）③ 鸿蒙端由秦老师 deveco 自做；影子文件读侧（ArkTS 卡片）点名协作才碰 ④ A-3 后半（辅助 key 收口 data/，低优先） |
