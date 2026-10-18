@@ -65,6 +65,16 @@
     </div>
   </nav>
 
+  <!-- 添加药品 FAB（2026-10-18）——
+       从「药品」页头右上角挪到右下角：六英寸屏上单手拇指够不到右上角，
+       而这颗按钮是药品页**唯一**的主动作。
+       放在 .phone 这一层（而不是药品视图里）：视图在 #main 内部滚动，
+       放在里面会跟着内容滚走、也会被 overflow 裁掉。
+       显示/隐藏由 tabs.js 的 setTab 按当前页签切换（只在「药品」页出现）。 -->
+  <button class="fab hidden" id="btnAdd" aria-label="添加药品">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5.5v13M5.5 12h13" style="stroke:var(--on-accent)" stroke-width="2.2" stroke-linecap="round"/></svg>
+  </button>
+
   <!-- Scrim -->
   <div class="scrim" id="scrim"></div>
 
@@ -295,26 +305,31 @@
       </div>
       <div class="dlg-actions">
         <button class="btn btn-ghost" id="confirmCancel">取消</button>
-        <button class="btn btn-accent" id="confirmOk">确认删除</button>
+        <button class="btn btn-danger" id="confirmOk">确认删除</button>
       </div>
     </div>
   </div>
 
-  <!-- Reminder dialog -->
+  <!-- Reminder dialog —— 2026-10-18 版式重做：
+       ① 去掉顶部装饰图标，换成**巨型时间**（半梦半醒时用户只扫最大的那一块）；
+       ② 两颗按钮尺寸/层级明确分开：「已服用」是主色实心（54 高），
+          「稍后」是描边次按钮；两者等大同距会显著抬高误触率；
+       ③ 底部一行小字把后果说清（点已服用会请拍照），减少"点完才发现"的返工。
+       元素的 id 一个都没改 —— app.js 的 showReminder / remindDone / remindSnooze
+       全部照旧，这里只换结构。 -->
   <div class="dlg-wrap" id="dlgRemind">
     <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="remindName">
-      <div class="badge badge-56">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6.4 10.2a5.6 5.6 0 0 1 11.2 0c0 3.9 1.4 5.4 1.4 5.4H5s1.4-1.5 1.4-5.4Z" style="stroke:var(--accent)" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.9 18.6a2.3 2.3 0 0 0 4.2 0" style="stroke:var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg>
-      </div>
-      <div class="dlg-text">
-        <span class="eyebrow accent">TIME TO TAKE</span>
-        <div class="dlg-title-lg" id="remindName">维生素 D3</div>
-        <div class="dlg-body" id="remindMeta">14:00 · 第 2 / 3 次 · 每 8 小时</div>
+      <div class="dlg-text" style="gap:6px">
+        <span class="eyebrow accent">TIME TO TAKE · 该吃药了</span>
+        <div class="ring-time" id="remindTime">14:30</div>
+        <div class="ring-name" id="remindName">维生素 D3</div>
+        <div class="dlg-body" id="remindMeta">第 2 / 3 次 · 每 8 小时</div>
       </div>
       <div class="dlg-actions-vert">
         <button class="btn btn-primary" id="remindDone">已服用</button>
-        <button class="btn btn-ghost" id="remindSnooze">10 分钟后提醒</button>
+        <button class="btn btn-ghost" id="remindSnooze">稍后 10 分钟</button>
       </div>
+      <p class="ring-note" id="remindNote">点「已服用」后会请你拍张照；拍不了可以跳过。</p>
     </div>
   </div>
 
@@ -419,6 +434,24 @@
     </div>
   </div>
 
+  <!-- 使用帮助（2026-10-18）——
+       适老化调研里反复出现的一条：老人更愿意**打电话**，不愿意翻 FAQ。
+       所以这里只放最短的文字说明 + 一个「打给家人」的 tel: 入口，
+       不做搜索、不做多级目录。内容由 records.js 的 helpHtml() 注入。 -->
+  <div class="dlg-wrap" id="dlgHelp">
+    <div class="dlg dlg-wide" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <div class="dlg-text">
+        <span class="eyebrow accent">HELP</span>
+        <div class="dlg-title" id="helpTitle">怎么用</div>
+        <div class="dlg-body" id="helpHint">三步就够了。看不懂的地方，让家里人念一遍这段文字。</div>
+      </div>
+      <div class="dlg-scroll" id="helpBody"></div>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" data-dlg-close>关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Storage cleanup dialog -->
   <div class="dlg-wrap" id="dlgClean">
     <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cleanTitle">
@@ -472,6 +505,17 @@
         <button class="btn btn-ghost" id="viewClose">关闭</button>
       </div>
     </div>
+  </div>
+
+  <!-- 打卡成功反馈层（2026-10-18）——
+       纯装饰、pointer-events:none、1 秒后自动消失（CSS 动画 + class 摘除）。
+       为什么需要它：原来打卡只弹一句 toast，老人常常再点一次确认"到底记上没有"，
+       而重复点击在药品卡上会走到「今天已经打过卡了」的分支，观感像失败。 -->
+  <div class="checkpop" id="checkpop" aria-hidden="true">
+    <div class="checkpop-ring">
+      <svg width="58" height="58" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 9.8 17.8 19.5 7" style="stroke:var(--on-accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <span class="checkpop-txt" id="checkpopTxt">已记录</span>
   </div>
 
   <div class="toast" id="toast"></div>

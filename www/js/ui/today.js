@@ -3,12 +3,12 @@
  * 架构重构：从 app.js 抽出。
  * 函数体一字未改，只去掉一层缩进并加 export。
  */
-import { $, $$, esc, minToStr, nowMin } from '../core/util.js';
+import { $, $$, esc, minToStr, minOfDay, nowMin } from '../core/util.js';
 import { S, save } from '../core/store.js';
 import { ackDropped, anyScheduledToday, checkIn, checkInAll, courseState, dueAt, isMissed, markTaken, medById, missedDoses, nextPending, progress, sortedDoses, todayDoses } from '../core/schedule.js';
 import { closeDlg, openDlg } from './overlay.js';
 import { render } from './render.js';
-import { toast } from './toast.js';
+import { toast, takenPop } from './toast.js';
 import { dismissFsHint, syncNotifications, takenToast } from './actions.js';
 import { askNotify, onPermCardTap, permCardHtml } from './permission.js';
 import { ICON, doseClockHtml, droppedCardHtml, fsHintDismissed, fsHintHtml, medCardHtml, snoozeTag, storageAlertHtml } from './cards.js';
@@ -127,10 +127,10 @@ export function renderToday() {
     var missed = missedDoses();
     if (missed.length) {
       html += '<button class="card card-miss" id="btnMissAll" style="display:flex;flex-direction:column;gap:6px;width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-        + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">今天漏了 ' + missed.length + ' 次服药</span>'
+        + '<span style="font-size:calc(15px * var(--fs));line-height:calc(22px * var(--fs));color:var(--warn);font-weight:600">今天漏了 ' + missed.length + ' 次服药</span>'
         + '<span class="meta">' + missed.map(function (d) { return minToStr(d.time); }).join('、')
         + ' 这几次没有打卡记录。已经吃过就点这里补记，没吃就留意一下。</span>'
-        + '<span class="meta" style="color:#FF7A17">点此把漏掉的都记为已服用</span></button>';
+        + '<span class="meta" style="color:var(--warn)">点此把漏掉的都记为已服用</span></button>';
     }
 
     html += droppedCardHtml();
@@ -161,7 +161,10 @@ export function renderToday() {
         right = snoozeTag(ds) + '<span class="dose-s"><span class="txt">待服用</span></span>';
       }
       var rowMiss = isMissed(ds) ? ' dose-miss' : '';
-      html += '<div class="dose' + rowMiss + '">'
+      /* 「下一次」行加一条主色竖条（CSS .dose.next::before）——
+       * 比整行填色克制：整块高亮会和"已服用/待服用"的状态色打架。 */
+      var rowNext = isNext ? ' next' : '';
+      html += '<div class="dose' + rowMiss + rowNext + '">'
         + '<div class="dose-l"><span class="' + tCls + '">' + doseClockHtml(ds) + '</span>'
         + '<span class="' + nCls + '">' + esc(med ? med.name : '已删除药品') + '</span></div>'
         + right + '</div>';
@@ -268,6 +271,7 @@ export function bindToday() {
         stampPhoto(arr, rel, skipped);
         save(); render();
         toast((med ? med.name : '') + ' 已打卡 · 排了 ' + arr.length + ' 次提醒');
+        takenPop('已打卡 · ' + (med ? med.name : '服药'));
       });
     };
   });
@@ -288,6 +292,7 @@ export function bindToday() {
       stampPhoto(created, rel, skipped);
       save(); render();
       toast(created.length ? '已打卡 · 今天共排了 ' + todayDoses().length + ' 次提醒' : '今天已经打过卡了');
+      if (created.length) takenPop('今天已打卡');
     });
   };
   var fm = $('#btnFirstMed');
@@ -302,6 +307,7 @@ export function bindToday() {
       var r = markTaken(nxt, at);
       save(); render();
       toast(takenToast(med, at, r));
+      takenPop('已记录 ' + minToStr(minOfDay(at)));
     });
   };
   var s = $('#btnSkip');

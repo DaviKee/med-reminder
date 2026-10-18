@@ -61,6 +61,14 @@ export function setTab(name) {
     if (cls) v.classList.add(cls);
   });
 
+  /* 添加药品的 FAB 只在「药品」页出现（2026-10-18）。
+   * 它住在 .phone 这一层（不在视图里）—— 视图在 #main 内部滚动，
+   * 放进去会跟着内容滚走。所以显隐只能在这里按页签名切换。
+   * ⚠️ 用 class 而不是 hidden 属性：项目里 .hidden{display:none !important}
+   *    是既有约定，样式统一走 CSS。 */
+  var fab = $('#btnAdd');
+  if (fab) fab.classList.toggle('hidden', name !== 'meds');
+
   /* 切页后回到顶部。放在动画 class 之后 —— 两者互不影响（动画只改 transform/opacity）。 */
   $('#main').scrollTop = 0;
   currentTab = name;

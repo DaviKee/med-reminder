@@ -2,7 +2,7 @@
  * 打卡制：每天第一次服药打卡后，按药品间隔自动排程当天剩余提醒。
  */
 
-import { $, $$, esc, nowMin, minToStr, todayKey, pushRemindLog } from './core/util.js';
+import { $, $$, esc, nowMin, minToStr, minOfDay, todayKey, pushRemindLog } from './core/util.js';
 /* ⬆ 2026-09-24 架构重构：这些工具函数已抽到 core/util.js。
  * import 必须在模块顶层 —— 所以它在 IIFE 外面，IIFE 内部靠闭包可见。
  * 其余代码一字未改。 */
@@ -32,7 +32,7 @@ import { medScheduleLabel } from './ui/cards.js';
 import { setRenderers, markDirty, render } from './ui/render.js';
 
 
-import { toast } from './ui/toast.js';
+import { toast, takenPop } from './ui/toast.js';
 
 
 import { syncNotifications, takenToast, rollDayIfNeeded, markToday, queueStorageRefresh } from './ui/actions.js';
@@ -128,8 +128,8 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.33';
-  var APP_BUILD = '2026-10-17';
+  var APP_VERSION = '1.5.34';
+  var APP_BUILD = '2026-10-18';
 
 
 
@@ -331,6 +331,14 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
   }
 
   var remindDose = null;
+
+  /* 延后上限（2026-10-18）：同一次剂量最多延后 3 次。
+   * 为什么要有上限：延后是"安全的拖延"，但没有边界时它会把一次服药一路拖到
+   * 宽限期之后 —— 结果既没吃、也没被记为漏服，依从率反而更好看。
+   * 第 3 次之后按钮直接不可点并换成一句说明，不给"再点一下试试"的空间。
+   * 计数用 schedule.js 已有的 d.snoozeCount（snoozeDose 每次 +1），不新增字段。 */
+  var SNOOZE_CAP = 3;
+
   function showReminder(ds, via) {
     /* ★ 幂等护栏：只有「待服」才值得弹。已服/已跳过的剂量再弹就是骚扰
      * （真机 2026-10-07 反馈的重复弹窗，防线之一）。 */
@@ -340,10 +348,29 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
      * 真机再复现时「调试与验收」里能看到完整时间线。 */
     pushRemindLog('弹窗 · ' + (med ? med.name : '?') + ' · ' + minToStr(ds.time) + (via ? ' · ' + via : ''));
     remindDose = ds;
+    /* 巨型时间显示**实际响铃时刻**（延后过就显示延后后的），
+     * 而不是计划时刻 —— 用户此刻要确认的是"现在该不该吃"。 */
+    var ring = $('#remindTime');
+    if (ring) ring.textContent = minToStr(ds.snoozeUntil != null ? ds.snoozeUntil : ds.time);
     $('#remindName').textContent = med ? med.name : '服药时间';
-    $('#remindMeta').textContent = minToStr(ds.time)
-      + (ds.snoozeUntil != null ? ('（已延后至 ' + minToStr(ds.snoozeUntil) + '）') : '')
-      + ' · 第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · ' + (med ? esc(medScheduleLabel(med)) : '-');
+    /* ⚠️ 这里用 textContent，**不能再套 esc()** —— 套了会把 & < 显示成实体字面量
+     * （改造前就有的小毛病，顺手修掉）。 */
+    $('#remindMeta').textContent = '第 ' + (ds.idx + 1) + ' / ' + ds.total + ' 次 · '
+      + (med ? medScheduleLabel(med) : '-')
+      + (ds.snoozeUntil != null ? (' · 已延后至 ' + minToStr(ds.snoozeUntil)) : '');
+    /* 延后已到上限 → 次按钮置灰并改写文案；说明行同步换成"该怎么办" */
+    var sn = $('#remindSnooze');
+    var note = $('#remindNote');
+    var capped = (ds.snoozeCount || 0) >= SNOOZE_CAP;
+    if (sn) {
+      sn.disabled = capped;
+      sn.textContent = capped ? ('已延后 ' + SNOOZE_CAP + ' 次') : '稍后 10 分钟';
+    }
+    if (note) {
+      note.textContent = capped
+        ? '已经延后到上限了。请现在服用；确定这次吃不了，回「今天」页点「跳过本次」。'
+        : '点「已服用」后会请你拍张照；拍不了可以跳过。';
+    }
     openDlg($('#dlgRemind'));
     fireNotification(med, ds);
     /* S-10 语音播报：到点念药名 —— 老人看不清屏幕也能知道吃哪种药。
@@ -388,6 +415,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
         var r = markTaken(ds, at);
         if (window.MedNotify) window.MedNotify.cancelOne(ds.id);
         save(); render(); toast(takenToast(med, at, r));
+        takenPop('已记录 ' + minToStr(minOfDay(at)));
       });
     } else if (action === 'snooze') {
       var sr = snoozeDose(ds);
@@ -632,6 +660,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
         if (window.MedNotify && window.MedNotify.native) window.MedNotify.cancelOne(dose.id);
         save(); render();
         toast(takenToast(med, at, r));
+        takenPop('已记录 ' + minToStr(minOfDay(at)));
       });
     };
     $('#remindSnooze').onclick = function () {

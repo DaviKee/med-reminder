@@ -75,7 +75,7 @@ export function droppedCardHtml() {
   var n = droppedToday();
   if (!n || droppedAcked()) return '';
   return '<div class="card card-miss" style="display:flex;flex-direction:column;gap:6px">'
-    + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">有 ' + n
+    + '<span style="font-size:calc(15px * var(--fs));line-height:calc(22px * var(--fs));color:var(--warn);font-weight:600">有 ' + n
     + ' 次服药排到了次日，今天不再提醒</span>'
     + '<span class="meta">这次打卡比较晚，按间隔本该排到明天凌晨。今天不会再响，建议明早打卡后补记一次。</span>'
     + '<button class="btn btn-ghost" id="btnDropAck" style="align-self:flex-start;min-height:44px;margin-top:2px">知道了</button>'
@@ -129,7 +129,7 @@ export function stockHtml(m) {
   var left = s.stock + (unit ? ' ' + unit : '');
   if (s.days == null) return '<p class="meta">还剩 ' + esc(left) + '</p>';
   if (s.low) {
-    return '<p class="meta" style="color:#FF7A17">⚠ 只剩 ' + esc(left)
+    return '<p class="meta" style="color:var(--warn)">⚠ 只剩 ' + esc(left)
       + '，约够 ' + s.days + ' 天 —— 该买药了</p>';
   }
   return '<p class="meta">还剩 ' + esc(left) + ' · 约够 ' + s.days + ' 天</p>';

@@ -133,15 +133,15 @@ export function permCardHtml() {
 
   // 浏览器不支持通知：页面必须开着才提醒，说清楚，别让用户以为装完就万事大吉
   if (!isNative && notifyPerm === 'unsupported') {
-    return '<div class="card" style="display:flex;flex-direction:column;gap:6px;border-color:#8A8F98">'
+    return '<div class="card" style="display:flex;flex-direction:column;gap:6px">'
       + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:var(--sub)">当前环境不支持通知</span>'
       + '<span class="meta">提醒只在 App 页面前台时弹出，切走或锁屏不会响。装到手机上才能锁屏提醒。</span></div>';
   }
 
   // 未申请：不吓唬用户，只在浏览器模式提示，点了才发起授权
   if (!isNative && notifyPerm === 'prompt') {
-    return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-      + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">还没开启通知</span>'
+    return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:var(--warn);cursor:pointer;-webkit-tap-highlight-color:transparent">'
+      + '<span style="font-size:calc(15px * var(--fs));line-height:calc(22px * var(--fs));color:var(--warn);font-weight:600">还没开启通知</span>'
       + '<span class="meta">开启后才能及时收到服药提醒，点这里授权。</span></button>';
   }
 
@@ -150,8 +150,8 @@ export function permCardHtml() {
     var hint = isNative
       ? '锁屏和息屏时收不到服药提醒。点这里重新申请；若系统不再弹授权框，会自动打开系统设置页，请在那里把「通知」打开。'
       : '浏览器已拒绝通知，需要到浏览器的网站权限设置里把通知改回「允许」，然后刷新页面。';
-    return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:#FF7A17;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-      + '<span style="font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:#FF7A17">通知未开启 · 收不到提醒</span>'
+    return '<button class="card" id="btnPerm" style="display:flex;flex-direction:column;gap:6px;width:100%;border-color:var(--warn);cursor:pointer;-webkit-tap-highlight-color:transparent">'
+      + '<span style="font-size:calc(15px * var(--fs));line-height:calc(22px * var(--fs));color:var(--warn);font-weight:600">通知未开启 · 收不到提醒</span>'
       + '<span class="meta">' + hint + '</span></button>';
   }
 

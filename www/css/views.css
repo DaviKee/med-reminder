@@ -2,6 +2,7 @@
  * views.css —— 页级样式
  *
  * 2026-10-16 P1 架构拆分：从 app.css 拆出。
+ * 2026-10-18 视觉重构 v2：剂量行加大、药品行改药片缩略图、统计卡统一 18 圆角。
  * 今日页剂量行 / 药品行 / 周视图圆点 / 统计 / 月历（viz）/
  * 报告（rpt）/ 拍照打卡（photo）。
  *
@@ -10,60 +11,85 @@
  *    两块必须都留在本文件、且存储块在 viz 块之后（见文件末尾）。
  * ============================================================ */
 
-/* schedule rows */
-.sched{padding:8px 20px}
-.dose{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0}
+/* ---------- schedule rows ----------
+   一行 = 时刻(46) + 药名(自适应) + 状态(右)。行高 52，
+   相邻行之间用 1px 分隔线而**不是**卡片 —— 一次四条排下来，
+   四条独立卡片会让"今天还剩几次"这件事碎掉。 */
+.sched{padding:6px 18px}
+.dose{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;position:relative}
 .dose + .dose{border-top:1px solid var(--line)}
 .dose-l{display:flex;align-items:center;gap:14px;min-width:0}
-.dose-t{font-family:var(--font-num);font-size:calc(15px * var(--fs));line-height:calc(20px * var(--fs));width:calc(52px * var(--fs));flex:0 0 calc(52px * var(--fs));color:var(--muted);font-variant-numeric:tabular-nums}
-.dose-t.now{color:var(--accent)}
-.dose-n{font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dose-n.on{color:var(--text)}
+/* 时刻列：tabular-nums 防跳字宽；宽度给足 17px 数字的"00:00" */
+.dose-t{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:calc(17px * var(--fs));line-height:calc(22px * var(--fs));width:calc(50px * var(--fs));flex:0 0 calc(50px * var(--fs));color:var(--muted);letter-spacing:-.4px}
+.dose-t.now{color:var(--accent);font-weight:600}
+.dose-n{font-size:calc(15px * var(--fs));line-height:calc(21px * var(--fs));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dose-n.on{color:var(--text);font-weight:500}
 .dose-n.dim{color:var(--sub)}
 .dose-s{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 .dose-s .txt{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted);white-space:nowrap}
+/* 「下一次」那一行：左侧主色竖条 + 时刻变色。**不整行填色** ——
+   整块高亮会和"已服用/待服用"的状态色打架，一条 3px 竖条已经够定位。 */
+.dose.next::before{
+  content:'';position:absolute;left:-9px;top:11px;bottom:11px;width:3px;
+  border-radius:2px;background:var(--accent);
+}
 
 /* 漏服可见化：已错过的行 + 补记按钮。触摸目标按 44×44 最小值给足 */
-.dose-miss{position:relative}
-.dose-miss .dose-t{color:var(--accent)}
+.dose-miss .dose-t{color:var(--warn)}
 .btn-miss{
-  flex:0 0 auto;min-height:44px;padding:0 12px;border-radius:9999px;
-  border:1px solid var(--accent);background:transparent;color:var(--accent);
+  flex:0 0 auto;min-height:44px;padding:0 14px;border-radius:9999px;
+  border:1px solid var(--warn);background:transparent;color:var(--warn);
   font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));cursor:pointer;-webkit-tap-highlight-color:transparent;
 }
 .btn-miss:active{background:var(--miss-wash)}
-.card-miss{border-color:var(--accent);text-align:left}
+.card-miss{border-color:var(--warn);text-align:left}
 .card-miss:active{background:var(--pressed)}
 
-/* med list item */
+/* ---------- med list item ----------
+   2026-10-18：左侧 36px 图标 → 44px 药片缩略位。
+   老人认药靠**外观**，不靠药名（"维生素 D3" 和 "维生素 D3 滴剂" 在文字上几乎同形）。
+   目前没有药品照片 → 用剂型图标兜底（.medthumb[data-form]），
+   将来加了拍照直接往里塞 <img>，尺寸与圆角都不用改。 */
 .meditem{
   display:flex;align-items:center;gap:14px;width:100%;text-align:left;
-  background:var(--card);border:1px solid var(--line);border-radius:8px;
+  background:var(--card);border:1px solid var(--line);border-radius:18px;
   padding:16px;cursor:pointer;color:inherit;
+  transition:transform .12s cubic-bezier(.2,0,0,1);
 }
-.meditem:active{background:var(--pressed)}
+.meditem:active{background:var(--pressed);transform:scale(.99)}
+.medthumb{
+  width:44px;height:44px;border-radius:14px;background:var(--inner);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;color:var(--sub);
+  overflow:hidden;
+}
+.medthumb img{width:100%;height:100%;object-fit:cover}
 .badge{display:flex;align-items:center;justify-content:center;border-radius:9999px;background:var(--inner);flex:0 0 auto}
 .badge-36{width:36px;height:36px}
 .badge-56{width:56px;height:56px}
-.medinfo{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px}
-.medinfo .n{font-size:calc(15px * var(--fs));line-height:calc(20px * var(--fs));color:var(--text)}
-.medinfo .m{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
+.medinfo{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:5px}
+.medinfo .n{font-size:calc(17px * var(--fs));line-height:calc(22px * var(--fs));color:var(--text);font-weight:500}
+.medinfo .m{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted)}
 
 /* week dots */
 .week{display:flex;justify-content:space-between}
 .day{display:flex;flex-direction:column;align-items:center;gap:8px}
 .day .lb{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
-.day .lb.on{color:var(--text);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.day .lb.on{color:var(--text);font-weight:600}
 /* 周视图圆点：用**形状**区分状态，不只靠颜色 —— 色盲 / 灰度屏 / 强光下都要能分辨。
-   无记录 = 空心细圈；已服 = 实心；今天 = 粗环 + 中心点（三者在形状上互不相同）。 */
-.dot{width:12px;height:12px;border-radius:9999px;background:transparent;border:1.5px solid var(--line-2);box-sizing:border-box}
+   无记录 = 空心细圈；已服 = 实心；漏服 = 琥珀实心；今天 = 主色粗环 + 中心点。
+   ⚠️ 中心点不能省。2026-10-18 重构时试过"只留粗环"，结果是：
+   今天的粗环和「无记录」的空心圈**形状相同、只差线宽**（2.5 vs 1.5px），
+   小尺寸下根本分不出 —— 正是这条无障碍要求要避免的情况。
+   环 + 点 = 靶心，与空心圈在轮廓上就不同。tools/verify-apk.py 有断言盯着。 */
+.dot{width:13px;height:13px;border-radius:9999px;background:transparent;border:1.5px solid var(--line-2);box-sizing:border-box}
 .dot.fill{background:var(--contrast-bg);border:1.5px solid var(--contrast-bg)}
-.dot.today{background:transparent;border:2px solid var(--accent);position:relative}
-.dot.today::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:4px;height:4px;border-radius:9999px;background:var(--accent)}
+.dot.miss{background:var(--warn);border:1.5px solid var(--warn)}
+.dot.today{background:transparent;border:2.5px solid var(--accent);position:relative}
+.dot.today::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:9999px;background:var(--accent)}
 .statrow{display:flex;gap:12px}
-.stat{flex:1 1 0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px;display:flex;flex-direction:column;gap:8px}
-.stat .v{display:flex;align-items:baseline;gap:2px}
-.stat .v .n{font-family:var(--font-num);font-size:calc(32px * var(--fs));line-height:calc(34px * var(--fs));letter-spacing:-1px;color:var(--text)}
+.stat{flex:1 1 0;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.stat .v{display:flex;align-items:baseline;gap:3px}
+.stat .v .n{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:calc(30px * var(--fs));line-height:calc(32px * var(--fs));letter-spacing:-1px;font-weight:600;color:var(--text)}
 .stat .v .u{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted)}
 
 .medcard.tappable{width:100%;cursor:pointer;display:flex}
@@ -74,22 +100,22 @@
    字号同样走 --fs —— 老人把字号档位调大后，报告也要跟着变大。 */
 .rpt-area{max-height:44vh;overflow-y:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:2px 0}
 .rpt-head{display:flex;align-items:baseline;gap:10px;margin:14px 0 4px}
-.rpt-rate{font-family:var(--font-num);font-size:calc(38px * var(--fs));line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+.rpt-rate{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:calc(38px * var(--fs));line-height:1;color:var(--accent);font-weight:600}
 .rpt-rate-cap{font-size:calc(13px * var(--fs));color:var(--muted)}
 .rpt-meta{font-size:calc(12px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted);margin-bottom:10px}
 .rpt-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .rpt-chip{border:1px solid var(--line-2);border-radius:9999px;padding:3px 10px;font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--text);white-space:nowrap}
-/* 只有「漏服」用警示色 —— 项目里 #FF7A17 就是「漏服」的既定语义（见 .btn-miss / .dose-miss） */
-.rpt-chip.bad{border-color:var(--accent);color:var(--accent)}
+/* 只有「漏服」用警示色 —— 项目里 --warn 就是「漏服」的既定语义 */
+.rpt-chip.bad{border-color:var(--warn);color:var(--warn)}
 .rpt-tb{width:100%;border-collapse:collapse;font-size:calc(13px * var(--fs))}
 .rpt-tb th{text-align:left;font-weight:400;color:var(--muted);font-size:calc(12px * var(--fs));padding:6px 0;border-bottom:1px solid var(--line)}
 .rpt-tb td{padding:7px 0;border-bottom:1px solid var(--line);color:var(--sub);font-variant-numeric:tabular-nums}
 .rpt-tb td:first-child{color:var(--text);font-family:var(--font-num)}
-.rpt-tb b.bad{color:var(--accent);font-weight:500}
+.rpt-tb b.bad{color:var(--warn);font-weight:500}
 .rpt-tb tr:last-child td{border-bottom:0}
 /* ---- S-6 月历与统计（ui/viz.js） ----
    格子只靠底色区分状态，日期数字照常显示 —— 图例就放在图下面，
-   颜色语义不当场说清，用户只能靠猜。全部颜色走变量（S-5 约束）。 */
+   颜色语义不当场说清，用户只能靠猜。全部颜色走变量。 */
 .cal{display:flex;flex-direction:column;gap:4px}
 .cal-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;aspect-ratio:7/1}
 .cal-w{text-align:center;font-size:calc(11px * var(--fs));color:var(--muted)}
@@ -98,11 +124,11 @@
    行高 = 行宽 ÷ 7，格子 stretch 填满。表头行豁免。 */
 .cal-row.cal-head{aspect-ratio:auto}
 .cal-cell{display:flex;min-width:0;align-items:center;justify-content:center;
-  border-radius:9px;font-size:calc(12px * var(--fs));
+  border-radius:10px;font-size:calc(12px * var(--fs));
   font-variant-numeric:tabular-nums;color:var(--sub)}
 .cal-cell.empty{background:transparent}
 .cal-cell.good{background:var(--ok);color:var(--on-ok)}
-.cal-cell.partial{background:var(--accent);color:var(--on-accent)}
+.cal-cell.partial{background:var(--warn);color:var(--on-accent)}
 .cal-cell.bad{background:var(--danger);color:var(--on-accent)}
 /* 进行中：同 good 的绿但半透明 —— 「今天还有没吃的」，不该和已完成长得一样 */
 .cal-cell.part{background:var(--ok);opacity:.45;color:var(--on-ok)}
@@ -129,15 +155,14 @@
   border-radius:9999px;-webkit-tap-highlight-color:transparent;
 }
 .cam-btn:active{opacity:.65}
-/* 「未拍照」用橙色标出来 —— 留痕是方案 B 的核心，不能让它看起来和正常打卡一样 */
-.no-shot{color:var(--accent)}
+/* 「未拍照」用警示色标出来 —— 留痕是方案 B 的核心，不能让它看起来和正常打卡一样 */
+.no-shot{color:var(--warn)}
 
 /* 已延后的剂量标记。计划时刻保持原样，这里只说明「响铃被推到几点」 */
 .snooze-tag{font-size:calc(11px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted);white-space:nowrap}
 
 /* ---------- 存储占用条（D-1） ---------- */
 /* ⚠️ 级联保序：存储用法的 .bar 必须留在 viz 的 .bar **之后** ——
-   两者同名不同值（6px 细条 vs 14px 统计条），存储块靠源顺序覆盖 height。
-   2026-10-16 P1 拆分时从 components 区挪到此处末尾，相对顺序未变。 */
+   两者同名不同值（6px 细条 vs 14px 统计条），存储块靠源顺序覆盖 height。 */
 .bar{height:6px;border-radius:9999px;background:var(--inner);overflow:hidden}
 .bar > i{display:block;height:100%;border-radius:9999px;transition:width .2s}

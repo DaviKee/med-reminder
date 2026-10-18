@@ -112,7 +112,7 @@ export function closableDialogs() {
     return el.id === 'dlgData' || el.id === 'dlgSkip' || el.id === 'dlgClean'
       || el.id === 'dlgView' || el.id === 'dlgPhoto' || el.id === 'dlgHistory'
       || el.id === 'dlgReport' || el.id === 'dlgViz' || el.id === 'dlgDisplay'
-      || el.id === 'dlgDebug';
+      || el.id === 'dlgDebug' || el.id === 'dlgHelp';
   });
 }
 

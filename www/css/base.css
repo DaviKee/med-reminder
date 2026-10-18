@@ -2,6 +2,8 @@
  * base.css —— 复位 / 布局骨架 / 排版类 / 无障碍底线
  *
  * 2026-10-16 P1 架构拆分：从 app.css 拆出。
+ * 2026-10-18 视觉重构 v2：字阶整体上提（正文 14→16，眉标 12→11 但加粗），
+ *   理由见 tokens.css 顶部与 docs —— 老人界面文字"太小又太浅"是 NN/g 点名的通病。
  * 只管「页面骨架与文字」，不含任何具体组件（组件在 components.css，
  * 页级样式在 views.css）。全部用色/字号走 tokens.css 的变量。
  * ============================================================ */
@@ -61,25 +63,36 @@ main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:
 @keyframes viewInLeft{from{transform:translateX(-36px);opacity:0}to{transform:none;opacity:1}}
 .view.enter-from-right{animation:viewInRight .26s cubic-bezier(.22,.61,.36,1) both}
 .view.enter-from-left{animation:viewInLeft .26s cubic-bezier(.22,.61,.36,1) both}
-.stack{display:flex;flex-direction:column;gap:28px;padding:8px 20px 24px}
+/* 页内节奏：区块间距 28 → 22，卡片内已自带 18 内边距，太松会让一屏装不下三张卡 */
+.stack{display:flex;flex-direction:column;gap:22px;padding:10px 20px 26px}
 .pad{padding:0 20px}
 
-/* ---------- type ---------- */
+/* ---------- type ----------
+   字阶表（与设计稿 07 规范板一致）：
+     巨型时间 96/98 −5 · 页标题 28/34 −0.5 · 卡片标题 17/22
+     正文 16/24 · 辅助 13/20 · 眉标 11/14 +1.6
+   全部乘 --fs，所以「特大」档是等比放大，布局骨架不动。 */
 .num{font-family:var(--font-num);font-variant-numeric:tabular-nums;letter-spacing:-.6px}
-.eyebrow{font-family:var(--font-mono);font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));letter-spacing:1.4px;color:var(--muted);text-transform:uppercase}
+.eyebrow{
+  font-family:var(--font-num);font-size:calc(11px * var(--fs));line-height:calc(14px * var(--fs));
+  letter-spacing:1.6px;color:var(--muted);text-transform:uppercase;font-weight:600;
+}
 .eyebrow.accent{color:var(--accent)}
-.h1{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.6px;color:var(--text);margin:0;font-weight:400}
-.h2{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));color:var(--text);margin:0;font-weight:500}
-.body{font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted);margin:0}
+.h1{font-size:calc(28px * var(--fs));line-height:calc(34px * var(--fs));letter-spacing:-.5px;color:var(--text);margin:0;font-weight:600}
+.h2{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));letter-spacing:-.2px;color:var(--text);margin:0;font-weight:600}
+.body{font-size:calc(16px * var(--fs));line-height:calc(24px * var(--fs));color:var(--sub);margin:0}
 .meta{font-size:calc(13px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);margin:0}
 .hint{font-size:calc(13px * var(--fs));line-height:calc(20px * var(--fs));color:var(--muted);margin:10px 0 0}
+/* 巨型时间：今日页与响铃页共用的"一句话"排版。letter-spacing 为负是关键 ——
+   数字互相咬住才有"数字块"的体量感，松开会散成五个字符。 */
+.tnum{font-family:var(--font-num);font-variant-numeric:tabular-nums;letter-spacing:-5px;font-weight:600;color:var(--text)}
 
 /* ---------- 无障碍（A-2 / A-5） ---------- */
 /* 键盘 / 开关设备需要的可见焦点环。浏览器默认 outline 在纯黑背景上几乎看不见 */
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:12px}
 
-/* A-5 尊重系统的「减少动态效果」设置：不做无谓的位移/淡入动画 */
-/* ⚠️ 2026-10-16 P1 拆分级联注记：本块里的 `.scrim{transition:none}` 原先靠
+/* A-5 尊重系统的「减少动态效果」设置：不做无谓的位移/淡入动画。
+   ⚠️ 2026-10-16 P1 拆分级联注记：本块里的 `.scrim{transition:none}` 原先靠
    "排在 app.css 末尾" 覆盖 .scrim 的正牌过渡；拆分后 base 先于 components 加载，
    该条被 components 的 `.scrim{...transition:opacity .22s}` 反覆盖——
    但首行 `*{transition-duration:.001ms !important}` 以 !important 通杀

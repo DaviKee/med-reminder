@@ -44,14 +44,43 @@ function shortLeft(m) {
   if (diff <= 0) return '今天最后一天';
   return '还剩 ' + diff + ' 天';
 }
+
+/* ---------------- 剂型图标（2026-10-18） ----------------
+ * 为什么药品行要有个 44×44 的图形位：老人**靠外观认药**，不靠药名 ——
+ * 「维生素 D3」和「维生素 D3 滴剂」在纯文字列表里几乎同形。
+ *
+ * 现状：med 里没有药品照片（拍照打卡存的是每次服药的记录，不是药品档案），
+ * 所以先按 med.form（剂型）给一个兜底图标。将来加了"给药品拍张照"，
+ * 直接把 <img> 塞进 .medthumb 即可，尺寸/圆角都不用动（见 views.css 注释）。
+ *
+ * ⚠️ 图标一律 currentColor —— 颜色由 .medthumb 的 color 决定，
+ *    写死 #fff 会在亮色主题下直接看不见（theme.spec 有断言盯着）。 */
+var FORM_ICON = {
+  pill: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)" stroke="currentColor" stroke-width="1.8"/><path d="M9 9l6 6" stroke="currentColor" stroke-width="1.8"/></svg>',
+  tablet: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="5" y="5" width="14" height="14" rx="4.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 8.4v7.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  bottle: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9.5 3.2h5M10 3.2v3.1L7.7 9.2A3 3 0 0 0 6.7 11.3v6.5a2 2 0 0 0 2 2h6.6a2 2 0 0 0 2-2v-6.5a3 3 0 0 0-1-2.1L14 6.3V3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  patch: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3.6" y="6.4" width="16.8" height="11.2" rx="3.2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.6"/></svg>'
+};
+
+function formIcon(m) {
+  var f = (m && m.form) || '';
+  if (!f) return FORM_ICON.pill;
+  if (f === '胶囊') return FORM_ICON.pill;
+  if (f === '颗粒' || f === '口服液' || f === '滴剂' || f === '喷剂') return FORM_ICON.bottle;
+  if (f === '贴剂' || f === '软膏') return FORM_ICON.patch;
+  return FORM_ICON.tablet;
+}
 export function renderMeds() {
   var host = $('#medsView');
   var html = ''
     + '<div class="card-row" style="padding:0 0 4px">'
     + '<h1 class="h1">我的药品</h1>'
-    + '<button class="icon-btn" id="btnAdd" aria-label="添加药品">'
-    + '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" style="stroke:var(--text)" stroke-width="1.8" stroke-linecap="round"/></svg>'
-    + '</button></div>';
+    + '<span class="meta" style="flex:0 0 auto">' + (S.meds.length ? S.meds.length + ' 种' : '') + '</span>'
+    + '</div>';
+  /* ⚠️ 「添加」按钮**不在页头**了（2026-10-18）：挪到了 index.html 里的右下角 FAB
+     （#btnAdd）。原因：六英寸屏单手够不到右上角，而这颗按钮是药品页唯一的主动作。
+     点击仍走 app.js 的 document 级事件委托（`t.closest('#btnAdd')`），所以这里
+     不需要绑任何东西 —— 委托不依赖本视图的重绘。 */
 
   if (!S.meds.length) {
     html += '<div class="card"><p class="body" style="text-align:center">还没有药品。点右上角 + 添加第一个。</p></div>';
@@ -65,7 +94,7 @@ export function renderMeds() {
       var meta = medScheduleLabel(m) + ' · ' + (todayDoseCount(m.id) ? ('今日 ' + todayDoseCount(m.id) + ' 次') : '未排程');
       if (badge) meta += ' · ' + badge;
       return '<button class="meditem" data-med="' + m.id + '">'
-        + '<span class="badge badge-36" style="color:#DADBDF">' + ICON.pill + '</span>'
+        + '<span class="medthumb">' + formIcon(m) + '</span>'
         + '<span class="medinfo"><span class="n">' + esc(m.name) + '</span>'
         + '<span class="m">' + esc(meta) + '</span></span>'
         + ICON.chev + '</button>';

@@ -2,63 +2,73 @@
  * components.css —— 跨页复用组件
  *
  * 2026-10-16 P1 架构拆分：从 app.css 拆出。
+ * 2026-10-18 视觉重构 v2：卡片 8→18 圆角、按钮 52→54 高、主按钮改主色填充、
+ *   页签指示器改主色、新增响铃弹层与打卡成功反馈。
  * 卡片 / 按钮 / 输入 / 页签 / sheet / 对话框 / toast / 菜单行 /
  * stepper / chip。页级样式（剂量行、药品行、月历、报告、拍照）在 views.css。
  * ⚠️ 源顺序即级联顺序：本文件内规则按原 app.css 的相对顺序排列，
  *    有同特异性冲突的（如 .input-wrap.multi 先于 .date-wrap）勿随意调换。
  * ============================================================ */
 
-/* ---------- card ---------- */
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px}
+/* ---------- card ----------
+   圆角统一到三档：12（小件）/ 18-20（卡片与弹层）/ 9999（胶囊）。
+   卡片**没有投影** —— 层级只靠 --bg → --card → --inner 的明度差。 */
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
 .card-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.pill{border:1px solid var(--line);border-radius:9999px;padding:4px 10px;font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--sub);white-space:nowrap}
-.pill.accent{border-color:var(--accent);color:var(--accent)}
+.pill{border:1px solid var(--line);border-radius:9999px;padding:5px 11px;font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--sub);white-space:nowrap}
+.pill.accent{border-color:var(--accent);color:var(--accent);font-weight:600}
 .sect{display:flex;flex-direction:column;gap:12px}
-.list{display:flex;flex-direction:column;gap:12px}
+.list{display:flex;flex-direction:column;gap:10px}
 
 /* ---------- buttons ---------- */
 .btn{
-  width:100%;height:52px;border-radius:9999px;border:0;cursor:pointer;
+  width:100%;height:54px;border-radius:9999px;border:0;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  font-size:calc(15px * var(--fs));font-weight:500;line-height:calc(20px * var(--fs));
+  font-size:calc(16px * var(--fs));font-weight:600;line-height:calc(22px * var(--fs));
+  transition:transform .12s cubic-bezier(.2,0,0,1),opacity .12s linear;
 }
-.btn:active{opacity:.82}
-.btn-primary{background:var(--contrast-bg);color:var(--contrast-text)}
-.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+/* 按压反馈 120ms —— 只做 0.985 缩放，不做位移（老人手抖时位移会放大"点空了"的错觉） */
+.btn:active{transform:scale(.985);opacity:.9}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--line-2)}
 .btn-accent{background:var(--accent);color:var(--on-accent)}
-.btn-text{background:transparent;color:var(--accent);height:44px;font-size:calc(14px * var(--fs))}
+/* 破坏性确认键：**描边而不是实心**。实心红块在暗底上像主按钮，
+   描边红则明确是"危险但次要"——删除永远不该长得像推荐动作。 */
+.btn-danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.btn-text{background:transparent;color:var(--accent);height:44px;font-size:calc(14px * var(--fs));font-weight:500}
 .btnrow{display:flex;gap:10px}
-/* 固定时刻：每行一个时刻输入。44px 高满足触摸目标要求 */
+/* 固定时刻：每行一个时刻输入。48px 高满足触摸目标要求 */
 .time-row{display:flex;align-items:center;gap:10px}
-.time-input{flex:1 1 auto;min-width:0;height:44px;padding:0 12px;background:var(--inner);
-  border:1px solid var(--line);border-radius:8px;color:var(--text);font-family:inherit;
+.time-input{flex:1 1 auto;min-width:0;height:48px;padding:0 14px;background:var(--inner);
+  border:1px solid var(--line);border-radius:12px;color:var(--text);font-family:inherit;
   font-size:calc(16px * var(--fs))}
 .time-input::-webkit-calendar-picker-indicator{filter:var(--cal-filter);opacity:.75}
 .time-input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.icon-btn{width:36px;height:36px;border-radius:9999px;border:1px solid var(--line);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+.icon-btn{width:40px;height:40px;border-radius:9999px;border:1px solid var(--line);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
 .hidden{display:none !important}
 
 /* ---------- tabbar ---------- */
 .tabbar{flex:0 0 auto;padding:12px 21px calc(21px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))}
 .tabpill{position:relative;display:flex;height:62px;border-radius:36px;background:var(--inner);border:1px solid var(--line);padding:4px;gap:4px}
 .tab{
-  position:relative;z-index:1;   /* 抬到 .tab-ind 之上，否则白底会盖住图标文字 */
+  position:relative;z-index:1;   /* 抬到 .tab-ind 之上，否则实心底会盖住图标文字 */
   flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
   border:0;background:transparent;color:var(--muted);border-radius:26px;cursor:pointer;padding:0;
   transition:color .26s cubic-bezier(.22,.61,.36,1);
 }
-.tab svg{width:18px;height:18px}
-.tab span{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));font-weight:500}
-.tab.active{color:var(--contrast-text)}
-/* 白色胶囊改成**独立的一层**，切换时平滑滑到目标页签（原来是 background 瞬切，
-   和页面滑动放在一起会很割裂）。
+.tab svg{width:19px;height:19px}
+.tab span{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));font-weight:600}
+.tab.active{color:var(--on-accent)}
+/* 指示器是**独立的一层**，切换时平滑滑到目标页签（原来是 background 瞬切，
+   和页面滑动放在一起会很割裂）。2026-10-18：白胶囊 → 主色胶囊，
+   与「选中 = 主色」的全局语义一致（标签页 / 筛选 chip / 日历今天）。
    位移公式 `var(--i) * (100% + 4px)`：transform 里的 100% 解析为**指示器自身宽度**
    （= 一个 tab 宽），加上 gap 正好是一格步长。`--i` 由 setTab 写，这里不碰。
    ⚠️ 宽度的除数 3 是页签个数 —— 加第 4 个页签时这里要一起改，
       tests/tabs.spec.js 有一条断言盯着它（数量对不上会直接报红）。 */
 .tab-ind{
   position:absolute;top:4px;bottom:4px;left:4px;pointer-events:none;
-  width:calc((100% - 16px) / 3);border-radius:26px;background:var(--contrast-bg);
+  width:calc((100% - 16px) / 3);border-radius:26px;background:var(--accent);
   transform:translateX(calc(var(--i, 0) * (100% + 4px)));
   transition:transform .26s cubic-bezier(.22,.61,.36,1);
 }
@@ -69,20 +79,20 @@
 
 .sheet{
   position:absolute;left:0;right:0;bottom:0;z-index:50;
-  background:var(--sheet);border-top:1px solid var(--line);border-radius:16px 16px 0 0;
+  background:var(--sheet);border-top:1px solid var(--line);border-radius:28px 28px 0 0;
   padding:8px 20px calc(20px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);
   max-height:90%;overflow-y:auto;
 }
 .sheet.show{transform:translateY(0)}
-.sheet-grip{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:6px auto 14px}
+.sheet-grip{width:40px;height:4px;border-radius:2px;background:var(--line-2);margin:6px auto 14px}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
-.sheet-title{font-size:calc(17px * var(--fs));line-height:calc(24px * var(--fs));font-weight:500}
+.sheet-title{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));font-weight:600}
 
-.field{display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+.field{display:flex;flex-direction:column;gap:10px;margin-bottom:26px}
 .field-label{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--muted)}
 .input-wrap{
-  display:flex;align-items:center;height:54px;border-radius:8px;
+  display:flex;align-items:center;height:56px;border-radius:14px;
   background:var(--inner);border:1px solid var(--line);padding:0 16px;
 }
 .input-wrap input{
@@ -93,7 +103,7 @@
 .input-wrap:focus-within{border-color:var(--accent)}
 
 /* 多行输入（备注）：与单行 input「同壳不同骨」—— 壳高自适应、内边距交给 textarea 自己。
-   ⚠️ 别把 textarea 直接放进 .input-wrap：那是 height:54px 的单行壳，rows=2 的内容
+   ⚠️ 别把 textarea 直接放进 .input-wrap：那是 height:56px 的单行壳，rows=2 的内容
    会垂直溢出，文字与光标跑到框外（2026-10-01 真机反馈）。 */
 .input-wrap.multi{height:auto;align-items:stretch;padding:0}
 .input-wrap.multi textarea{
@@ -105,45 +115,45 @@
 .input-wrap.multi textarea::placeholder{color:var(--placeholder)}
 
 /* ---- 记录页功能入口（二级菜单的行） ----
-   页面只留概览，功能各归各的浮层；行 = 52px 触摸目标 + 副标题 + 箭头。
-   按下态用 --pressed（亮色主题自动翻转，见 §0.3）。 */
+   页面只留概览，功能各归各的浮层；行 = 56px 触摸目标 + 副标题 + 箭头。
+   按下态用 --pressed（亮色主题自动翻转）。 */
 .menu-card{padding:4px 0 2px}
 .menu-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  width:100%;min-height:52px;padding:8px 16px;background:transparent;border:0;
+  width:100%;min-height:56px;padding:8px 18px;background:transparent;border:0;
   border-bottom:1px solid var(--line);cursor:pointer;text-align:left;color:var(--text)}
 .menu-row:last-child{border-bottom:0}
 .menu-row:active{background:var(--pressed)}
-.menu-lb{font-size:calc(14px * var(--fs));display:flex;flex-direction:column;gap:2px}
+.menu-lb{font-size:calc(15px * var(--fs));display:flex;flex-direction:column;gap:2px}
 .menu-sub{font-size:calc(12px * var(--fs));color:var(--muted)}
 .menu-chev{font-size:22px;color:var(--muted);line-height:1}
 
 .stepper{
   display:flex;align-items:center;justify-content:space-between;
-  height:auto;border-radius:8px;border:1px solid var(--line);
-  padding:18px 16px;
+  height:auto;border-radius:20px;border:1px solid var(--line);
+  background:var(--inner);padding:18px 16px;
 }
-.step-btn{width:44px;height:44px;border-radius:9999px;border:1px solid var(--line);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
-.step-plus{background:var(--contrast-bg);border-color:var(--contrast-bg)}
+.step-btn{width:48px;height:48px;border-radius:9999px;border:1px solid var(--line-2);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;transition:transform .12s cubic-bezier(.2,0,0,1)}
+.step-btn:active{transform:scale(.94)}
+.step-plus{background:var(--accent);border-color:var(--accent)}
 .step-val{display:flex;flex-direction:column;align-items:center;gap:2px}
-.step-num{font-size:calc(36px * var(--fs));line-height:calc(40px * var(--fs));letter-spacing:-1px;color:var(--text)}
+.step-num{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:calc(40px * var(--fs));line-height:calc(44px * var(--fs));letter-spacing:-1.5px;font-weight:600;color:var(--text)}
 .step-unit{font-size:calc(12px * var(--fs));line-height:calc(16px * var(--fs));color:var(--muted)}
 .chip-row{display:flex;gap:8px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);border-radius:9999px;padding:7px 12px;font-family:var(--font-num);font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--sub)}
+.chip{border:1px solid var(--line-2);border-radius:9999px;padding:8px 14px;font-family:var(--font-num);font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--sub);background:transparent}
 /* 字号档位按钮：触摸目标按 44×44 给足；选中态用实心，不只用颜色区分（色盲可辨） */
-.fs-chip{min-height:44px;padding:7px 16px;cursor:pointer;background:transparent}
+.fs-chip{min-height:44px;padding:8px 16px;cursor:pointer;background:transparent}
 .fs-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
 /* S-3 服用周期：7 个星期按钮等宽平分一行。
    触摸目标仍按 44px 给足（适老化），所以不能用固定宽度的 .chip。
-   选中态沿用反色块语义 —— 亮色主题下自动翻转（见 §0.3）。 */
+   选中态沿用反色块语义 —— 亮色主题下自动翻转。 */
 .week-row{display:flex;gap:6px}
 .week-chip{flex:1 1 0;min-width:0;min-height:44px;padding:0;display:flex;align-items:center;
   justify-content:center;cursor:pointer;background:transparent}
 .week-chip.on{background:var(--contrast-bg);border-color:var(--contrast-bg);color:var(--contrast-text);font-weight:600}
 /* S-4 疗程的日期输入：原生 `input[type=date]` 在不同 WebView 里**高度不一**
 （各自带日历图标、内边距也不同）。
-所以容器用 min-height 而不是固定 height —— 固定高度会把它裁掉
-（与「多行框不能塞进单行壳」同源，见 MEMORY-数据与交互 §4）。 */
-.input-wrap.date-wrap{height:auto;min-height:54px}
+所以容器用 min-height 而不是固定 height —— 固定高度会把它裁掉。 */
+.input-wrap.date-wrap{height:auto;min-height:56px}
 .input-wrap.date-wrap input{font-family:var(--font-num);min-width:0}
 .sheet-actions{display:flex;flex-direction:column;gap:4px}
 
@@ -153,26 +163,41 @@
 }
 .dlg-wrap.show{opacity:1;pointer-events:auto}
 .dlg{
-  width:100%;max-width:350px;background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:28px 28px 24px;display:flex;flex-direction:column;align-items:center;gap:20px;
+  width:100%;max-width:350px;background:var(--card);border:1px solid var(--line);border-radius:24px;
+  padding:26px 22px 22px;display:flex;flex-direction:column;align-items:center;gap:18px;
   transform:scale(.96);transition:transform .2s;
 }
 .dlg-wrap.show .dlg{transform:scale(1)}
 .dlg-text{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
-.dlg-title{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));font-weight:500;color:var(--text);text-align:center}
-.dlg-title-lg{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.6px;color:var(--text);text-align:center}
-.dlg-body{font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted);text-align:center}
+.dlg-title{font-size:calc(20px * var(--fs));line-height:calc(28px * var(--fs));font-weight:600;color:var(--text);text-align:center}
+.dlg-title-lg{font-size:calc(28px * var(--fs));line-height:calc(36px * var(--fs));letter-spacing:-.4px;font-weight:600;color:var(--text);text-align:center}
+.dlg-body{font-size:calc(15px * var(--fs));line-height:calc(22px * var(--fs));color:var(--sub);text-align:center}
 .strip{
   width:100%;display:flex;align-items:center;justify-content:space-between;
-  background:var(--inner);border-radius:8px;padding:12px 16px;
+  background:var(--inner);border-radius:14px;padding:12px 16px;
 }
 .strip-val{font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));color:var(--sub)}
 .dlg-actions{display:flex;gap:10px;width:100%}
 .dlg-actions-vert{display:flex;flex-direction:column;gap:10px;width:100%}
 
+/* ---- 响铃弹层（#dlgRemind）----
+   2026-10-18 版式重做：巨型时间 + 药名 + 两颗**尺寸差异明显**的按钮。
+   为什么不再用 badge 圆图标：半梦半醒时人会先扫"最大的一块"，
+   一个装饰性图标只会抢走第一眼，把该看的时间挤到第二位。 */
+#dlgRemind .dlg{
+  background:linear-gradient(180deg,var(--ring-a) 0%,var(--ring-b) 100%);
+  border:0;gap:14px;
+}
+.ring-time{
+  font-family:var(--font-num);font-variant-numeric:tabular-nums;
+  font-size:calc(72px * var(--fs));line-height:calc(78px * var(--fs));
+  letter-spacing:-4px;font-weight:600;color:var(--text);text-align:center;
+}
+.ring-name{font-size:calc(26px * var(--fs));line-height:calc(34px * var(--fs));letter-spacing:-.3px;font-weight:600;color:var(--text);text-align:center}
+.ring-note{font-size:calc(12px * var(--fs));line-height:calc(18px * var(--fs));color:var(--sub);text-align:center;margin:0;opacity:.86}
+
 /* 数据备份/导出对话框：内容左对齐、更宽，容纳长文本 */
-/* 二级菜单里的长列表：自己滚。记录会积到几十天，不设上限会把对话框撑出屏幕
-   （.dlg 没有 max-height，.dlg-wrap 也不滚）。 */
+/* 二级菜单里的长列表：自己滚。记录会积到几十天，不设上限会把对话框撑出屏幕 */
 .dlg-scroll{
   width:100%;max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
   display:flex;flex-direction:column;gap:10px;padding-right:2px;
@@ -182,21 +207,62 @@
 .dlg-wide .dlg-title,.dlg-wide .dlg-body{text-align:left}
 .data-area{
   width:100%;height:176px;resize:none;outline:0;
-  background:var(--inner);border:1px solid var(--line);border-radius:8px;
+  background:var(--inner);border:1px solid var(--line);border-radius:14px;
   color:var(--sub);font-family:var(--font-mono);font-size:calc(12px * var(--fs));line-height:calc(18px * var(--fs));
   padding:12px 14px;white-space:pre;overflow:auto;
 }
 .data-area:focus{border-color:var(--accent)}
 
 .toast{
-  position:absolute;left:50%;bottom:130px;z-index:80;
+  position:absolute;left:50%;bottom:124px;z-index:80;
   transform:translate(-50%,12px);opacity:0;pointer-events:none;
-  background:var(--contrast-bg);color:var(--contrast-text);font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));font-weight:500;
-  padding:10px 18px;border-radius:18px;max-width:calc(100% - 40px);text-align:center;transition:.22s;
+  background:var(--contrast-bg);color:var(--contrast-text);font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));font-weight:600;
+  padding:12px 20px;border-radius:9999px;max-width:calc(100% - 40px);text-align:center;transition:.22s;
 }
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
 .empty{padding:36px 20px;text-align:center;font-size:calc(14px * var(--fs));line-height:calc(22px * var(--fs));color:var(--muted)}
+
+/* ---------- 打卡成功反馈（2026-10-18） ----------
+   原来打卡后只有一个 toast，老人往往会**再点一次**确认到底记上没记上。
+   这里给一个明确的、不可交互的确认层：大勾 + 一句"已记录 14:30"。
+   pointer-events:none 是关键 —— 它绝不能挡住下面任何东西。 */
+.checkpop{
+  position:absolute;inset:0;z-index:90;pointer-events:none;opacity:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+}
+.checkpop.show{animation:popIn 1000ms cubic-bezier(.22,.61,.36,1) both}
+@keyframes popIn{
+  0%{opacity:0;transform:scale(.9)}
+  14%{opacity:1;transform:scale(1)}
+  72%{opacity:1;transform:scale(1)}
+  100%{opacity:0;transform:scale(1.03)}
+}
+.checkpop-ring{
+  width:124px;height:124px;border-radius:9999px;background:var(--accent);
+  display:flex;align-items:center;justify-content:center;
+}
+.checkpop-txt{
+  font-size:calc(17px * var(--fs));line-height:calc(24px * var(--fs));
+  font-weight:600;color:var(--text);background:var(--card);
+  border:1px solid var(--line);border-radius:9999px;padding:8px 18px;
+}
+
+/* ---------- FAB（添加药品，2026-10-18） ----------
+   方形圆角（60 / 20）而不是圆形：与卡片的 18-20 圆角同一档，
+   在"全是圆胶囊"的界面里是最容易被一指命中的形状（Material 3 Expressive
+   把闹钟的 + 也改成了方形圆角，理由相同 —— 可辨识度 + 命中面积）。
+   位置：底部导航之上 12px。`bottom` 里必须再减一次 safe-area ——
+   .tabbar 自己给 safe-area 留了 padding，FAB 是绝对定位、不吃那层 padding。 */
+.fab{
+  position:absolute;right:20px;
+  bottom:calc(107px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  width:60px;height:60px;border-radius:20px;border:0;
+  background:var(--accent);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:30;padding:0;
+  transition:transform .12s cubic-bezier(.2,0,0,1);
+}
+.fab:active{transform:scale(.95)}
 
 /* ---------- 存储告警与状态（D-1） ---------- */
 /* 写失败告警卡：红描边、左对齐、可点。跨今日页与记录页显示。 */
@@ -204,7 +270,7 @@
   display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
   cursor:pointer;border-color:var(--danger);-webkit-tap-highlight-color:transparent;
 }
-.card-alert .alert-title{font-size:calc(14px * var(--fs));line-height:calc(20px * var(--fs));color:var(--danger)}
+.card-alert .alert-title{font-size:calc(15px * var(--fs));line-height:calc(22px * var(--fs));color:var(--danger);font-weight:600}
 .card-alert .alert-cta{
   font-size:calc(13px * var(--fs));line-height:calc(18px * var(--fs));
   color:var(--danger);font-weight:600;margin-top:2px;
@@ -213,8 +279,7 @@
 .btn:disabled{opacity:.4;pointer-events:none}
 
 /* 无障碍（A-2）触摸目标补到 44×44 —— 但**不改布局尺寸**：用透明伪元素扩大命中区。
-   直接把按钮改成 44×44 会把标题行撑高、把药名挤掉，属于"修一个坏三个"。
-   （命中区规则原来在 app.css 末尾，拆入 components 紧邻按钮区，行为不变。） */
+   直接把按钮改成 44×44 会把标题行撑高、把药名挤掉，属于"修一个坏三个"。 */
 .icon-btn,.cam-btn{position:relative}
 .icon-btn::after,.cam-btn::after{
   content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);

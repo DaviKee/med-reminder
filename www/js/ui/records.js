@@ -38,7 +38,11 @@ export function renderRecords() {
     var arr = S.doses[k] || [];
     var taken = arr.some(function (x) { return x.status === 'taken'; });
     var isToday = k === todayKey();
-    var cls = isToday ? 'dot today' : (taken ? 'dot fill' : 'dot');
+    /* 漏服也要在周视图里看得见（2026-10-18）：过去某天还留着 pending，
+     * 就是那天漏掉的 —— 只标"吃没吃过"会把"吃了一部分"糊成一片绿。
+     * 今天不参与判断（pending 在今天意味着"还没到点"，不是漏服）。 */
+    var missed = !isToday && arr.length > 0 && arr.some(function (x) { return x.status === 'pending'; });
+    var cls = isToday ? 'dot today' : (missed ? 'dot miss' : (taken ? 'dot fill' : 'dot'));
     html += '<div class="day"><span class="lb' + (isToday ? ' on' : '') + '">' + labels[i] + '</span><span class="' + cls + '"></span></div>';
   }
   html += '</div></div>';
@@ -77,6 +81,7 @@ export function renderRecords() {
     + menuRow('report', '给医生看的报告', '近 7 天依从率')
     + menuRow('data', '数据与备份', '导出 · 恢复 · 清理')
     + menuRow('disp', '显示设置', '主题 · 字号')
+    + menuRow('help', '使用帮助', '三步上手 · 收不到提醒怎么办')
     + menuRow('debug', '调试与验收', '测试提醒 · 通知诊断')
     + '</div>';
   host.innerHTML = html;
@@ -90,6 +95,7 @@ export function renderRecords() {
       else if (k === 'report') openReportDlg();
       else if (k === 'data') openDataDlg('backup');
       else if (k === 'disp') openDisplayDlg();
+      else if (k === 'help') openHelpDlg();
       else if (k === 'debug') openDebugDlg();
     };
   });
@@ -105,6 +111,41 @@ function menuRow(entry, label, sub) {
   return '<button class="menu-row" data-entry="' + entry + '">'
     + '<span class="menu-lb">' + label + '<span class="menu-sub">' + sub + '</span></span>'
     + '<span class="menu-chev">›</span></button>';
+}
+
+/* ---------------- 使用帮助（2026-10-18） ----------------
+ * 为什么要有这一屏：适老化调研里反复出现同一条 —— 老人更愿意**打电话问人**，
+ * 不愿意在多级 FAQ 里翻找。所以这里只有五段最短的文字，没有搜索、没有目录、
+ * 没有二级页面；每段都直接说"去哪里点什么"。
+ *
+ * ⚠️ 内容纪律：帮助文本**不出现任何药品名、剂量、频次建议**。
+ *    这个 App 负责提醒，不负责医疗建议 —— 写错一句就是事故。 */
+function helpHtml() {
+  var rows = [
+    ['每天只做一件事：打卡',
+     '吃完今天第一次药，回「今天」页点下面那个绿色大按钮。之后的提醒会自己排好，不用再管。'],
+    ['提醒响了，选一个就行',
+     '点「已服用」就记上了（会请你拍张照，拍不了可以跳过）；这次先不吃，就点「稍后 10 分钟」。同一件事最多延后 3 次。'],
+    ['字太小、看不清',
+     '「记录」→「显示与字号」，有「大」和「特大」两档。只放大文字，排版不会乱。'],
+    ['收不到提醒',
+     '「记录」→「调试与验收」，先点「测试提醒」试一条；还是不行，去手机的「设置 → 应用 → 定时服药提醒 → 通知」里打开。'],
+    ['怕记录丢',
+     '「记录」→「数据与备份」，先导出一次，把文件存到微信或电脑上。']
+  ];
+  return '<div class="card" style="display:flex;flex-direction:column;gap:14px">'
+    + rows.map(function (r) {
+        return '<div style="display:flex;flex-direction:column;gap:4px">'
+          + '<span style="font-size:calc(15px * var(--fs));line-height:calc(22px * var(--fs));color:var(--text);font-weight:600">' + r[0] + '</span>'
+          + '<span class="meta">' + r[1] + '</span></div>';
+      }).join('')
+    + '</div>';
+}
+
+export function openHelpDlg() {
+  $('#helpBody').innerHTML = helpHtml();
+  bindDlgClose('dlgHelp');
+  openDlg($('#dlgHelp'));
 }
 
 /* 显示设置卡（主题 + 字号）—— markup 原样从记录页搬来 */

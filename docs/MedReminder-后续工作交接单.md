@@ -15,10 +15,10 @@
 | 仓库 | `https://github.com/DaviKee/med-reminder`（私有）｜**✅ 与远端同步**（HEAD `c73eb1b`，`harmony` 分支） |
 | 工作区 | `C:\WorkBuddy\med-reminder`（**仓库在子目录 `med-reminder/`**；**活文档在仓库的 `docs/`**） |
 | 技术栈 | Capacitor 8（`harmony` 分支）+ 纯 ES module（**无打包器**） |
-| 最新版本 | **v1.5.33**（2026-10-17，UI 重构 P1：样式拆四文件 tokens/base/components/views，零视觉回归已核）：**A-3 影子状态文件 web 侧 ✅**（`platform/shadow.js`，喂鸿蒙卡片/Agent；调试卡可看影子状态）。10-07~10 连续六版：v1.5.22 月历浮层关闭按钮 / v1.5.23 备份浮层滚动 / v1.5.24 重复弹窗第四道防线+恢复丢打卡 / v1.5.25~26 **纯净状态栏**（insets 注入 CSS 变量，黑条 margin 方案被否后重做） |
-| 测试 | **harness 一键 29 关口**：25 套 920 条 spec（新增 shadow 17 条）+ APK 验收 + 漏 import 硬闸门 |
-| 当前阶段 | **A-3 数据层 web 侧 ✅**（c73eb1b）→ 读侧（ArkTS，卡片/Agent）待做 —— **不碰 `openharmony/`（秦老师的 DevEco 工作区）** |
-| **下一步** | ① 小米 13 真机回归（纯净状态栏 / 重复弹窗四道防线，等秦老师装机反馈）② **AGC 代理提醒 ✅ 已批准（10-10）** → 鸿蒙真机复测 `publishReminder`（注意 profile 可能要重生成重签）③ 鸿蒙端由秦老师 deveco 自做；影子文件读侧（ArkTS 卡片）点名协作才碰 ④ A-3 后半（辅助 key 收口 data/，低优先） |
+| 最新版本 | **v1.5.34**（2026-10-18，**UI 重构 v2「晨光刻度」**：色板/字阶/组件全量重写 + 4 项适老化补强 + `build-apk.sh` 两处真 bug 修复）→ **细节与本轮待验项见 `MedReminder-UI重构v2-交接单.md`**。上一版 v1.5.33（10-17，UI 重构 P1：样式拆四文件 tokens/base/components/views） |
+| 测试 | **harness 一键 31 关口**：28 套 **1016 条** spec + APK 产物验收（125 项）+ 漏 import 硬闸门 |
+| 当前阶段 | **UI 重构 v2 已落代码并出包，等真机回归**（v1.5.34）。A-3 数据层 web 侧 ✅（c73eb1b）→ 读侧（ArkTS，卡片/Agent）待做 —— **不碰 `openharmony/`（秦老师的 DevEco 工作区）** |
+| **下一步** | ① **v1.5.34 真机回归**（按《UI重构v2-交接单》§3 的 A~E 五组走，重点：特大字号下不裁字、浅色主题不漏色、稍后 3 次上限）② 小米 13 真机回归（纯净状态栏 / 重复弹窗四道防线）③ **AGC 代理提醒 ✅ 已批准（10-10）** → 鸿蒙真机复测 `publishReminder`（注意 profile 可能要重生成重签）④ 鸿蒙端由秦老师 deveco 自做 ⑤ **待拍板：主色薄荷（当前）还是 10-16 定的品牌蓝 #1B5CF0** —— 见《UI重构v2-交接单》§2.4 |
 
 ### 10-07 ~ 10-10 增量（细节见 `.workbuddy/memory/2026-10-07/09/10.md`）
 

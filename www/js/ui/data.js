@@ -381,7 +381,9 @@ export function storageCardHtml() {
   else if (st.pct >= 70) { level = 'warn'; note = '占用偏高。建议导出备份后清理旧记录。'; }
   else                   { level = 'ok';   note = '记录只存在这台手机上，清缓存或换手机会丢，建议定期导出备份。'; }
 
-  var color = level === 'err' ? '#FF3B30' : (level === 'warn' ? '#FF7A17' : '#3ECF8E');
+  /* 颜色一律走变量 —— 写死 hex 在亮色主题下会失真（theme.spec 对 SVG 有断言，
+   * 这里的 inline background 不在断言范围内，但同样必须守这条规矩）。 */
+  var color = level === 'err' ? 'var(--danger)' : (level === 'warn' ? 'var(--warn)' : 'var(--ok)');
   var barW = st.pct > 0 ? Math.max(2, st.pct) : 0;   // 有数据至少画一小段，0% 的空条看起来像坏了
 
   return '<div class="card" style="display:flex;flex-direction:column;gap:10px">'

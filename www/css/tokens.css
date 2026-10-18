@@ -2,8 +2,8 @@
  * tokens.css —— 设计令牌（唯一真源）
  *
  * 2026-10-16 P1 架构拆分：从 app.css 拆出。
- * 本文件**只放变量定义**（颜色 / 字体 / 字号因子），不放任何规则。
- * 加载顺序第一位（index.html 里第一个 stylesheet）——其余文件只消费变量。
+ * 2026-10-18 视觉重构 v2「晨光刻度」：色板 / 字阶整体替换（对比度实测见下）。
+ * 本文件**只放变量定义**，不放任何规则。加载顺序第一位。
  *
  * ⚠️ theme.spec.js 的约束（改动前必读）：
  *   · :root 里每个**颜色**变量，html[data-theme="light"] 块必须逐个重定义
@@ -14,48 +14,67 @@
  * ============================================================ */
 
 :root{
-  --bg:#0A0A0A;
-  --card:#191919;
-  --inner:#1A1C20;
-  --line:#212327;
-  --line-2:#363A3F;
-  --text:#FFFFFF;
-  --sub:#DADBDF;
-  --muted:#7D8187;
-  --accent:#FF7A17;
+  /* ---- 表面三档：靠**明度差**分层级，不用投影、不用渐变描边 ----
+     121212 → 1A1A1C → 232427，相邻两档亮度差约 5%，肉眼分得开、
+     又不会在 OLED 上出现"一块块补丁"。 */
+  --bg:#121212;
+  --card:#1A1A1C;
+  --inner:#232427;
+  --line:#2A2B2F;
+  --line-2:#3D3F45;
 
-  /* ---- S-5 明暗主题：新增**语义**变量 ----
-     这些颜色原先散在几十条规则里硬编码，亮色主题没法只改一处。
-     命名按「用途」而不是「颜色」—— 亮色下 --contrast-bg 会变成近黑。
-     下面这组是**暗色值**，与改造前逐像素一致（零视觉回归）。 */
+  /* ---- 文字三档（全部实测过 WCAG，见每条注释） ----
+     ⚠️ 2026-10-18 审计结论：原 --muted:#7B7F85 在卡片底(#1A1A1C)上只有 4.32:1、
+     在高亮行(#232427)上只有 3.86:1，都不达 AA；另有一档 #5E6166 只有 3.01:1。
+     **这一档已被删除** —— 老人界面不保留「更精致但读不清」的灰。
+     现在只有三档：主文字 / 次文字 / 主色，最小值 4.77:1。 */
+  --text:#F7F8F8;            /* 17.6:1 on --bg */
+  --sub:#B9BDC2;             /*  9.9:1 on --bg · 9.2:1 on --card */
+  --muted:#8B8F94;           /*  5.76:1 on --bg · 5.34:1 on --card · 4.77:1 on --inner */
+  --placeholder:#7B7F85;
+
+  /* ---- 主色与警示色：语义彻底分开（2026-10-18） ----
+     旧版 #FF7A17 同时承担「主行动」和「漏服警示」两种语义 ——
+     橙色既表示"该按"又表示"出事了"，在服药提醒里是危险的歧义。
+     现在：accent=行动（薄荷），warn=警示（琥珀），两者永不混用。 */
+  --accent:#7FE7C4;          /* 12.6:1 on --bg */
+  --on-accent:#06120E;       /* 12.8:1 on --accent */
+  --warn:#FF8A3D;            /*  8.0:1 on --bg */
+  --danger:#FF5A4E;          /*  5.3:1 on --card */
+
+  /* ---- 其余语义变量 ---- */
   --bg-outer:#000;           /* 机身之外的底色（比 --bg 更黑，形成"手机边缘"） */
-  --sheet:#0F1012;           /* 底部弹层 */
-  --pressed:#1D1D1D;         /* 列表 / 按钮按下态 */
-  --placeholder:#5F6368;     /* 输入占位符 */
-  --danger:#FF3B30;          /* 危险（删除 / 写失败告警） */
-  --contrast-bg:#fff;        /* 反色块底色（主按钮 / 白胶囊 / 选中 chip / 打卡实心点） */
+  --sheet:#131417;           /* 底部弹层 */
+  --pressed:#262A2E;         /* 列表 / 按钮按下态 */
+  --contrast-bg:#F7F8F8;     /* 反色块底色（白胶囊 / 选中 chip / 实心圆点） */
   --contrast-text:#0A0A0A;   /* 反色块上的文字 */
-  --on-accent:#0A0A0A;       /* accent 块上的文字（accent 是亮橙 → 恒用深色） */
   --scrim:rgba(0,0,0,.72);   /* 遮罩 */
-  --miss-wash:rgba(255,122,23,.16);   /* 「标记漏服」按下态 */
+  --miss-wash:rgba(255,138,61,.16);   /* 「标记漏服」按下态 */
   --cal-filter:invert(1);    /* 日期选择器图标：暗色下原生图标是黑的，需反色 */
-  --ok:#2E9E5B;              /* 月历「全服」格（S-6）：绿 = 按计划完成 */
-  --on-ok:#FFFFFF;           /* --ok 块上的文字（两套主题都白，绿色底够深） */
+  --ok:#35C08A;              /* 月历「全服」格：绿 = 按计划完成 */
+  --on-ok:#06120E;           /* --ok 块上的文字 */
+  /* 响铃弹层的日出渐变（两档都由变量给出，亮色主题下自动翻转） */
+  --ring-a:#191426;
+  --ring-b:#3A2018;
+
   --font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+  /* 数字字体：优先 Inter Tight（桌面设计环境），Android 上落到 Roboto。
+     不用等宽字体 —— 巨型时间要的是紧凑，不是等宽。 */
+  --font-num:"Inter Tight","Inter",-apple-system,"SF Pro Display",Roboto,"Segoe UI",sans-serif;
   --font-mono:"Geist Mono","JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;
-  --font-num:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;
   /* 字号缩放因子：只影响文字大小，不动 padding/margin，所以布局骨架不变。
-     默认 1 = 与改造前逐像素一致（零视觉回归）。档位在「记录 → 显示」里设置。 */
+     默认 1；档位在「记录 → 显示」里设置（小 / 标准 / 大 / 特大 = 1.3）。 */
   --fs:1;
   /* 告诉浏览器用哪套调色板 —— 影响滚动条、日期选择器等原生控件的渲染。 */
   color-scheme:dark;
 }
 
-/* ---- S-5 亮色主题 ----
+/* ---- 亮色主题 ----
    用 **属性选择器**（html[data-theme="light"]）而不是 @media (prefers-color-scheme: light)：
    ① 用户手动选的要能覆盖系统；② 判断逻辑集中在 ui/theme.js 一处，可被 spec 测到；
    ③ CSS 不参与「跟随系统」的判断，避免两处逻辑打架。
-   对比度按 WCAG AA 校过 —— 浅色主题的 --muted / --accent 是**重新取值**，不是把暗色值提亮。 */
+   对比度按 WCAG AA 校过 —— 浅色主题的 --muted / --accent / --warn 是**重新取值**，
+   不是把暗色值提亮（薄荷在浅底上只有 1.4:1，必须换成深墨绿）。 */
 html[data-theme="light"]{
   color-scheme:light;
   --bg:#F2F3F5;
@@ -63,21 +82,24 @@ html[data-theme="light"]{
   --inner:#ECEDEF;
   --line:#E3E4E8;
   --line-2:#C4C6CB;
-  --text:#0A0A0A;
-  --sub:#3A3D42;
-  --muted:#646A70;           /* 4.84:1 on --bg → AA 过 */
-  --accent:#C2410C;          /* 5.18:1 on white；原 #FF7A17 在浅底上只有 2.5:1，不能直接用 */
+  --text:#0A0A0A;            /* 18.7:1 on white */
+  --sub:#3A3D42;             /* 10.4:1 */
+  --muted:#5F656B;           /*  6.0:1 on white · 4.8:1 on --inner */
+  --placeholder:#9AA0A6;
+  --accent:#0B6E55;          /* 6.3:1 on white —— 深墨绿，与暗色薄荷同色相 */
+  --on-accent:#FFFFFF;
+  --warn:#B4530A;            /* 5.1:1 on white */
+  --danger:#D92D20;          /* 4.8:1 on white */
   --bg-outer:#E4E5E8;
   --sheet:#FFFFFF;
   --pressed:#E8E9EC;
-  --placeholder:#9AA0A6;
-  --danger:#D92D20;          /* 4.83:1 on white */
   --contrast-bg:#0A0A0A;     /* 反色块翻过来：浅色主题下是**深色**块 */
   --contrast-text:#FFFFFF;
-  --on-accent:#FFFFFF;       /* 浅色主题的 accent 是深橙 → 上面的字用白 */
   --scrim:rgba(0,0,0,.45);
-  --miss-wash:rgba(194,65,12,.12);
+  --miss-wash:rgba(180,83,10,.12);
   --cal-filter:none;         /* 原生图标本来就是深的，别再反色 */
-  --ok:#1E7A43;              /* 浅底上加深到 4.6:1（#2E9E5B 只有 2.6:1） */
+  --ok:#1E7A43;              /* 浅底上加深到 4.6:1 */
   --on-ok:#FFFFFF;
+  --ring-a:#FFFDFB;
+  --ring-b:#F6E7DC;
 }

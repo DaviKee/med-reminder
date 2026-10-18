@@ -368,7 +368,11 @@ console.log('=== G. 源码级接线（防改回去）===');
   t('有「添加时刻」按钮', HTML_SRC.indexOf('id="addTime"') >= 0, '缺');
   t('间隔字段可被隐藏（id 存在）', HTML_SRC.indexOf('id="fieldInterval"') >= 0, '缺');
   t('预览块可被隐藏（id 存在）', HTML_SRC.indexOf('id="fieldPreview"') >= 0, '缺');
-  t('时刻输入框有 44px 高（触摸目标）', /\.time-input\{[^}]*height:44px/.test(CSS), '太矮');
+  /* 断言"别太矮"，而不是锁死 44 —— 2026-10-18 视觉重构把输入框统一抬到 48/56，
+     同样满足 44px 触摸目标下限。项目自己的规矩：断言查"做了什么"，不查"怎么写"。
+     （原写法 /height:44px/ 会把任何不是 44 的合规值判成失败。） */
+  var tiH = Number((CSS.match(/\.time-input\{[^}]*height:(\d+)px/) || [])[1]);
+  t('时刻输入框高度 ≥ 44px（触摸目标）', tiH >= 44, '实际 ' + tiH + 'px');
   t('时刻行有布局样式', CSS.indexOf('.time-row') >= 0, '缺');
 
   console.log('  -- 无障碍 --');
