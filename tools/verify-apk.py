@@ -268,6 +268,12 @@ def main():
         ('UI-死文件 app.css 不再被引用', 'css/app.css"' not in html),
         ('UI-安全区规则仍在（.phone border-top）', 'var(--safe-area-inset-top' in CSS),
         ('UI-设计令牌齐全（暗/亮双套）', ':root{' in CSS and 'html[data-theme="light"]{' in CSS),
+        # 打卡反馈 v2（2026-10-20）：背景模糊 + 圆扩散 + 缩后台
+        ('打卡-背景模糊层随包', 'checkpop-veil' in html and 'backdrop-filter:blur(10px)' in CSS),
+        ('打卡-圆扩散动画在', 'cpBurst' in CSS and 'scale(30)' in CSS),
+        ('打卡-扩散后缩后台（minimizeApp 已接线）',
+         'minimizeApp' in APP and "classList.add('burst')" in APP),
+        ('打卡-减少动态效果时不动画', 'prefers-reduced-motion' in CSS),
         ('H-2-注册失败不静默',
          "serviceWorker.register('sw.js').then" in APP and "console.warn('[sw]" in APP),
         # 2026-09-24 真机反馈批次

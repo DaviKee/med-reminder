@@ -512,6 +512,9 @@
        为什么需要它：原来打卡只弹一句 toast，老人常常再点一次确认"到底记上没有"，
        而重复点击在药品卡上会走到「今天已经打过卡了」的分支，观感像失败。 -->
   <div class="checkpop" id="checkpop" aria-hidden="true">
+    <!-- 背景模糊层（2026-10-20）：只模糊下层内容、不吃 pointer 事件；
+         不支持 backdrop-filter 的 WebView 退化成暗化遮罩（--scrim），不会糊成一片 -->
+    <div class="checkpop-veil" aria-hidden="true"></div>
     <div class="checkpop-ring">
       <svg width="58" height="58" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 9.8 17.8 19.5 7" style="stroke:var(--on-accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>

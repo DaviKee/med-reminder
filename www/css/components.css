@@ -230,22 +230,42 @@
 .checkpop{
   position:absolute;inset:0;z-index:90;pointer-events:none;opacity:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  transition:opacity 140ms;
 }
-.checkpop.show{animation:popIn 1000ms cubic-bezier(.22,.61,.36,1) both}
-@keyframes popIn{
-  0%{opacity:0;transform:scale(.9)}
-  14%{opacity:1;transform:scale(1)}
-  72%{opacity:1;transform:scale(1)}
-  100%{opacity:0;transform:scale(1.03)}
+.checkpop.show{opacity:1}
+/* 背景模糊：backdrop-filter 在 Android WebView 76+ 可用；不支持时只剩 --scrim 暗化，
+   观感退一档但绝不影响可读性。⚠️ 必须 pointer-events 继承自父层 none —— 它只是装饰。 */
+.checkpop-veil{
+  position:absolute;inset:0;opacity:0;
+  background:var(--scrim);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  transition:opacity 220ms;
 }
+.checkpop.show .checkpop-veil{opacity:1}
 .checkpop-ring{
   width:124px;height:124px;border-radius:9999px;background:var(--accent);
   display:flex;align-items:center;justify-content:center;
+  animation:cpPop 300ms cubic-bezier(.22,.61,.36,1) both;
+  will-change:transform;
 }
+@keyframes cpPop{from{transform:scale(.86)}to{transform:scale(1)}}
+/* ---- 圆扩散（2026-10-20）----
+   打卡确认后 380ms，主色圆以自身为中心放大到盖住整块屏幕，随后 JS 把 App 缩到后台。
+   勾号先淡出 —— 否则缩放的是一根横穿全屏的巨大白线。scale(30)：124px×30≈3.7m
+   直径，任何手机 CSS 尺寸都盖得满。 */
+.checkpop.burst .checkpop-ring{animation:cpBurst 420ms cubic-bezier(.4,0,.55,1) forwards}
+.checkpop.burst .checkpop-ring svg{opacity:0;transition:opacity 90ms}
+.checkpop.burst .checkpop-txt{opacity:0;transition:opacity 120ms}
+@keyframes cpBurst{from{transform:scale(1)}to{transform:scale(30)}}
 .checkpop-txt{
   font-size:calc(17px * var(--fs));line-height:calc(24px * var(--fs));
   font-weight:600;color:var(--text);background:var(--card);
   border:1px solid var(--line);border-radius:9999px;padding:8px 18px;
+}
+/* 关掉动效时不要扩散 —— 直接把圆留在原地，由 JS 按短延时最小化 */
+@media (prefers-reduced-motion: reduce){
+  .checkpop-ring{animation:none}
+  .checkpop.burst .checkpop-ring{animation:none}
 }
 
 /* ---------- FAB（添加药品，2026-10-18） ----------

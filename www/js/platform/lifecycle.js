@@ -35,6 +35,16 @@ export function exitApp() {
   /* 浏览器 / PWA 没有「退出」这个概念，什么都不做 */
 }
 
+/* 把 App 缩到后台（**不是退出**，进程与定时器照常）—— 2026-10-20 打卡动效用。
+ * App 插件的 minimizeApp 只有 Android 有；iOS/PWA 没有这个动作，返回 false 让调用方降级。 */
+export function minimizeApp() {
+  var A = capApp();
+  if (A && typeof A.minimizeApp === 'function') {
+    try { A.minimizeApp(); return true; } catch (e) { return false; }
+  }
+  return false;
+}
+
 /* 注册「返回键 / 侧滑返回」回调。返回 true 表示确实注册上了。
  * 判定逻辑由上层提供（`handleBackButton`，内部调 `ui/overlay.js` 的 `backAction`）。 */
 export function onBackButton(cb) {
