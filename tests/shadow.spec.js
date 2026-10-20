@@ -13,6 +13,7 @@ const path = require('path');
 const vm = require('vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, '../www/js/platform/shadow.js'), 'utf8');
+const STORE = fs.readFileSync(path.join(__dirname, '../www/js/core/store.js'), 'utf8');
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -73,6 +74,9 @@ const GETTER = function () { return { state: { meds: [1], doses: { k: [] }, noti
   t('落点是 Directory.Data（沙箱内）', /'DATA'/.test(SRC) && /'shadow'/.test(SRC), '');
   t('走防抖与串行化（照抄 storage 纪律）', /DEBOUNCE_MS/.test(SRC) && /busy/.test(SRC) && /dirty/.test(SRC), '');
   t('暴露 schedule/flush/status', /schedule: schedule/.test(SRC) && /flush: flush/.test(SRC) && /status: status/.test(SRC), '');
+  /* 2026-10-20 真机 bug：槽位与实现都在，但 save() 里没调 —— 影子文件永远「还没写过」。
+   * 这条断言锁的就是那个调用点：加钩子必须「槽位 + 注册 + 调用」三处齐。 */
+  t('★ save() 真的调了 saveHooks.shadow()', /saveHooks\.shadow\(\);/.test(STORE), '只注册不调用 = 永远不写');
 
   console.log('=== 2. 原子替换协议（正常路径）===');
   {

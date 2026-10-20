@@ -269,19 +269,18 @@ function debugHtml() {
 
 /* 语音播报状态（S-10 真机反馈 2026-10-20）——
  * 这一行回答三个问题：插件接上没有（injected/proxy/missing）、引擎就绪没有、
- * 系统到底装没装中文语音（带 initStatus / langResult / 引擎包名）。
- * 打开调试卡时**自动重探一次**（probe 会带回填），不用重装 App 才能看到新状态。 */
+ * 引擎细节（个数/包名/初始化码）。
+ * 打开调试卡时**自动重探一次**（probe 会回填），不用重装 App 才能看到新状态；
+ * 重探回来只改这一行，不重渲染整张卡（避免闪烁）。 */
 function ttsStatusHtml() {
   var T = window.MedTts;
   if (!T) return '<p class="hint" style="margin:0">语音播报：模块未加载</p>';
   var html = '<p class="hint" style="margin:0" id="ttsLine">' + ttsLineText() + '</p>';
-  /* 异步重探 → 回来就地把这一行改掉（不重渲染整张卡，避免闪烁）；
-   * 诊断细则（引擎包名/初始化码）追加在 title 里，点开/长按能看到。 */
   try {
     if (T.probe) {
       T.probe().then(function () {
         var el = $('#ttsLine');
-        if (el) { el.textContent = ttsLineText(); }
+        if (el) el.textContent = ttsLineText();
       });
     }
   } catch (e) { /* ignore */ }
@@ -297,11 +296,8 @@ function ttsLineText() {
   var label = MODE[s.mode] || s.mode || '未探测';
   var readyTxt = s.ready === true ? '引擎就绪' : (s.ready === false ? '引擎未就绪' : '引擎未探测');
   var extra = '';
-  /* 有初始化码才展开细节 —— 正常设备只显示前三段，不吓人 */
-  if (s.ready !== true && (s.initStatus != null || s.langResult != null)) {
-    extra = ' · init=' + s.initStatus + ' lang=' + s.langResult
-      + (s.engine ? ' · ' + s.engine : '');
-  }
+  /* 就绪时只显示前三段（"开 · 原生已注入 · 引擎就绪"），细节留给异常态 —— 正常设备不吓人 */
+  if (s.ready !== true && s.tags) extra = '（' + s.tags + '）';
   if (s.err) extra += '（' + s.err + '）';
   return '语音播报：' + (T.enabled() ? '开' : '关') + ' · ' + label + ' · ' + readyTxt + extra;
 }
@@ -309,8 +305,8 @@ function ttsLineText() {
 /* 影子状态文件状态（A-3，2026-10-10）：真机验收用 ——
  * 有这行才能确认「web 层确实在往沙箱写原生可读的副本」。
  * 浏览器模式没有文件系统插件 → supported=false → 只显示一行说明。
- * ⚠️ 2026-10-20：at=0（还没写过）不是异常 —— 刚装完还没保存过而已，
- *    文案必须说清楚，否则用户以为坏了。 */
+ * ⚠️ 2026-10-20：at=0 不是"坏了" —— 刚装完还没保存过而已，
+ *    文案要说清楚（"保存一次后自动生成"），否则用户以为功能挂了。 */
 function shadowStatusHtml() {
   var S2 = window.MedShadow;
   if (!S2) return '';

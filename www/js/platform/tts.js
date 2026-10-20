@@ -56,30 +56,37 @@
     return null;
   }
 
-  /* 最近一次原生状态（诊断卡用）。
-   * 2026-10-20 真机「引擎未就绪」后加诊断码：只报 ready 布尔值分不清
-   * 「没装中文引擎」和「引擎初始化失败」—— 把 initStatus / langResult / engine 都带出来。 */
-  var st = { mode: '', ready: null, available: null, at: 0, err: '', initStatus: null, langResult: null, engine: '' };
+  /* 最近一次原生状态（诊断卡用） */
+  var st = { mode: '', ready: null, available: null, tags: '', at: 0, err: '' };
   function probe() {
     var P = getNative();
-    if (!P) { st = { mode: pluginMode(), ready: null, available: null, at: Date.now(), err: '插件未注册', initStatus: null, langResult: null, engine: '' }; return Promise.resolve(st); }
+    if (!P) { st = { mode: pluginMode(), ready: null, available: null, tags: '', at: Date.now(), err: '插件未注册' }; return Promise.resolve(st); }
     var p = null;
-    try { p = P.status({ reinit: true }); } catch (e) { p = null; }
+    try { p = P.status(); } catch (e) { p = null; }
     if (!p || typeof p.then !== 'function') {
-      st = { mode: pluginMode(), ready: null, available: null, at: Date.now(), err: 'status 不可用', initStatus: null, langResult: null, engine: '' };
+      st = { mode: pluginMode(), ready: null, available: null, tags: '', at: Date.now(), err: 'status 不可用' };
       return Promise.resolve(st);
     }
     return p.then(function (r) {
+      r = r || {};
+      /* tags 拼一行给人看：引擎个数 / 默认引擎 / 初始化码。
+       * 「未就绪」时这几个数直接决定下一步是"重装 App"还是"系统装 TTS 引擎"。 */
+      var parts = [];
+      if (typeof r.engines === 'number') parts.push('引擎 ' + r.engines + ' 个');
+      if (r.defaultEngine) parts.push(String(r.defaultEngine).split('.').pop());
+      if (typeof r.initStatus === 'number' && r.initStatus !== 0) parts.push('init=' + r.initStatus);
+      if (typeof r.langStatus === 'number' && r.langStatus !== 0) parts.push('lang=' + r.langStatus);
       st = {
-        mode: pluginMode(), ready: !!(r && r.ready), available: !!(r && r.ttsAvailable),
-        at: Date.now(), err: '',
-        initStatus: r && typeof r.initStatus === 'number' ? r.initStatus : null,
-        langResult: r && typeof r.langResult === 'number' ? r.langResult : null,
-        engine: (r && r.engine) || ''
+        mode: pluginMode(),
+        ready: !!r.ready,
+        available: !!r.ttsAvailable,
+        tags: parts.join(' · '),
+        at: Date.now(),
+        err: ''
       };
       return st;
     }).catch(function (e) {
-      st = { mode: pluginMode(), ready: false, available: false, at: Date.now(), err: (e && e.message) || 'status 失败', initStatus: null, langResult: null, engine: '' };
+      st = { mode: pluginMode(), ready: false, available: false, tags: '', at: Date.now(), err: (e && e.message) || 'status 失败' };
       return st;
     });
   }
@@ -113,14 +120,25 @@
         var p = P.speak({ text: t });
         if (p && typeof p.then === 'function') {
           p.then(function (r) {
-            /* 引擎还在初始化（首次调用/刚开机）→ 800ms 后补一次。
-             * 只在 ready===false 时补：那意味着这句话根本没念出去，补一次不会重音。 */
-            if (r && r.ok === false && r.ready === false) {
-              setTimeout(function () {
-                try { var pp = P.speak({ text: t }); if (pp && pp.catch) pp.catch(function () {}); } catch (e) { /* ignore */ }
-              }, 800);
+            /* 引擎还在初始化（首次调用/刚开机/引擎重启）→ 800ms 后补一次，再不成就
+             * 1600ms 再试最后一次。只在 ok===false 时补：那意味着这句话根本没念出去。 */
+            if (r && r.ok === false) {
+              var retry = function (delay, times) {
+                setTimeout(function () {
+                  var pp = null;
+                  try { pp = P.speak({ text: t }); } catch (e) { return; }
+                  if (pp && typeof pp.then === 'function') {
+                    pp.then(function (r2) {
+                      if (r2 && r2.ok === false && times > 1) retry(800, times - 1);
+                      if (r2 && typeof r2.ready === 'boolean') { st.ready = r2.ready; st.at = Date.now(); }
+                    }).catch(function () {});
+                  }
+                }, delay);
+              };
+              retry(800, 2);
             }
             if (r && typeof r.ready === 'boolean') { st.ready = r.ready; st.at = Date.now(); }
+            if (r && typeof r.initStatus === 'number' && r.initStatus !== 0) { st.tags = 'init=' + r.initStatus; }
           }).catch(function () { /* ignore */ });
         }
         return true;

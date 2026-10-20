@@ -8,7 +8,7 @@ import { $, $$, esc, nowMin, minToStr, minOfDay, todayKey, pushRemindLog } from 
  * 其余代码一字未改。 */
 
 
-import { load, S, storageStats, gcNotified, cleanTargets, save, setSaveHooks, saveHooks } from './core/store.js';
+import { load, S, storageStats, gcNotified, cleanTargets, save, setSaveHooks } from './core/store.js';
 import { writeCardFile } from './core/cardSummary.js';
 
 
@@ -113,10 +113,6 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
       }
     }
   });
-
-  /* 启动后补写一次影子文件（A-3）：刚装完还没改过数据时影子不存在，
-   * 原生侧（鸿蒙卡片 / Agent）第一次读会扑空。走 3s 防抖，不拖启动。 */
-  saveHooks.shadow();
 
 
   /* ---------------- 版本号（单一来源） ----------------

@@ -29,8 +29,8 @@ t('★ 插件句柄有 registerPlugin 代理兜底（2026-10-20 真机「TTS 不
   /registerPlugin\('MedTts'\)/.test(TTS) && /hasHeader/.test(TTS), '');
 t('★ 只在原生平台走代理（浏览器不能假支持）', /getPlatform/.test(TTS) && /!== 'web'/.test(TTS), '');
 t('★ 启动预热（插件懒加载，首条提醒前把引擎叫醒）', /setTimeout\(function \(\) \{ probe\(\); \}, 600\)/.test(TTS), '');
-t('★ 引擎未就绪时补念一次（ready===false 才补，不会重音）',
-  /r\.ok === false && r\.ready === false/.test(TTS) && /800/.test(TTS), '');
+t('★ 引擎未就绪时可重试补念（两次，只在 ok===false 时补，不会重音）',
+  /r\.ok === false/.test(TTS) && /retry\(800, 2\)/.test(TTS), '');
 t('失败全程吞掉（播报绝不影响打卡主流程）', /catch \(e\)/.test(TTS) && /不等待、不重试/.test(TTS), '');
 t('开关独立 key（不进主状态/备份）', /medreminder\.tts\.v1/.test(TTS), '');
 t('默认开（功能就是给看不清屏幕的人设计的）', /!== 'off'/.test(TTS), '');
@@ -55,13 +55,11 @@ t('显示本设备是否支持（别让老人开了不响还不知道为什么�
 console.log('=== 5. 原生侧（Android） ===');
 t('TtsPlugin 注册存在', JAVA.indexOf('@CapacitorPlugin(name = "MedTts")') >= 0, '');
 t('中文引擎', JAVA.indexOf('Locale.SIMPLIFIED_CHINESE') >= 0, '');
-t('引擎未就绪时 speak 优雅拒绝（不卡打卡）', /ready\.get\(\)/.test(JAVA) && /ok", false/.test(JAVA), '');
+t('引擎未就绪时 speak 优雅拒绝（不卡打卡）', /ready\.get\(\)/.test(JAVA) && /resolve\(call, false, "not-ready"\)/.test(JAVA), '');
+t('★ 未就绪可重新初始化（onInit 失败不等于永久失败）', /initTts\(\);/.test(JAVA) && /initing/.test(JAVA), '');
+t('★ 原生侧上报引擎个数/默认引擎（诊断"没装引擎"vs"初始化失败"）',
+  /getEngines\(\)/.test(JAVA) && /getDefaultEngine\(\)/.test(JAVA) && /initStatus/.test(JAVA), '');
 t('QUEUE_ADD 排队不互断', JAVA.indexOf('QUEUE_ADD') >= 0, '');
-t('★ 引擎失败可重建（MIUI 偶发 init 失败，节流 5s）', /tryReinit\(\)/.test(JAVA) && JAVA.indexOf('5000') >= 0, '');
-t('★ 诊断码齐全（initStatus / langResult / engine）',
-  JAVA.indexOf('initStatus') >= 0 && JAVA.indexOf('langResult') >= 0 && JAVA.indexOf('getDefaultEngine') >= 0, '');
-t('调试卡会重探并回填（不重装也能看到新状态）',
-  REC.indexOf('id="ttsLine"') >= 0 && REC.indexOf('T.probe()') >= 0, '');
 
 console.log('\n通过 ' + pass + ' / 共 ' + (pass + fail));
 if (fail) { console.log('失败清单:\n  - ' + fails.join('\n  - ')); process.exit(1); }

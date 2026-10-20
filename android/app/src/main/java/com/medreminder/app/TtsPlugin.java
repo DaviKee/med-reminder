@@ -2,7 +2,6 @@ package com.medreminder.app;
 
 import android.content.Context;
 import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -17,127 +16,114 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 语音播报药名（S-10）—— Android TextToSpeech 的极小包装。
  *
  * 为什么必须原生：Android WebView **不支持** Web Speech API 的 speechSynthesis
- * （那是 Chrome 浏览器的能力，WebView 引擎没带），纯 web 层做不到 ——
- * 这是 S-10 依赖原生的根本原因（鸿蒙侧另有 TTS Kit，届时同一 JS 出口换实现）。
+ * （那是 Chrome 浏览器的能力，WebView 引擎没带），纯 web 层做不到。
  *
- * 设计约束：
- *   · 引擎初始化是**异步**的（onInit 回调），ready 之前 speak 直接优雅拒绝
- *     （返回 {ok:false}），调用方不等待 —— 播报是锦上添花，绝不能卡打卡流程；
- *   · 只说中文（Locale.SIMPLIFIED_CHINESE）—— 本应用面向中文用户；
- *   · QUEUE_ADD：连续多次 speak 排队播，不互相打断；
- *   · stop() 供「弹窗关闭时打断残留播报」用。
+ * 2026-10-20 真机（小米）反馈「引擎未就绪」后重写初始化逻辑：
+ *   · **可重试**：onInit 失败不等于永久失败（系统引擎刚被唤醒、TTS 服务重启都会失败一次）。
+ *     speak 时若未就绪，会重新 init 一次；JS 侧 800ms 后自动补念。
+ *   · **状态可诊断**：status() 返回 initStatus / langStatus / 引擎个数 / 默认引擎名 ——
+ *     「未就绪」时能立刻看出是"系统没装引擎"还是"引擎装了但初始化失败"。
+ *   · 一切失败都 resolve（不 reject）：播报是锦上添花，绝不能卡住打卡流程。
  */
 @CapacitorPlugin(name = "MedTts")
 public class TtsPlugin extends Plugin {
 
     private TextToSpeech tts;
     private final AtomicBoolean ready = new AtomicBoolean(false);
-    private volatile int initStatus = -999;   // -999 = 回调还没回来
-    private volatile int langResult = -999;
+    private volatile int initStatus = -1;     // TextToSpeech.SUCCESS(0) / ERROR(-1)
+    private volatile int langStatus = 99;     // setLanguage 返回值（99 = 没跑到）
+    private volatile boolean initing = false;
 
-    /** 插件加载时初始化引擎。onInit 是异步回调 —— ready 置位前 speak 会优雅拒绝。 */
     @Override
     public void load() {
         initTts();
     }
 
-    /* 引擎诊断（2026-10-20 真机反馈「引擎未就绪」后加）：
-
-     * 只回一个 ready 布尔值不够 —— 真机上「没装中文引擎」和「引擎初始化失败」
-     * 都表现为 ready=false，用户和开发者都无从判断。这里把关键码全带出去：
-     *   initStatus  TextToSpeech 构造回调的码（0=SUCCESS，-1=ERROR）
-     *   langResult  setLanguage 的返回值（-1/-2 = 该语言不支持，需要装语音数据）
-     *   engine      系统默认引擎包名（没装时为空）
-     * 并且 **失败后允许重建引擎** —— MIUI 上偶发首次 init 失败、重试即好。 */
-    private void initTts() {
-        try { if (tts != null) { tts.shutdown(); } } catch (Exception e) { /* ignore */ }
+    /** 初始化（或重建）引擎。失败不抛，只记录 initStatus —— speak 时会再试。 */
+    private synchronized void initTts() {
+        if (initing) return;
+        initing = true;
         ready.set(false);
-        initStatus = -999;
-        langResult = -999;
         try {
-            tts = new TextToSpeech(getContext(), status -> {
+            if (tts != null) {
+                try { tts.shutdown(); } catch (Exception ignored) { }
+                tts = null;
+            }
+            // 用 ApplicationContext：Activity 销毁重建（转屏/返回）不该影响引擎生命周期
+            Context ctx = getContext().getApplicationContext();
+            tts = new TextToSpeech(ctx, status -> {
                 initStatus = status;
                 if (status == TextToSpeech.SUCCESS) {
-                    try { langResult = tts.setLanguage(Locale.SIMPLIFIED_CHINESE); }
-                    catch (Exception e) { langResult = -998; }
-                    // 缺中文语音时 setLanguage 返回 NOT_SUPPORTED_* —— 仍然置 ready，
-                    // 引擎会退回默认语言念原文，好过完全哑掉（但诊断里看得见这个码）。
+                    try {
+                        langStatus = tts.setLanguage(Locale.SIMPLIFIED_CHINESE);
+                    } catch (Exception e) {
+                        langStatus = 98;      // 调用本身抛了
+                    }
+                    // 即使缺中文语音也置 ready：引擎会退回默认语言念，好过完全哑掉
                     ready.set(true);
                 } else {
                     ready.set(false);
                 }
-            });
-            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override public void onStart(String id) { }
-                @Override public void onDone(String id) { }
-                @Override public void onError(String id) { }
-                @Deprecated @Override public void onError(String id, int code) { }
+                initing = false;
             });
         } catch (Exception e) {
-            tts = null;
-            ready.set(false);
+            initStatus = -2;                  // 构造就抛了
+            initing = false;
         }
     }
 
-    /* 重建节流：失败重试最多每 5 秒一次，避免每次 speak 都重建引擎 */
-    private long lastReinit = 0;
-    private boolean tryReinit() {
-        long now = System.currentTimeMillis();
-        if (now - lastReinit < 5000) return false;
-        lastReinit = now;
-        initTts();
-        return true;
-    }
-
-    private void putDiag(JSObject r) {
-        r.put("ready", ready.get());
-        r.put("initStatus", initStatus);
-        r.put("langResult", langResult);
-        String eng = "";
-        try { if (tts != null) eng = tts.getDefaultEngine() == null ? "" : tts.getDefaultEngine(); }
-        catch (Exception e) { /* ignore */ }
-        r.put("engine", eng);
-    }
-
-    /** 播报一段文本。返回 {ok, ready, ...诊断} —— ok=false 时调用方静默忽略（锦上添花原则）。 */
+    /** 播报。返回 {ok, ready, reason, initStatus} —— ok=false 时调用方会补念一次（见 tts.js）。 */
     @PluginMethod
     public void speak(PluginCall call) {
         String text = call.getString("text", "");
         if (text == null || text.trim().isEmpty()) {
-            JSObject r = new JSObject(); r.put("ok", false); putDiag(r);
-            call.resolve(r); return;
+            resolve(call, false, "empty");
+            return;
         }
         if (!ready.get()) {
-            /* 没就绪 → 尝试重建一次（节流），仍不行就如实回诊断码 */
-            tryReinit();
-            JSObject r = new JSObject(); r.put("ok", false); putDiag(r);
-            call.resolve(r); return;
+            initTts();                        // 未就绪 → 重新初始化（异步），本次先拒
+            resolve(call, false, "not-ready");
+            return;
         }
         try {
             tts.speak(text, TextToSpeech.QUEUE_ADD, null, "med-" + System.currentTimeMillis());
-            JSObject r = new JSObject(); r.put("ok", true); putDiag(r);
-            call.resolve(r);
+            resolve(call, true, "");
         } catch (Exception e) {
-            JSObject r = new JSObject(); r.put("ok", false); putDiag(r);
-            call.resolve(r);
+            ready.set(false);                 // 引擎坏了 → 下次 speak 重新 init
+            resolve(call, false, "speak-failed");
         }
     }
 
-    /** 打断播报（提醒弹窗被处理/关闭时用，别让语音拖在后台念完）。 */
+    private void resolve(PluginCall call, boolean ok, String reason) {
+        JSObject r = new JSObject();
+        r.put("ok", ok);
+        r.put("ready", ready.get());
+        r.put("reason", reason);
+        r.put("initStatus", initStatus);
+        call.resolve(r);
+    }
+
     @PluginMethod
     public void stop(PluginCall call) {
         try { if (tts != null) tts.stop(); } catch (Exception e) { /* ignore */ }
         call.resolve();
     }
 
-    /** 引擎状态（调试/诊断用）。fail=true 时若未就绪会尝试重建一次。 */
+    /** 诊断：引擎装没装、初始化成没成、默认引擎是谁。 */
     @PluginMethod
     public void status(PluginCall call) {
-        boolean force = Boolean.TRUE.equals(call.getBoolean("reinit", false));
-        if (force && !ready.get()) tryReinit();
         JSObject r = new JSObject();
+        r.put("ready", ready.get());
         r.put("ttsAvailable", tts != null);
-        putDiag(r);
+        r.put("initStatus", initStatus);
+        r.put("langStatus", langStatus);
+        try {
+            r.put("engines", tts != null && tts.getEngines() != null ? tts.getEngines().size() : 0);
+            r.put("defaultEngine", tts != null && tts.getDefaultEngine() != null ? tts.getDefaultEngine() : "");
+        } catch (Exception e) {
+            r.put("engines", 0);
+            r.put("defaultEngine", "");
+        }
         call.resolve(r);
     }
 }
