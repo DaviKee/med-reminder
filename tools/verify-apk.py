@@ -258,6 +258,8 @@ def main():
         ('A-3-saveHooks 挂了 shadow 槽', 'h.shadow' in APP and 'shadow:' in APP),
         # S-10 语音播报（2026-10-10）
         ('S-10-TTS 模块随包', tts is not None and 'MedTts' in tts and 'speechSynthesis' in tts),
+        ('S-10-TTS 有 registerPlugin 兜底', tts is not None and "registerPlugin('MedTts')" in tts),
+        ('S-10-调试卡能看 TTS 状态', 'ttsStatusHtml' in APP),
         ('S-10-TTS 随 sw 预缓存', "'./js/platform/tts.js'" in SW),
         ('S-10-TTS 脚本已加载', 'js/platform/tts.js' in html),
         ('S-10-提醒弹窗会念药名', 'MedTts.speak(' in APP and 'MedTts.enabled()' in APP),

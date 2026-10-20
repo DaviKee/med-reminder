@@ -261,9 +261,25 @@ function debugHtml() {
     + diagHtml()
     + remindLogHtml()
     + shadowStatusHtml()
+    + ttsStatusHtml()
     + '<p class="hint">' + esc(versionLine()) + '</p>'
     + '</div>';
   return html;
+}
+
+/* 语音播报状态（S-10 真机反馈 2026-10-20）——
+ * 这一行回答两个问题：插件接上没有（injected/proxy/missing）、TTS 引擎就绪没有。
+ * 用户报"TTS 不起作用"时，先看这行，不用盲猜是开关关了还是设备没引擎。 */
+function ttsStatusHtml() {
+  var T = window.MedTts;
+  if (!T) return '<p class="hint" style="margin:0">语音播报：模块未加载</p>';
+  var s = (T.lastStatus && T.lastStatus()) || {};
+  var MODE = { injected: '原生已注入', proxy: '代理兜底', web: '浏览器语音', missing: '插件缺失', '': '未探测' };
+  var label = MODE[s.mode] || s.mode || '未探测';
+  var ready = s.ready === true ? '引擎就绪' : (s.ready === false ? '引擎未就绪' : '引擎未探测');
+  var note = s.available === false ? '（系统没装中文 TTS 引擎）' : (s.err ? '（' + s.err + '）' : '');
+  return '<p class="hint" style="margin:0">语音播报：' + (T.enabled() ? '开' : '关') + ' · '
+    + esc(label) + ' · ' + esc(ready) + esc(note) + '</p>';
 }
 
 /* 影子状态文件状态（A-3，2026-10-10）：真机验收用 ——

@@ -25,7 +25,13 @@ function t(name, ok, extra) {
 
 console.log('=== 1. platform/tts.js 能力封装 ===');
 t('三层降级：原生 MedTts → speechSynthesis → 不支持', /Plugins\.MedTts/.test(TTS) && /speechSynthesis/.test(TTS) && /supported/.test(TTS), '');
-t('失败全程吞掉（播报绝不影响打卡主流程）', /catch \(e\)/.test(TTS) && /锦上添花/.test(TTS), '');
+t('★ 插件句柄有 registerPlugin 代理兜底（2026-10-20 真机「TTS 不响」的根因）',
+  /registerPlugin\('MedTts'\)/.test(TTS) && /hasHeader/.test(TTS), '');
+t('★ 只在原生平台走代理（浏览器不能假支持）', /getPlatform/.test(TTS) && /!== 'web'/.test(TTS), '');
+t('★ 启动预热（插件懒加载，首条提醒前把引擎叫醒）', /setTimeout\(function \(\) \{ probe\(\); \}, 600\)/.test(TTS), '');
+t('★ 引擎未就绪时补念一次（ready===false 才补，不会重音）',
+  /r\.ok === false && r\.ready === false/.test(TTS) && /800/.test(TTS), '');
+t('失败全程吞掉（播报绝不影响打卡主流程）', /catch \(e\)/.test(TTS) && /不等待、不重试/.test(TTS), '');
 t('开关独立 key（不进主状态/备份）', /medreminder\.tts\.v1/.test(TTS), '');
 t('默认开（功能就是给看不清屏幕的人设计的）', /!== 'off'/.test(TTS), '');
 t('中文语速放慢（老人跟得上）', /rate/.test(TTS) && /zh-CN/.test(TTS), '');
