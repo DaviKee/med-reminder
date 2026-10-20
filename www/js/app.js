@@ -8,7 +8,7 @@ import { $, $$, esc, nowMin, minToStr, minOfDay, todayKey, pushRemindLog } from 
  * 其余代码一字未改。 */
 
 
-import { load, S, storageStats, gcNotified, cleanTargets, save, setSaveHooks } from './core/store.js';
+import { load, S, storageStats, gcNotified, cleanTargets, save, setSaveHooks, saveHooks } from './core/store.js';
 import { writeCardFile } from './core/cardSummary.js';
 
 
@@ -114,6 +114,10 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
     }
   });
 
+  /* 启动后补写一次影子文件（A-3）：刚装完还没改过数据时影子不存在，
+   * 原生侧（鸿蒙卡片 / Agent）第一次读会扑空。走 3s 防抖，不拖启动。 */
+  saveHooks.shadow();
+
 
   /* ---------------- 版本号（单一来源） ----------------
    * 只在这里改一处：build-apk.sh 会自动读出这两个值，用于
@@ -128,7 +132,7 @@ import { dropLegacySamples, renderMeds } from './ui/meds.js';
    *   次   +1  加功能
    *   主   +1  不兼容变更（数据格式之类）
    * 历史对照表见 MedReminder-后续任务计划.md 的「版本历史」。 */
-  var APP_VERSION = '1.5.36';
+  var APP_VERSION = '1.5.37';
   var APP_BUILD = '2026-10-20';
 
 

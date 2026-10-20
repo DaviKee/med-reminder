@@ -57,6 +57,11 @@ t('TtsPlugin 注册存在', JAVA.indexOf('@CapacitorPlugin(name = "MedTts")') >=
 t('中文引擎', JAVA.indexOf('Locale.SIMPLIFIED_CHINESE') >= 0, '');
 t('引擎未就绪时 speak 优雅拒绝（不卡打卡）', /ready\.get\(\)/.test(JAVA) && /ok", false/.test(JAVA), '');
 t('QUEUE_ADD 排队不互断', JAVA.indexOf('QUEUE_ADD') >= 0, '');
+t('★ 引擎失败可重建（MIUI 偶发 init 失败，节流 5s）', /tryReinit\(\)/.test(JAVA) && JAVA.indexOf('5000') >= 0, '');
+t('★ 诊断码齐全（initStatus / langResult / engine）',
+  JAVA.indexOf('initStatus') >= 0 && JAVA.indexOf('langResult') >= 0 && JAVA.indexOf('getDefaultEngine') >= 0, '');
+t('调试卡会重探并回填（不重装也能看到新状态）',
+  REC.indexOf('id="ttsLine"') >= 0 && REC.indexOf('T.probe()') >= 0, '');
 
 console.log('\n通过 ' + pass + ' / 共 ' + (pass + fail));
 if (fail) { console.log('失败清单:\n  - ' + fails.join('\n  - ')); process.exit(1); }

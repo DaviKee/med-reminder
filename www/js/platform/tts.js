@@ -56,22 +56,30 @@
     return null;
   }
 
-  /* 最近一次原生状态（诊断卡用） */
-  var st = { mode: '', ready: null, available: null, at: 0, err: '' };
+  /* 最近一次原生状态（诊断卡用）。
+   * 2026-10-20 真机「引擎未就绪」后加诊断码：只报 ready 布尔值分不清
+   * 「没装中文引擎」和「引擎初始化失败」—— 把 initStatus / langResult / engine 都带出来。 */
+  var st = { mode: '', ready: null, available: null, at: 0, err: '', initStatus: null, langResult: null, engine: '' };
   function probe() {
     var P = getNative();
-    if (!P) { st = { mode: pluginMode(), ready: null, available: null, at: Date.now(), err: '插件未注册' }; return Promise.resolve(st); }
+    if (!P) { st = { mode: pluginMode(), ready: null, available: null, at: Date.now(), err: '插件未注册', initStatus: null, langResult: null, engine: '' }; return Promise.resolve(st); }
     var p = null;
-    try { p = P.status(); } catch (e) { p = null; }
+    try { p = P.status({ reinit: true }); } catch (e) { p = null; }
     if (!p || typeof p.then !== 'function') {
-      st = { mode: pluginMode(), ready: null, available: null, at: Date.now(), err: 'status 不可用' };
+      st = { mode: pluginMode(), ready: null, available: null, at: Date.now(), err: 'status 不可用', initStatus: null, langResult: null, engine: '' };
       return Promise.resolve(st);
     }
     return p.then(function (r) {
-      st = { mode: pluginMode(), ready: !!(r && r.ready), available: !!(r && r.ttsAvailable), at: Date.now(), err: '' };
+      st = {
+        mode: pluginMode(), ready: !!(r && r.ready), available: !!(r && r.ttsAvailable),
+        at: Date.now(), err: '',
+        initStatus: r && typeof r.initStatus === 'number' ? r.initStatus : null,
+        langResult: r && typeof r.langResult === 'number' ? r.langResult : null,
+        engine: (r && r.engine) || ''
+      };
       return st;
     }).catch(function (e) {
-      st = { mode: pluginMode(), ready: false, available: false, at: Date.now(), err: (e && e.message) || 'status 失败' };
+      st = { mode: pluginMode(), ready: false, available: false, at: Date.now(), err: (e && e.message) || 'status 失败', initStatus: null, langResult: null, engine: '' };
       return st;
     });
   }
